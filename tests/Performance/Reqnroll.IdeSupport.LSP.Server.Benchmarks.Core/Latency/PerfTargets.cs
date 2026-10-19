@@ -69,7 +69,7 @@ public static class PerfTargets
     public static readonly PerfTarget FoldingRange =
         new("textDocument/foldingRange", 0, PerfTargetKind.InteractiveP95, "Folding ranges (session load)");
 
-    // Measured-but-unpublished operations (issue #119): field-instrumented (see #113/#118) but no
+    // Measured-but-unpublished operations: field-instrumented but no
     // threshold exists yet in the architecture's §9 Performance Requirements table, so TargetMs is
     // 0 (rendered "—", never asserted) until one is proposed and published there. Not part of
     // <see cref="All"/>. Step Rename and Find Unused Step Definitions are workspace-wide operations
@@ -87,9 +87,9 @@ public static class PerfTargets
     public static readonly PerfTarget FindUnusedStepDefinitions =
         new("reqnroll/findUnusedStepDefinitions", 0, PerfTargetKind.Batch, "Find unused step definitions, workspace-wide scan (F15)");
 
-    // Issue #671 (R3): the registry/match-cache commit a rename implies moved off the measured
-    // textDocument/rename request onto the client's confirmation (reqnroll/renameApplied) --
-    // StepRename above no longer includes it. Batch-classified like its discovery-scenario
+    // The registry/match-cache commit a rename implies runs on the client's confirmation
+    // (reqnroll/renameApplied), not inside the measured textDocument/rename request, so
+    // StepRename above does not include it. Batch-classified like its discovery-scenario
     // siblings: this is the reparse-on-confirm cost, not a per-request percentile.
     public static readonly PerfTarget RenameApplyCommit =
         new("reqnroll/renameApplied", 0, PerfTargetKind.Batch,
@@ -98,8 +98,8 @@ public static class PerfTargets
     public static readonly PerfTarget SemanticTokensDelta =
         new("textDocument/semanticTokens/full/delta", 0, PerfTargetKind.InteractiveP95, "Semantic tokens delta pull");
 
-    // Remaining previously-dark handlers from issue #113/#118, synthetic coverage added by #119
-    // follow-up. Same load-only rationale as above: field-instrumented, no published threshold.
+    // Further handlers with synthetic coverage. Same load-only rationale as above:
+    // field-instrumented, no published threshold.
     public static readonly PerfTarget FindStepUsages =
         new("reqnroll/findStepUsages", 0, PerfTargetKind.InteractiveP95, "Find step usages from a .cs binding (F17)");
 
@@ -109,9 +109,9 @@ public static class PerfTargets
     public static readonly PerfTarget FindHooks =
         new("reqnroll/findHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
 
-    // Issue #757: the same step lookup as textDocument/definition (shared StepAtPositionResolver),
+    // The same step lookup as textDocument/definition (shared StepAtPositionResolver),
     // plus per-binding detail — field-instrumented in FindStepDefinitionsHandler, so it gets synthetic
-    // coverage too (the #495 lesson). Load-only: no published threshold of its own.
+    // coverage too, keeping field and synthetic labels aligned. Load-only: no published threshold of its own.
     public static readonly PerfTarget FindStepDefinitions =
         new("reqnroll/findStepDefinitions", 0, PerfTargetKind.InteractiveP95,
             "Go to step definition with binding detail (VS results window, VS Code picker, #757)");
@@ -119,7 +119,7 @@ public static class PerfTargets
     public static readonly PerfTarget StepCodeLens =
         new("textDocument/codeLens", 0, PerfTargetKind.InteractiveP95, "Step code lens on a .cs binding file (F18)");
 
-    // Hook-facing CodeLens/navigation (issues #269/#372/#373): the operation label carries a
+    // Hook-facing CodeLens/navigation: the operation label carries a
     // "#..." suffix (same convention as the completion variants above) because all three share the
     // raw "textDocument/codeLens"/"reqnroll/findHooks" wire method with an existing target above —
     // without it they'd collide in the report and overwrite each other.
@@ -135,10 +135,9 @@ public static class PerfTargets
         new("reqnroll/findMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
             "Go to matching scenarios from a .cs hook binding (#373)");
 
-    // Issue #495: the one reqnroll/* operation the Run CodeLens bridge depends on had neither a
-    // PerfTargets entry nor an InteractiveScenarios method, despite being field-instrumented via
-    // IOperationDurationRecorder in ResolveTestTargetsHandler since #262/#492 — the gap the whole-file
-    // walk investigation (#491-#495) exposed but never closed. Single-request latency only; the
+    // The one reqnroll/* operation the Run CodeLens bridge depends on; it is field-instrumented via
+    // IOperationDurationRecorder in ResolveTestTargetsHandler, so it needs a synthetic counterpart
+    // with the same label. Single-request latency only; the
     // WorkspaceReloadContentionScenario-shaped concurrent-callers case lives alongside
     // ResolveTestTargetsContentionScenario.
     public static readonly PerfTarget ResolveTestTargets =
@@ -178,42 +177,41 @@ public static class PerfTargets
         new("workspace/inlayHint/refresh", 0, PerfTargetKind.Batch, "Server-initiated inlay hint refresh push",
             IncludesFixedDelay: true);
 
-    // Issue #256: the sibling refresh pushes above were both benchmarked, but code lens's own push
-    // (CodeLensRefreshHandler / workspace/codeLens/refresh) had no coverage — an inconsistency, not
-    // a deliberate omission, since it follows the exact same debounced-push shape.
+    // Code lens's own refresh push (CodeLensRefreshHandler / workspace/codeLens/refresh) follows the
+    // exact same debounced-push shape as the two sibling refresh pushes above, so it is measured the
+    // same way.
     public static readonly PerfTarget CodeLensRefresh =
         new("workspace/codeLens/refresh", 0, PerfTargetKind.Batch, "Server-initiated code lens refresh push",
             IncludesFixedDelay: true);
 
-    // Issues #514/#516: live structural-validation diagnostics on .cs binding methods (non-static,
-    // async void, malformed step/tag expression) had no benchmark coverage -- the sibling
-    // PublishDiagnostics target above only ever exercises a .feature document's diagnostics push.
+    // Live structural-validation diagnostics on .cs binding methods (non-static,
+    // async void, malformed step/tag expression); the sibling PublishDiagnostics target above
+    // only exercises a .feature document's diagnostics push.
     // Same "#..." wire-method-collision-avoidance suffix convention as the completion/codeLens
     // variants above.
     public static readonly PerfTarget CSharpDiagnosticsPush =
         new("textDocument/publishDiagnostics#cs-binding", 0, PerfTargetKind.InteractiveP95,
             "Diagnostics push from a .cs binding structural-validation edit (#514/#516)");
 
-    // Issue #531: CSharpBindingDiscoveryService.UpdateFromSourceAsync's staleness short-circuit for
-    // rapid .cs typing (mirrors the pre-existing Gherkin-side one) had no regression coverage --
-    // SessionScenario's supersede/cancel burst only ever edits .feature documents. Batch-classified
+    // CSharpBindingDiscoveryService.UpdateFromSourceAsync's staleness short-circuit for
+    // rapid .cs typing (mirrors the Gherkin-side one); SessionScenario's supersede/cancel burst
+    // only ever edits .feature documents, so this scenario covers the .cs side. Batch-classified
     // like its sibling discovery scenarios: coarse wall-clock, not a per-request percentile.
     public static readonly PerfTarget CSharpRapidEditBurst =
         new("discovery/roslyn-rapid-cs-burst", 0, PerfTargetKind.Batch,
             "Roslyn re-discovery after a rapid burst of superseded .cs edits (staleness short-circuit, #531)");
 
-    // Issue #714: the LSP-server test-outcome pipeline (#700/#702) added a request surface, an
-    // out-of-band TCP ingest path and two stateful singletons, both new handlers already
-    // field-instrumented via IOperationDurationRecorder — so Layer-4 logs emitted labels with no
-    // synthetic counterpart, the same field/synthetic alignment gap #495 closed for
-    // reqnroll/resolveTestTargets. Same measured-but-unpublished convention as everything above
+    // The LSP-server test-outcome pipeline has a request surface, an
+    // out-of-band TCP ingest path and two stateful singletons; both handlers are
+    // field-instrumented via IOperationDurationRecorder, so each field label needs a
+    // synthetic counterpart (as for reqnroll/resolveTestTargets). Same measured-but-unpublished convention as everything above
     // (TargetMs 0, rendered "—", never asserted) until §9 publishes a threshold.
     //
     // The "#..." suffix convention (as with the completion/codeLens variants) is what keeps
     // getOutcome's two genuinely different cost shapes apart — a dictionary hit does a container
     // stat plus row sort plus DTO build, a miss skips the stat entirely — while GetTestOutcome
     // below keeps the bare wire-method label the handler actually emits via Measure(), so the
-    // field label and the synthetic label still line up 1:1 (the #714 acceptance criterion).
+    // field label and the synthetic label still line up 1:1.
     public static readonly PerfTarget GetTestOutcome =
         new("reqnroll/testOutcomes/getOutcome", 0, PerfTargetKind.InteractiveP95,
             "Test outcome lookup for a Run CodeLens, aggregate over both variants (#700/#714)");

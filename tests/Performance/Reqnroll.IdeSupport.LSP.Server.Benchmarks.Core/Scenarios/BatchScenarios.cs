@@ -111,7 +111,7 @@ public static class BatchScenarios
     }
 
     /// <summary>
-    /// Step rename, workspace-wide (issue #119): renames the shared "precondition N is met" step
+    /// Step rename, workspace-wide: renames the shared "precondition N is met" step
     /// pattern — bound once, referenced by every generated feature file (see
     /// <c>CorpusGenerator.BuildFeature</c>) — the highest-blast-radius rename case, where the
     /// resulting <c>WorkspaceEdit</c> touches every open feature file at once. Coarse wall-clock,
@@ -121,17 +121,14 @@ public static class BatchScenarios
     /// <para>
     /// <b>Repetitions are idempotent</b> because the harness never applies the returned edit and
     /// never sends <c>reqnroll/renameApplied</c>, so the server discards the registry/match-cache
-    /// updates it staged for each rename (issue #671, R3) and every repetition starts from the
+    /// updates it staged for each rename and every repetition starts from the
     /// same state.
     /// </para>
     /// <para>
-    /// That was <i>not</i> true before #671. The server committed those updates unconditionally
-    /// for any non-Visual-Studio client — the harness included — so each repetition patched the
+    /// This matters because committing those updates without a confirmation would patch the
     /// registry with the new <c>.cs</c> text while the corpus files on disk still held the old
-    /// step, exactly the desync issue #670 reported. Repetitions after the first were therefore
-    /// measuring a rename against a registry that no longer matched the corpus, not the same
-    /// operation as the first. Expect this number to have risen when #671 landed: it is the
-    /// scenario starting to measure five real renames rather than one.
+    /// step. Repetitions after the first would then measure a rename against a registry that no
+    /// longer matched the corpus, not the same operation as the first.
     /// </para>
     /// <para>
     /// <b>Still narrower than a real client's rename.</b> The registry refresh the edit implies (a
@@ -153,7 +150,7 @@ public static class BatchScenarios
             // Rename by appending to the step's own expression rather than substituting fixed
             // wording: NewNameReconciler only accepts a new name whose parameter placeholders
             // line up with the binding's, so a hard-coded "precondition renamed {rep} is met"
-            // (a word inserted before the {int}) was rejected on every corpus step (issue #678).
+            // (a word inserted before the {int}) is rejected on every corpus step.
             await harness.RequestRenameAsync(f.Uri, line, character, $"{f.FirstStepExpression} (renamed {rep})")
                 .ConfigureAwait(false);
             recorder.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
@@ -162,10 +159,10 @@ public static class BatchScenarios
     }
 
     /// <summary>
-    /// Rename's confirmed-apply commit (issue #671, R3): the registry/match-cache work a rename
-    /// implies moved off the measured <c>textDocument/rename</c> round trip onto the client's
-    /// <c>reqnroll/renameApplied</c> confirmation, so <see cref="StepRenameAsync"/> above no longer
-    /// measures it at all — its own remarks record why. This scenario measures that other half: a
+    /// Rename's confirmed-apply commit: the registry/match-cache work a rename
+    /// implies runs on the client's <c>reqnroll/renameApplied</c> confirmation, not in the
+    /// <c>textDocument/rename</c> round trip, so <see cref="StepRenameAsync"/> above does not
+    /// measure it — its own remarks record why. This scenario measures that other half: a
     /// full Roslyn parse of the renamed <c>.cs</c> text, the registry patch, and the reparse
     /// cascade it triggers for every open <c>.feature</c> file (<c>BindingRegistryChangedHandler
     /// .ReparseOpenFilesAsync</c>), timed end to end via the resulting <c>publishDiagnostics</c>
@@ -209,7 +206,7 @@ public static class BatchScenarios
     /// <para>
     /// The confirmed rename is never written back into the appended block's own text — only the
     /// registry is updated to match it (a real desync between live text and registry, the same
-    /// kind #670 reported for a genuine client). Harmless here: nothing reads this block again
+    /// kind a genuine client would produce). Harmless here: nothing reads this block again
     /// after its repetition's diagnostics push lands, and the whole block is discarded by the
     /// final restore regardless. The desync exists only to give
     /// <c>BindingRegistryChangedHandler</c> real reparse work to do.
@@ -313,7 +310,7 @@ public static class BatchScenarios
     }
 
     /// <summary>
-    /// Find unused step definitions, workspace-wide (issue #119): a full scan comparing every
+    /// Find unused step definitions, workspace-wide: a full scan comparing every
     /// step-definition binding against every step usage across the corpus. Coarse wall-clock, like
     /// the other workspace-wide batch scenarios.
     /// </summary>
@@ -331,7 +328,7 @@ public static class BatchScenarios
     }
 
     /// <summary>
-    /// <c>reqnroll.json</c> change reaction, workspace-wide (issue #119 follow-up): simulates the
+    /// <c>reqnroll.json</c> change reaction, workspace-wide: simulates the
     /// client's file-watcher reporting a config change (<c>workspace/didChangeWatchedFiles</c>),
     /// which drives <c>WatchedFilesHandler</c> → <c>ReqnrollConfigChangedHandler</c> → per-file
     /// re-diagnose. There's no direct request/response for this — the client only ever sends the
@@ -368,7 +365,7 @@ public static class BatchScenarios
     private static readonly TimeSpan RefreshSettleDelay = TimeSpan.FromMilliseconds(700);
 
     /// <summary>
-    /// Server-initiated <c>workspace/semanticTokens/refresh</c> push (issue #119 follow-up):
+    /// Server-initiated <c>workspace/semanticTokens/refresh</c> push:
     /// <c>SemanticTokensRefreshHandler</c> only fires when the client advertised
     /// <c>workspace.semanticTokens.refreshSupport</c> (declared by
     /// <see cref="BenchmarkLspHarness"/>'s client capabilities); edits a feature and waits for the
@@ -398,7 +395,7 @@ public static class BatchScenarios
     }
 
     /// <summary>
-    /// Server-initiated <c>workspace/inlayHint/refresh</c> push (issue #119 follow-up). Mirrors
+    /// Server-initiated <c>workspace/inlayHint/refresh</c> push. Mirrors
     /// <see cref="SemanticTokensRefreshAsync"/> for <c>InlayHintRefreshHandler</c>.
     /// </summary>
     public static async Task<LatencySummary> InlayHintRefreshAsync(
@@ -421,8 +418,8 @@ public static class BatchScenarios
     }
 
     /// <summary>
-    /// Server-initiated <c>workspace/codeLens/refresh</c> push (issue #256 — the other two refresh
-    /// pushes above were benchmarked, this one wasn't). Unlike them, it isn't triggered by a plain
+    /// Server-initiated <c>workspace/codeLens/refresh</c> push (the third of the refresh
+    /// pushes benchmarked here). Unlike them, it isn't triggered by a plain
     /// <c>.feature</c> edit: <c>BindingRegistryChangedHandler</c> only requests it after an
     /// incremental Roslyn patch that changes a binding's matched expression (see
     /// <see cref="RoslynReDiscoveryAsync"/>'s identical edit shape), so this opens a synthetic
@@ -469,8 +466,8 @@ public static class BatchScenarios
     /// one of the corpus's deliberately-unbound steps ("undefined step F-S occurs" — see
     /// <c>CorpusGenerator.BuildFeature</c>) — the F2 live-editing path (source-level re-discovery, no
     /// build). Measures wall-clock from the <c>didChange</c> to the moment
-    /// <c>textDocument/definition</c> on that step resolves to a real location, i.e. the previously
-    /// unbound step becomes bound.
+    /// <c>textDocument/definition</c> on that step resolves to a real location, i.e. the unbound
+    /// step becomes bound.
     /// </summary>
     public static async Task<LatencySummary> RoslynReDiscoveryAsync(
         BenchmarkLspHarness harness, string corpusRoot, DocumentUri featureUri, string featureText,
@@ -519,12 +516,12 @@ public static class BatchScenarios
 
     /// <summary>
     /// Regression guard for the staleness short-circuit in
-    /// <c>CSharpBindingDiscoveryService.UpdateFromSourceAsync</c> (issue #531): fires a rapid burst of
+    /// <c>CSharpBindingDiscoveryService.UpdateFromSourceAsync</c>: fires a rapid burst of
     /// superseded <c>.cs</c> edits — no delay between them, faster than Roslyn can parse a single one,
     /// modelling fast typing — against a synthetic binding file, then a final edit that actually
     /// matches one of the corpus's deliberately-unbound steps, and measures wall-clock from that FINAL
     /// edit to the step resolving. <c>IParseCoordinator</c> chains every queued call rather than
-    /// cancelling superseded ones (by design), so before #531 every junk edit in the burst still did a
+    /// cancelling superseded ones (by design), so without the short-circuit every junk edit in the burst would still do a
     /// full, uncancellable Roslyn re-parse + registry patch; the short-circuit instead compares each
     /// queued call's text against the current cache entry and skips the parse once a later edit has
     /// already overwritten it. A regression that reintroduces the uncancellable pile-up should show up

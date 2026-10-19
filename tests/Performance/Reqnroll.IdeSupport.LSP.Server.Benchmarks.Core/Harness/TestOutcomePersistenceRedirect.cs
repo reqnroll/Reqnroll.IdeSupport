@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Harness;
 
 /// <summary>
-/// Issue #714's hermeticity prerequisite, benchmark side: points the server's outcome store at a
+/// Hermeticity prerequisite for the benchmarks: points the server's outcome store at a
 /// per-run temp file via <see cref="TestOutcomePersistence.FilePathEnvironmentVariable"/>, so no
 /// scenario in the suite can read or mutate the developer's real 30-day
 /// <c>%LOCALAPPDATA%\Reqnroll\test-outcomes.json</c> (which every <c>getOutcome</c>/<c>registerRun</c>
@@ -31,7 +31,7 @@ public sealed class TestOutcomePersistenceRedirect : IDisposable
     }
 
     /// <summary>
-    /// Where the persistence-scale fixture (scenario E) puts the container files its entries point
+    /// Where the persistence-scale fixture puts the container files its entries point
     /// at — inside the per-run directory, so it is cleaned up with everything else.
     /// </summary>
     public string ContainerDirectory => Path.Combine(_directory, "containers");

@@ -29,7 +29,7 @@ public sealed record LargeOutcomeFixture(
     string FirstFreshSource, string FirstFreshTypeFullName, string FirstFreshMethodName, int MethodCount);
 
 /// <summary>
-/// The test-outcome pipeline scenarios (issue #714, covering #700/#702): driving the server's
+/// The test-outcome pipeline scenarios: driving the server's
 /// outcome listener directly over loopback so the whole path — NDJSON ingest, <c>StepTraceParser</c>,
 /// the store, the throttled <c>changed</c> push and persistence — is measured without vstest, which
 /// is what makes them hermetic and reproducible.
@@ -46,7 +46,7 @@ public static class TestOutcomeScenarios
     /// <summary>The logger's own cap (<c>ReqnrollIdeTestLogger.MaxStdoutLength</c>), used for the worst-case rows.</summary>
     public const int StdoutCapChars = 64 * 1024;
 
-    /// <summary>Scenario E's scale: the issue's "~10k methods across many container paths".</summary>
+    /// <summary>Persistence-scale fixture size: ~10k methods across many container paths.</summary>
     public const int LargeMethodCount = 10_000;
 
     /// <summary>
@@ -85,7 +85,7 @@ public static class TestOutcomeScenarios
     /// Posts one synthetic run through the listener so the <c>getOutcome</c> scenarios have something
     /// real to find, then waits until the lookup actually resolves — the listener handles the
     /// connection on the thread pool, so the store is not populated the moment the socket closes.
-    /// Needs no vstest: <c>registerRun</c> → loopback connect → NDJSON (issue #714, scenario A).
+    /// Needs no vstest: <c>registerRun</c> → loopback connect → NDJSON.
     /// </summary>
     /// <param name="corpusAssemblyPath">
     /// Used as the result's <c>source</c>: a container that genuinely exists on disk, so the
@@ -129,10 +129,10 @@ public static class TestOutcomeScenarios
             $"the seeded outcome for {typeFullName}.{methodName} never became readable through getOutcome.");
     }
 
-    // ── Scenario B: ingest burst ────────────────────────────────────────────────
+    // ── Ingest burst ────────────────────────────────────────────────
 
     /// <summary>
-    /// Scenario B: posts <paramref name="resultCount"/> synthetic results over one loopback
+    /// Ingest burst: posts <paramref name="resultCount"/> synthetic results over one loopback
     /// connection and measures the wall-clock from <c>runStart</c> to <c>runComplete</c> <em>plus</em>
     /// the listener's trailing <c>Save</c> — the latter observed as the redirected persistence file
     /// being rewritten, since nothing on the wire announces it. Covers the store lock, the
@@ -245,10 +245,10 @@ public static class TestOutcomeScenarios
         return summary;
     }
 
-    // ── Scenario E: persistence scale ───────────────────────────────────────────
+    // ── Persistence scale ───────────────────────────────────────────
 
     /// <summary>
-    /// Scenario E's fixture: a persisted outcome file holding <paramref name="methodCount"/> methods
+    /// Persistence-scale fixture: a persisted outcome file holding <paramref name="methodCount"/> methods
     /// across <paramref name="containerCount"/> container paths, deliberately mixed — some containers
     /// absent from disk, some "rebuilt" since the outcome was recorded, the rest fresh. <c>Load</c>
     /// stats every persisted container, so that mix is what makes the read cost representative, and
@@ -341,7 +341,7 @@ public static class TestOutcomeScenarios
     }
 
     /// <summary>
-    /// Scenario E, read half: the session-start cost. A fresh server is started per repetition and
+    /// Persistence scale, read half: the session-start cost. A fresh server is started per repetition and
     /// the very first <c>getOutcome</c> is timed — the store and its persistence are singletons
     /// resolved lazily on that first request, so the measured round trip is exactly "dial the
     /// outcome, pay for loading the file".
@@ -378,7 +378,7 @@ public static class TestOutcomeScenarios
     }
 
     /// <summary>
-    /// Scenario E, write half: the post-run merge + write. Loading the large file first is what makes
+    /// Persistence scale, write half: the post-run merge + write. Loading the large file first is what makes
     /// this the real save path (merge into the file on disk, prune, rewrite) rather than a write of
     /// one fresh row; the measured window runs from <c>runComplete</c> to the moment the file
     /// actually changes, since the save is not an LSP message.

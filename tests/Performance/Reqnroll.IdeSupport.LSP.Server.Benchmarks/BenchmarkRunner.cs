@@ -26,10 +26,9 @@ public static class BenchmarkRunner
     {
         var warmup = IntArg(args, "--warmup", 10);
         var measured = IntArg(args, "--iterations", 50);
-        // Default to the full committed corpus (50 files, ~1,350 steps): issue #488 found the
-        // previous default of 10 undershot the scale (~50 files / ~1,350 steps) that #471's
-        // investigation needed to reliably reproduce dispatch-pipeline contention, so routine runs
-        // never got close to it.
+        // Default to the full committed corpus (50 files, ~1,350 steps): a smaller default
+        // undershoots the scale needed to reliably reproduce dispatch-pipeline contention, so
+        // routine runs would never get close to it.
         var fileCount = IntArg(args, "--files", 50);
         var outPath = StringArg(args, "--out");
         var corpusAssembly = StringArg(args, "--corpus-assembly") ?? CorpusAssemblyLocator.TryFind();
@@ -38,7 +37,7 @@ public static class BenchmarkRunner
         var serverExe = StringArg(args, "--server-exe") ?? (outOfProcess ? ServerExeLocator.Find() : null);
         var gate = ReferenceMachine.FromEnvironment(args);
 
-        // Issue #714's hermeticity prerequisite, benchmark side: the outcome store must never read or
+        // Hermeticity prerequisite for the benchmarks: the outcome store must never read or
         // write the developer's real %LOCALAPPDATA%\Reqnroll\test-outcomes.json. Set before the first
         // server starts — the path is resolved once, when the store's persistence is constructed.
         using var outcomes = TestOutcomePersistenceRedirect.Begin();
@@ -109,7 +108,7 @@ public static class BenchmarkRunner
             (PerfTargets.CSharpDiagnosticsPush, await scenarios.CSharpDiagnosticsPushAsync(corpusRoot).ConfigureAwait(false)),
         };
 
-        // ── The LSP-server test-outcome pipeline (issue #714) ────────────────────
+        // ── The LSP-server test-outcome pipeline ────────────────────
         // registerRun runs first on purpose: its very first call on a server is what binds the
         // loopback listener, and the scenario reports that one-off bind cost separately, so it must
         // not be a call the seeding below has already made.
@@ -162,7 +161,7 @@ public static class BenchmarkRunner
         if (seededOutcome is null)
             skipped.AddRange(TestOutcomeScenarios.UnavailableScenarios(corpusAssembly));
 
-        // Test-outcome pipeline batch scenarios (issue #714, scenarios B/E + the changed push).
+        // Test-outcome pipeline batch scenarios (ingest burst, persistence scale, changed push).
         if (includeBatch)
         {
             Console.WriteLine("Running test-outcome pipeline scenarios (ingest burst, changed push, persistence scale)...");
@@ -203,8 +202,8 @@ public static class BenchmarkRunner
         }
 
         // Unlike the corpusAssembly-gated group above, this needs no compiled assembly — it opens
-        // its own throwaway, syntax-discovered .cs/.feature pair per repetition (issue #671, R3
-        // follow-up: measures the registry-commit cost StepRename above no longer includes).
+        // its own throwaway, syntax-discovered .cs/.feature pair per repetition
+        // (measures the registry-commit cost that StepRename above does not include).
         if (includeBatch)
         {
             Console.WriteLine("Running rename apply-commit scenario (registry reparse on confirmed apply, issue #671)...");
@@ -231,8 +230,7 @@ public static class BenchmarkRunner
                 await BatchScenarios.FindUnusedStepDefinitionsAsync(harness).ConfigureAwait(false)));
         }
 
-        // Dispatch-fairness / head-of-line-blocking checks (issue #488, following up on #471/#477;
-        // #495 added the second one). Each fires a storm of concurrent activity and races it against
+        // Dispatch-fairness / head-of-line-blocking checks. Each fires a storm of concurrent activity and races it against
         // a cheap read on a file/range the storm never touches. Needs at least two open files (storm
         // set + probe); skipped below that.
         var contentionChecks = new List<ContentionCheck>();

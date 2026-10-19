@@ -47,8 +47,7 @@ public sealed record TestOutcomeSeedRow(
 
 /// <summary>
 /// A client of the server's outcome listener — the benchmark's stand-in for the bundled VSTest
-/// logger, so the outcome scenarios can be driven <b>without vstest</b> (issue #714's scenario A
-/// note). Writes the same newline-delimited JSON the logger writes (<c>hello</c> / <c>runStart</c> /
+/// logger, so the outcome scenarios can be driven <b>without vstest</b>. Writes the same newline-delimited JSON the logger writes (<c>hello</c> / <c>runStart</c> /
 /// <c>result</c>… / <c>runComplete</c>) and then closes the connection, which is what makes the
 /// listener run its trailing <c>Save</c>.
 /// </summary>

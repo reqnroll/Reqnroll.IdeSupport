@@ -117,7 +117,7 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
-    /// <c>reqnroll/findStepDefinitions</c> (issue #757) at the same bound step position as
+    /// <c>reqnroll/findStepDefinitions</c> at the same bound step position as
     /// <see cref="DefinitionAsync"/> — same lookup, so the two numbers are directly comparable;
     /// the difference is the per-binding detail (method parsing, identifier lookup) this adds.
     /// </summary>
@@ -180,8 +180,8 @@ public sealed class InteractiveScenarios
 
     // ── Document structure (F9/F10) ─────────────────────────────────────────────
     // Both fire on every keystroke burst alongside semantic tokens/completion (see
-    // SessionScenario), but previously had no isolated P95 measurement in this suite — only
-    // touched incidentally under the session suite's contention (issue #256).
+    // SessionScenario), so they get an isolated P95 measurement here in addition to the
+    // incidental load from the session suite's contention.
 
     public async Task<LatencySummary> DocumentSymbolAsync()
         => await RunAsync(PerfTargets.DocumentSymbol.Operation, async i =>
@@ -230,11 +230,10 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
-    /// <c>reqnroll/resolveTestTargets</c> (issue #262/#495) at the first scenario's own range — the
+    /// <c>reqnroll/resolveTestTargets</c> at the first scenario's own range — the
     /// Run CodeLens bridge's per-target resolution call, now backing VS's per-line data point, VS
     /// Code's lazy <c>resolveCodeLens</c>, and (via <c>RunTestTargetCache</c>) Rider's identity-keyed
-    /// per-scenario cache, instead of a whole-file walk. Field-instrumented since #262/#492 but had
-    /// no isolated benchmark coverage until #495.
+    /// per-scenario cache, instead of a whole-file walk. Field-instrumented, and measured in isolation here.
     /// </summary>
     public async Task<LatencySummary> ResolveTestTargetsAsync()
         => await RunAsync(PerfTargets.ResolveTestTargets.Operation, async i =>
@@ -243,7 +242,7 @@ public sealed class InteractiveScenarios
             await _harness.RequestResolveTestTargetsAsync(f.Uri, f.FirstScenarioRange).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
-    // ── Test outcomes (issues #700/#714) ────────────────────────────────────────
+    // ── Test outcomes ────────────────────────────────────────
     // The Run CodeLens bridge's outcome lookup, on the same LSP transport every other interactive
     // target is measured on. The store is seeded once (see TestOutcomeScenarios.SeedAsync) before
     // these run, and every one of the three lookups below is a distinct cost shape, which is why
@@ -357,8 +356,8 @@ public sealed class InteractiveScenarios
     }
 
     /// <summary>
-    /// <c>textDocument/codeLens</c> on a corpus <c>.feature</c> file (<c>HookCodeLensHandler</c>,
-    /// issues #269/#372) — the hook-match-count lenses above <c>Feature:</c>/<c>Scenario:</c> lines.
+    /// <c>textDocument/codeLens</c> on a corpus <c>.feature</c> file (<c>HookCodeLensHandler</c>)
+    /// — the hook-match-count lenses above <c>Feature:</c>/<c>Scenario:</c> lines.
     /// The corpus's global (unscoped) and <c>@hookscope</c>-tagged hooks (see
     /// <c>CorpusGenerator.BuildBindings</c>/<c>BuildFeature</c>) give every feature file's first
     /// scenario a real, non-empty lens set to measure against.
@@ -372,9 +371,8 @@ public sealed class InteractiveScenarios
 
     /// <summary>
     /// <c>textDocument/codeLens</c> on the corpus's .cs binding source file — measures
-    /// <c>HookMatchCountCodeLensHandler</c>'s scenario-match-count lenses specifically (issue #373,
-    /// the reverse direction of <see cref="FeatureHookCodeLensAsync"/>: from a hook-binding method to
-    /// the scenarios its scope matches). The combined <c>textDocument/codeLens</c> response also
+    /// <c>HookMatchCountCodeLensHandler</c>'s scenario-match-count lenses specifically (the reverse direction of
+    /// <see cref="FeatureHookCodeLensAsync"/>: from a hook-binding method to the scenarios its scope matches). The combined <c>textDocument/codeLens</c> response also
     /// carries <see cref="StepCodeLensAsync"/>'s lenses on the same file, but both requests exercise
     /// the identical wire round-trip and dispatch cost — this scenario isolates the operation label.
     /// </summary>
@@ -392,7 +390,7 @@ public sealed class InteractiveScenarios
     }
 
     /// <summary>
-    /// <c>reqnroll/findMatchingScenarios</c> (issue #373) — clicking a
+    /// <c>reqnroll/findMatchingScenarios</c> — clicking a
     /// <see cref="HookMatchCountCodeLensAsync"/> lens. The click position is read back from a real
     /// lens's own <c>Command.Arguments</c> (an untimed setup step, same precedent as
     /// <see cref="SemanticTokensDeltaAsync"/>'s <c>previousResultId</c> fetch), so the measured
@@ -470,13 +468,12 @@ public sealed class InteractiveScenarios
     }
 
     /// <summary>
-    /// Diagnostics push for a <c>.cs</c> binding's structural validation (issues #514/#516):
+    /// Diagnostics push for a <c>.cs</c> binding's structural validation:
     /// toggles a binding method between a valid <c>void</c> body and an invalid <c>async void</c> one
     /// (<c>StepDefinitionFileParser.GetStructuralError</c>'s "must not be async void" rule) and times
     /// from the edit to <c>publishDiagnostics</c> for that <c>.cs</c> URI. Mirrors
     /// <see cref="DiagnosticsPushAsync"/>'s "trigger, then wait for the push" shape, but for the
-    /// binding-file diagnostics path introduced by #514, which had no benchmark coverage at all —
-    /// the sibling scenario only ever edits <c>.feature</c> documents.
+    /// binding-file diagnostics path; the sibling scenario only ever edits <c>.feature</c> documents.
     /// </summary>
     public async Task<LatencySummary> CSharpDiagnosticsPushAsync(string corpusRoot)
     {
