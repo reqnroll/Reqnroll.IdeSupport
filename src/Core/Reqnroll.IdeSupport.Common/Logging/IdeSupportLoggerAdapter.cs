@@ -44,7 +44,7 @@ public sealed class IdeSupportLoggerAdapter : ILogger
     /// <summary>Initializes a new instance of the <see cref="IdeSupportLoggerAdapter"/> class.</summary>
     public IdeSupportLoggerAdapter(string categoryName, IIdeSupportLogger logger)
     {
-        // Shortened to the simple type name (issue #626): categoryName is usually a
+        // Shortened to the simple type name: categoryName is usually a
         // fully-qualified name (e.g. from ILogger<T>), and the direct IIdeSupportLogger call
         // sites already render just a short source name, not a namespace-qualified one.
         _shortCategoryName = ShortenCategoryName(categoryName);
@@ -97,7 +97,7 @@ public sealed class IdeSupportLoggerFactory : ILoggerFactory
     public ILogger CreateLogger(string categoryName) => new IdeSupportLoggerAdapter(categoryName, _logger);
 
     // A single IIdeSupportLogger is wired into this factory - that logger is typically itself an
-    // IdeSupportCompositeLogger fanning out to several destinations (e.g. issue #651's debug +
+    // IdeSupportCompositeLogger fanning out to several destinations (e.g. debug +
     // file + VS output pane sinks), so "single sink" here means "single ILoggerFactory backend",
     // not "only one place messages end up". ILoggerProvider is Microsoft.Extensions.Logging's own
     // extension point for adding backends; it's unsupported here because backends are composed on

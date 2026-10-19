@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.TestLogger;
 /// VSTest logger that streams every individual <see cref="TestResult"/> of an IDE-triggered run —
 /// including one per Scenario Outline example row — to the IDE that registered it, so the IDE can
 /// derive pass/fail state from the standard vstest pipeline instead of VS's internal, outline-blind
-/// test-outcome push (issue #702).
+/// test-outcome push.
 /// </summary>
 /// <remarks>
 /// <para>

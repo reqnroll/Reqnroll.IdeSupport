@@ -40,7 +40,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         _retryDelay = retryDelay;
         // The project scope may be thread-affine (VsProjectScope requires the VS UI thread, which
         // is where this provider is constructed), so retries are marshalled back to this context
-        // instead of running on the timer's thread-pool thread (#962).
+        // instead of running on the timer's thread-pool thread.
         _synchronizationContext = SynchronizationContext.Current;
         InitializeProjectSettings();
 
@@ -181,8 +181,8 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         // yet: the same transient "project not loaded" condition that makes PackageReferences null
         // (VsUtils.GetTargetFrameworkMoniker(s) return null from their catch blocks). Treat it as
         // uninitialized so the retry loop re-reads it, rather than caching a settings record that
-        // silently has no TFM. The optional chaining also removes the NullReferenceException that
-        // occurred when both sources were null (issue #963).
+        // silently has no TFM. The optional chaining also avoids a NullReferenceException when
+        // both sources are null.
         var targetFrameworkMoniker = TargetFrameworkMoniker.Create(_projectScope.TargetFrameworkMoniker);
         var targetFrameworkMonikers = _projectScope.TargetFrameworkMonikers ?? targetFrameworkMoniker?.Value;
 

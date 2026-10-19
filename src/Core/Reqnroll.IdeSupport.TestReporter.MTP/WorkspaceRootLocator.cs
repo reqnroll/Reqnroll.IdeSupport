@@ -9,8 +9,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP;
 /// <c>.sln</c>/<c>.slnx</c> file, or a <c>.git</c> entry (a directory for a normal clone, a file for a
 /// worktree). Mirrors the IDE's own opened-folder identity closely enough that the result is expected
 /// to equal (or, in a multi-folder workspace, be nested under) the <c>workspaceRoot</c> the LSP server
-/// published in its session breadcrumb (<see cref="SessionBreadcrumbMatcher"/>) — see issue #715 plan
-/// §4.
+/// published in its session breadcrumb (<see cref="SessionBreadcrumbMatcher"/>).
 /// </summary>
 internal static class WorkspaceRootLocator
 {

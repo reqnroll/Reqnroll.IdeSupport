@@ -14,7 +14,7 @@ public static class PathUtils
     /// </summary>
     /// <remarks>
     /// The "only when fully qualified" condition is the important half, and it is why this exists
-    /// rather than a bare <c>Path.GetFullPath</c> (issue #540). A source path recorded in a PDB
+    /// rather than a bare <c>Path.GetFullPath</c>. A source path recorded in a PDB
     /// built on another platform — <c>/workspaces/host-solution/Steps.cs</c> from a devcontainer,
     /// <c>/_/Steps.cs</c> from a deterministic CI build — is <see cref="Path.IsPathRooted(string)"/>
     /// on Windows but not <see cref="Path.IsPathFullyQualified(string)"/>, and handing it to
@@ -87,8 +87,7 @@ public static class PathUtils
     /// with an upper-case drive letter) while Roslyn discovery derives it from an LSP document URI
     /// (which can carry a lower-case one). A case-sensitive compare treats those as different files
     /// and fails to replace a file's previous bindings, leaving a stale binding behind. This is
-    /// technically over-permissive on case-sensitive filesystems; that trade has been in place since
-    /// #518 and is not revisited here.
+    /// technically over-permissive on case-sensitive filesystems; that is an accepted trade-off.
     /// </remarks>
     public static bool IsSamePath(string? a, string? b)
     {

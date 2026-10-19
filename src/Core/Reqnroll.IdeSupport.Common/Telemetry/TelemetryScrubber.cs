@@ -20,7 +20,7 @@ public static class TelemetryScrubber
     // (over-redacting is safe; under-redacting leaks a path) — see docs/architecture/telemetry.md's
     // privacy rules: "The Error event must scrub exception messages for file paths and
     // user-identifiable strings before transmission." Mirrored by the VS Code and Rider clients'
-    // exception scrubbers (issue #621).
+    // exception scrubbers.
     // A directory segment may contain interior spaces ("C:\Users\John Smith\x") but never starts or ends
     // with one, so a path cannot swallow the words (or a second path) that follow it.
     private const string Segments = @"(?:[^\\/\s""'<>|*?:](?:[^\\/\r\n""'<>|*?:]*[^\\/\s""'<>|*?:])?[\\/])*";

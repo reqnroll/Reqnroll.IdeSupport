@@ -13,7 +13,7 @@ public interface ITelemetryService : IErrorTelemetryService
 {
     /// <summary>Records that a project system was opened.</summary>
     void MonitorOpenProjectSystem(IIdeScope ideScope);
-    // MonitorOpenProject(ProjectSettings, int?) — retired (issue #873): the "Project loaded" event it sent
+    // MonitorOpenProject(ProjectSettings, int?) — retired: the "Project loaded" event it sent
     // duplicated the LSP server's "OpenProject command executed" (which carries FeatureFileCount) and
     // "ReqnrollDiscoveryExecuted" / "ProjectCharacteristics" events, which are identical across IDEs.
     /// <summary>Records that a feature file was opened.</summary>
@@ -25,7 +25,7 @@ public interface ITelemetryService : IErrorTelemetryService
     // textDocument/didOpen and textDocument/didChange via IOperationDurationRecorder — see
     // TextDocumentSyncHandler), not a business event on this interface. Restoring this member would
     // just duplicate that, and re-introduce the same "continuous per-edit event" problem the
-    // CommandAutoFormatTable exclusion (issue #255/#260) deliberately avoids elsewhere.
+    // CommandAutoFormatTable exclusion deliberately avoids elsewhere.
 
     /// <summary>Records that the extension was freshly installed.</summary>
     void MonitorExtensionInstalled();

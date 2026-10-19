@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP;
 /// <summary>
 /// Auto-registration entry point MTP's <c>Microsoft.Testing.Platform.MSBuild</c>-generated
 /// <c>SelfRegisteredExtensions.AddSelfRegisteredExtensions</c> calls for every
-/// <c>&lt;TestingPlatformBuilderHook&gt;</c> MSBuild item that names this class. Issue #741: that item
+/// <c>&lt;TestingPlatformBuilderHook&gt;</c> MSBuild item that names this class. That item
 /// is added by <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c>, which also compiles this file (as
 /// <c>internal</c>) into the user's own test assembly, so the generated call is an ordinary
 /// same-assembly static call. Deliberately a plain static method, not an extension method.

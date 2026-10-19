@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace Reqnroll.IdeSupport.TestReporter.MTP;
 
-/// <summary>One session breadcrumb, as written by the LSP server's <c>TestOutcomeSessionBreadcrumb</c> (issue #715 phase 1).</summary>
+/// <summary>One session breadcrumb, as written by the LSP server's <c>TestOutcomeSessionBreadcrumb</c>.</summary>
 internal sealed record SessionBreadcrumb(string Endpoint, string? WorkspaceRoot);
 
 /// <summary>
@@ -15,7 +15,7 @@ internal sealed record SessionBreadcrumb(string Endpoint, string? WorkspaceRoot)
 /// reporter's own resolved workspace root. Deepest-match-wins: among breadcrumbs whose
 /// <c>workspaceRoot</c> is an ancestor of (or equal to) this reporter's root, the one with the longest
 /// <c>workspaceRoot</c> wins — mirrors Rider's <c>RunTestRunner.findOwningProjectPath</c> tie-break
-/// rule (issue #715 plan §7 risk #3: nested/multi-solution repos can have more than one candidate
+/// rule (nested or multi-solution repos can have more than one candidate
 /// session). A connect-and-verify step (actually opening the TCP connection) is the reporter's own
 /// job, not this matcher's — a stale breadcrumb left by a crashed session is expected to fail to
 /// connect, same as the VSTest logger's existing "can't reach IDE" degradation.

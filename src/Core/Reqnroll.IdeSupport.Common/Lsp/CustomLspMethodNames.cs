@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.Common.Lsp;
 
 /// <summary>
 /// Centralizes the custom <c>reqnroll/*</c> LSP method names shared by the LSP server and the
-/// Visual Studio extension (issue #682) -- the counterpart to
+/// Visual Studio extension -- the counterpart to
 /// <see cref="Common.Lsp.LspStandardMethodNames"/> for standard methods, VS Code's
 /// <c>ReqnrollMethods</c> (<c>src/VSCode/src/lsp/lspMethods.ts</c>), and Rider's
 /// <c>@JsonRequest</c>/<c>@JsonNotification</c>-annotated <c>ReqnrollLanguageServer</c> interface.
@@ -37,13 +37,13 @@ public static class CustomLspMethodNames
     public const string ReqnrollFindStepUsages = "reqnroll/findStepUsages";
     /// <summary>Method name for the <c>reqnroll/findHooks</c> request.</summary>
     public const string ReqnrollFindHooks = "reqnroll/findHooks";
-    /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
+    /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request.</summary>
     public const string ReqnrollFindStepDefinitions = "reqnroll/findStepDefinitions";
-    /// <summary>Method name for the <c>reqnroll/findMatchingScenarios</c> request (issue #373).</summary>
+    /// <summary>Method name for the <c>reqnroll/findMatchingScenarios</c> request.</summary>
     public const string ReqnrollFindMatchingScenarios = "reqnroll/findMatchingScenarios";
-    /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
+    /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request.</summary>
     public const string ReqnrollResolveTestTargets = "reqnroll/resolveTestTargets";
-    /// <summary>Method name for the <c>reqnroll/resolveContainerTestTargets</c> request — resolves every scenario/Outline under a <c>Feature:</c> or <c>Rule:</c> block in one call (issue #744, "Run scenarios").</summary>
+    /// <summary>Method name for the <c>reqnroll/resolveContainerTestTargets</c> request — resolves every scenario/Outline under a <c>Feature:</c> or <c>Rule:</c> block in one call (used by "Run scenarios").</summary>
     public const string ReqnrollResolveContainerTestTargets = "reqnroll/resolveContainerTestTargets";
     /// <summary>Method name for the <c>reqnroll/findUnusedStepDefinitions</c> request.</summary>
     public const string ReqnrollFindUnusedStepDefinitions = "reqnroll/findUnusedStepDefinitions";
@@ -70,7 +70,7 @@ public static class CustomLspMethodNames
     /// <summary>
     /// Not a wire method — the <see cref="Performance.IOperationDurationRecorder"/> operation label
     /// for <see cref="Features.TestOutcomes.TestOutcomeTcpListener"/>'s NDJSON ingestion hot path,
-    /// timed from connection hello to <c>runComplete</c> (issue #722).
+    /// timed from connection hello to <c>runComplete</c>.
     /// </summary>
     public const string ReqnrollTestOutcomesIngestRun = "reqnroll/testOutcomes/ingestRun";
 

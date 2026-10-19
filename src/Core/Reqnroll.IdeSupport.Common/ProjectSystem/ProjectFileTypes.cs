@@ -28,7 +28,7 @@ public static class ProjectFileTypes
     /// project whose binding registry can never be populated, and -- because it is the innermost
     /// folder containing its own files -- one that wins the primary-owner rule for them, so those
     /// files resolve to that empty registry instead of the referencing test project's populated
-    /// one (issue #735). Its content still reaches the server, as part of the membership of each
+    /// one. Its content still reaches the server, as part of the membership of each
     /// project that imports it.
     /// </remarks>
     public static bool IsSharedProject(string projectFilePath)
