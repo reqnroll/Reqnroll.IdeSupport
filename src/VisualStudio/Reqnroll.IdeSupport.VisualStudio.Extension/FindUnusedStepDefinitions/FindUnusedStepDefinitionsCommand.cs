@@ -77,7 +77,7 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
         }
         catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
         {
-            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            // Say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("FindUnusedStepDefinitionsCommand: request failed: {Reason}", reason);
             await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Unused Step Definitions failed - {reason}.");
         }

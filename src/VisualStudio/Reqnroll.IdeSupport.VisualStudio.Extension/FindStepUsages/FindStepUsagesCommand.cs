@@ -44,7 +44,7 @@ internal sealed class FindStepUsagesCommand : Command
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
         VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
-        // Deliberately not in the editor context menu (#1118); no menu placement, so it can only be
+        // Deliberately not in the editor context menu; no menu placement, so it can only be
         // invoked through a user-assigned keyboard shortcut. The step-usages CodeLens does not use this command.
         Placements = [],
     };
@@ -112,7 +112,7 @@ internal sealed class FindStepUsagesCommand : Command
         }
         catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
         {
-            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            // Say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("FindStepUsagesCommand: request failed: {Reason}", reason);
             await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Step Usages failed - {reason}.");
         }

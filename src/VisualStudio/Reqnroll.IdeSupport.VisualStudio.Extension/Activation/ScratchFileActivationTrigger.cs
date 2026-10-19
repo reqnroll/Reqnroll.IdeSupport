@@ -12,7 +12,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 
 /// <summary>
-/// Recovers a missed language server activation (issue #533) by opening and closing a throwaway
+/// Recovers a missed language server activation by opening and closing a throwaway
 /// <c>.feature</c> file.
 /// </summary>
 /// <remarks>
@@ -49,7 +49,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 /// reacts to, and has not been tested.
 /// </para>
 /// <para>
-/// Now a fallback (issue #78). Live logs showed this trigger does start the server, and VS does
+/// This is a fallback. Live logs showed this trigger does start the server, and VS does
 /// then send <c>didOpen</c> for the restored tab, but the tab itself stayed inert: it had been
 /// restored without the <c>Gherkin</c> content type, so no Gherkin-scoped view feature ever
 /// attached to it. That root cause is addressed by <c>GherkinContentTypeDefinition</c> (static

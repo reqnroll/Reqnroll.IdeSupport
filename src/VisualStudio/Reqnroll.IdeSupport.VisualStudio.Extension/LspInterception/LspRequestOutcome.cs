@@ -22,13 +22,13 @@ internal enum LspRequestStatus
     /// <summary>The caller's token was cancelled before a response arrived.</summary>
     Cancelled,
 
-    /// <summary>There is no server to answer: the pipe is disposed, or the server terminated (issue #555).</summary>
+    /// <summary>There is no server to answer: the pipe is disposed, or the server terminated.</summary>
     Unavailable,
 }
 
 /// <summary>
 /// The full outcome of one owned request: the status says <em>whether</em> it was answered, so a
-/// caller no longer has to infer failure from a <see langword="null"/> result (issues #1017, #1019, #1020).
+/// caller no longer has to infer failure from a <see langword="null"/> result.
 /// </summary>
 /// <remarks>
 /// The older <c>SendRequestToServerAsync</c> collapsed a server error, the 60 s timeout, a terminated
@@ -155,7 +155,7 @@ internal sealed class LspRequestFailedException : InvalidOperationException
 
 /// <summary>
 /// Lets an interactive command present a failed owned request (see <see cref="LspRequestOutcome.GetResultOrThrow"/>)
-/// as "it failed, and why" instead of as an answer such as "none found" (issues #1019, #1020).
+/// as "it failed, and why" instead of as an answer such as "none found".
 /// </summary>
 internal static class LspRequestFailure
 {

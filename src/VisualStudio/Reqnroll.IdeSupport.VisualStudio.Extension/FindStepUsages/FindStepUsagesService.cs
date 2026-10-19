@@ -63,7 +63,7 @@ internal sealed class FindStepUsagesService
             .SendRequestAsync(CustomLspMethodNames.ReqnrollFindStepUsages, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1020: a failed request throws rather than reading as NotABinding. Only a server that
+        // A failed request throws rather than reading as NotABinding. Only a server that
         // actually answered (JSON null, isBinding:false, or locations) reaches MapResult.
         var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindStepUsages, fileUri, cancellationToken);
 

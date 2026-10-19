@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 
 /// <summary>
-/// Parsed result of a <c>reqnroll/findMatchingScenarios</c> response (issue #373) — the inverse
+/// Parsed result of a <c>reqnroll/findMatchingScenarios</c> response — the inverse
 /// of <see cref="FindHooks.FindHooksResult"/>.
 /// </summary>
 internal sealed class FindMatchingScenariosResult

@@ -55,18 +55,18 @@ internal sealed class GherkinNavigationBarSymbolService
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Retries once on <c>ContentModified</c></b> (issue #671, R6a). This request is dispatched
+    /// <b>Retries once on <c>ContentModified</c></b>. This request is dispatched
     /// on OmniSharp's default Parallel lane, and its scheduler cancels <i>every</i> outstanding
     /// Parallel request — with no per-document scoping — the moment any Serial-dispatched
     /// notification (<c>didChange</c>/<c>didOpen</c>/<c>didSave</c>) arrives (the same mechanism
-    /// documented for issue #654's rename failures). Unlike rename, this is not a rare occurrence:
+    /// which also hits rename). Unlike rename, this is not a rare occurrence:
     /// a <c>didChange</c> fires on every keystroke, so this request racing ordinary typing is the
     /// common case, not the exception.
     /// </para>
     /// <para>
     /// The result is not merely a stale-data cosmetic issue here. This service is the sole source
     /// of scenario ranges for <see cref="RunTestCodeLens.RunTestCodeLensService.GetTargetsForLineAsync"/>
-    /// — a swallowed <c>ContentModified</c> previously came back as an empty symbol list
+    /// — a swallowed <c>ContentModified</c> comes back as an empty symbol list
     /// indistinguishable from "no scenario found," which meant the Run CodeLens for that scenario
     /// silently failed to render, with nothing to tell it apart from a genuine miss.
     /// </para>
@@ -76,14 +76,14 @@ internal sealed class GherkinNavigationBarSymbolService
     /// first attempt's full round trip first), so the retry is racing only whatever the user typed
     /// in that gap — a bounded, one-shot mitigation rather than a retry storm under sustained
     /// typing. A second collision throws <see cref="LspContentModifiedException"/> rather than
-    /// returning no symbols, so no caller mistakes it for a real empty answer (issue #800
-    /// follow-up; seen live at startup, when the extension's own project notifications collided
+    /// returning no symbols, so no caller mistakes it for a real empty answer
+    /// (seen live at startup, when the extension's own project notifications collided
     /// twice). The Run CodeLens cache restarts its computation, and the Navigation Bar schedules
     /// another refresh.
     /// </para>
     /// <para>
     /// The proper fix — not retrying around a scheduling defect — is OmniSharp's global,
-    /// unscoped Parallel cancellation itself; see #671 for the broader design discussion. This is
+    /// unscoped Parallel cancellation itself. This is
     /// the client-side mitigation available without changing that scheduling behavior.
     /// </para>
     /// </remarks>
@@ -100,12 +100,12 @@ internal sealed class GherkinNavigationBarSymbolService
 
         // A cancelled request comes back from the pipe as an empty result, not an exception. Mapping
         // that to "no symbols" made the Run CodeLens cache a genuine-looking empty answer for a
-        // scenario line when its computation was cancelled by an invalidation (issue #78): the
+        // scenario line when its computation was cancelled by an invalidation: the
         // lens then stayed blank for the session. Cancellation must surface as cancellation.
         cancellationToken.ThrowIfCancellationRequested();
 
         // The same failure mode for ContentModified that survived the one retry: "no symbols"
-        // would be cached as a real answer (issue #800 follow-up). Callers treat this exception
+        // would be cached as a real answer. Callers treat this exception
         // as "ask again later".
         if (IsContentModified(error))
             throw new LspContentModifiedException(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);

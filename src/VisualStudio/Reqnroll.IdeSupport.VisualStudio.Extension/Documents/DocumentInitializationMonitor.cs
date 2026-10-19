@@ -18,7 +18,7 @@ internal enum RdtDocumentKind
     /// <summary>A Gherkin <c>.feature</c> file.</summary>
     Feature,
 
-    /// <summary>A C# file — a potential binding source, and (since issue #533 phase 1) an activation trigger.</summary>
+    /// <summary>A C# file — a potential binding source, and an activation trigger.</summary>
     CSharp,
 }
 
@@ -68,7 +68,7 @@ internal static class RdtDocumentInitialization
 /// lifecycle event for the documents that can activate the language server provider — locks,
 /// window shows and hides, and initialization — each timestamped relative to package load, so the
 /// distance between "package loaded", "the document became real", "the tab was shown" and "VS
-/// activated the language server provider" is measurable (issue #533).
+/// activated the language server provider" is measurable.
 /// </summary>
 /// <remarks>
 /// Two log levels on purpose. The inventory and initialization lines are <c>Info</c>: one-off, and
@@ -83,8 +83,9 @@ internal static class RdtDocumentInitialization
 /// touches the <c>LanguageServerProvider</c>.
 /// </para>
 /// <para>
-/// Originally scoped to <c>.feature</c> files only, and to initialization events only. Widened
-/// twice as measurement kept outrunning it (all 2026-08-30):
+/// Covers every activation-relevant document and lifecycle event, not only <c>.feature</c>
+/// files and initialization. Two widenings were needed as measurement kept outrunning the narrower
+/// scope (all 2026-08-30):
 /// </para>
 /// <list type="number">
 /// <item>
@@ -273,7 +274,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
     /// Logs <em>every</em> document window show, first or not.
     /// </summary>
     /// <remarks>
-    /// Originally first-show only, which turned out to be unreadable: on a cold start the restored
+    /// Logging only the first show would be unreadable: on a cold start the restored
     /// tab's first show happens before this monitor is advised, so the only line that ever appeared
     /// was for a document the user closed and reopened — easy to mistake for the user clicking the
     /// restored tab. Logging every show makes a plain tab click visible as such, which is what
@@ -327,7 +328,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
             // A stale RDT cookie (the document was released or closed during restore) makes
             // GetDocumentMoniker throw ArgumentException. In an observe-only monitor this is an
             // expected race, not an error — log at Verbose so it does not surface as a spurious
-            // [Error] in the output pane (issue #814).
+            // [Error] in the output pane.
             _logger.LogDebugException(ex, $"DocumentInitializationMonitor: logging '{what}' failed (stale RDT cookie).");
         }
         catch (Exception ex)

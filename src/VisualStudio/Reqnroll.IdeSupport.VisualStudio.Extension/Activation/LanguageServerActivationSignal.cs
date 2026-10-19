@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 /// <summary>
 /// Records whether VS has activated the <see cref="ReqnrollLanguageClient"/> provider in this
 /// session, so the VSSDK side (<see cref="ReqnrollPluginPackage"/>) can tell when activation was
-/// missed (issue #533).
+/// missed.
 /// </summary>
 /// <remarks>
 /// <para>

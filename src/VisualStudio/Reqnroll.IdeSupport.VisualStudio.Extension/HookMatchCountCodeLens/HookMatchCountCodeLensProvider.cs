@@ -17,14 +17,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 
 /// <summary>
 /// VS.Extensibility CodeLens provider that shows a "N scenario(s) matched" adornment above each
-/// hook-binding attribute in a C# file — issue #373, the inverse of #269's hook-match CodeLens on
+/// hook-binding attribute in a C# file — the inverse of the hook-match CodeLens on
 /// `.feature` lines.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A separate provider from <see cref="StepCodeLensProvider"/> rather than folding this lens kind
 /// into it: both providers call the same shared <see cref="StepCodeLensState.Service"/>, whose
-/// internal per-file cache (issue #552 follow-up) amortises the <c>textDocument/codeLens</c> round
+/// internal per-file cache amortises the <c>textDocument/codeLens</c> round
 /// trip across every method-level lens either provider asks for, so a second provider issuing its
 /// own request through it adds no new LSP traffic. Keeping the two lens kinds in separate
 /// providers/files mirrors the LSP-server-side split (<c>StepCodeLensHandler</c> vs
@@ -158,7 +158,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
             if (hookLenses.Count == 0)
                 return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
 
-            // An unscoped hook (server label "all scenarios", issue #403) matches everything, so
+            // An unscoped hook (server label "all scenarios") matches everything, so
             // it dominates any other count in the same aggregation window — show it as-is rather
             // than folding it into ParseCount's numeric sum (which would silently read it as 0).
             string text;
@@ -181,14 +181,14 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
         catch (OperationCanceledException)
         {
             // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while the
-            // shared fetch was still in flight (issue #679) -- VS re-requests the label on its
+            // shared fetch was still in flight -- VS re-requests the label on its
             // own, so this isn't a failure worth surfacing to the output pane.
             return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
         }
         catch (LspContentModifiedException)
         {
-            // The server's state changed under the fetch even after the cache's bounded restarts
-            // (issue #1017). Routine during a refresh storm, so not a Warning with a stack trace.
+            // The server's state changed under the fetch even after the cache's bounded restarts.
+            // Routine during a refresh storm, so not a Warning with a stack trace.
             _logger.LogDebug(
                 "HookMatchCountCodeLens.GetLabelAsync: ContentModified for {FileUri}:{MethodStartLine}", _fileUri, _methodStartLine);
             return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
@@ -235,7 +235,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
             // Use the first (topmost) hook lens in this method's attribute block. The server
             // resolves the exact hook by an exact (line, column) match against the attribute's
             // source location, so both ArgLine and ArgChar must be round-tripped verbatim —
-            // hardcoding column 0 here previously made every lookup miss (issue #373 follow-up).
+            // hardcoding column 0 here would make every lookup miss.
             var firstHook = lenses
                 .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound)
                 .Where(l => l.CommandName == "reqnroll.goToMatchingScenarios")
@@ -262,7 +262,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
             if (renderer is null) return;
 
             // Reuse the same FAR-window rendering pipeline as StepCodeLens's find-usages action
-            // (issue #373 follow-up: a picker dialog here was inconsistent with that surface) —
+            // (a picker dialog here would be inconsistent with that surface) —
             // map to StepUsageLocation and let FeatureReferencesDataSource read the scenario's own
             // header line from disk as the Code-column text (StepText left null).
             var locations = BuildLocations(result.Scenarios);
@@ -291,13 +291,13 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    // Server-side static label for unscoped hooks (issue #403) — not a "N scenarios matched" count.
+    // Server-side static label for unscoped hooks — not a "N scenarios matched" count.
     private const string AllScenariosLabel = "all scenarios";
 
     private static int ParseCount(string title)
     {
         // Title formats: "1 scenario matched" or "N scenarios matched" or "0 scenarios matched".
-        // "all scenarios" (unscoped hooks, issue #403) is handled separately by the caller before
+        // "all scenarios" (unscoped hooks) is handled separately by the caller before
         // this is reached.
         var space = title.IndexOf(' ');
         if (space > 0 && int.TryParse(title.Substring(0, space), out var n))

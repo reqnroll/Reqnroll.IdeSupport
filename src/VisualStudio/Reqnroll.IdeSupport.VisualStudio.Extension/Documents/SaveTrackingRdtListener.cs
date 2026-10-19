@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 /// Feeds <see cref="RecentSaveTracker.Instance"/> from <c>IVsRunningDocTableEvents3.OnBeforeSave</c>,
 /// so the Format Document command filter can tell a format fired from the save sequence (a
 /// format-on-save extension, Code Cleanup on save) from an explicit one and never show a dialog for the
-/// former (issue #1132).
+/// former.
 /// </summary>
 /// <remarks>
 /// The moniker is read through <see cref="IVsRunningDocumentTable4.GetDocumentMoniker"/>, which — unlike

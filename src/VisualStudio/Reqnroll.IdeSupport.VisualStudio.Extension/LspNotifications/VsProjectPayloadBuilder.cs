@@ -30,13 +30,12 @@ internal static class VsProjectPayloadBuilder
     /// <summary>
     /// Builds the <c>reqnroll/projectLoaded</c> params JSON for a project (paths, TFM, NuGet package
     /// references). Reads DTE on the UI thread (switching to it if needed); the NuGet brokered-service query is awaited
-    /// rather than blocked on (issue #1031).
+    /// rather than blocked on.
     /// </summary>
     /// <returns>
-    /// The JSON payload, plus whether NuGet's package references were actually available (issue
-    /// #690). When <see langword="false"/>, the payload still carries an empty
+    /// The JSON payload, plus whether NuGet's package references were actually available. When <see langword="false"/>, the payload still carries an empty
     /// <c>packageReferences</c> array (NuGet reported <c>ProjectNotReady</c> or did not answer in time
-    /// -- issue #1031 -- not a real absence of references) -- callers that care about correctness (e.g. <see cref="VsProjectEventMonitor"/>)
+    /// -- not a real absence of references) -- callers that care about correctness (e.g. <see cref="VsProjectEventMonitor"/>)
     /// should re-send once NuGet's restore actually finishes rather than treating this baseline as final.
     /// </returns>
     public static async Task<ProjectLoadedPayload> BuildProjectLoadedParamsJsonAsync(
@@ -151,7 +150,7 @@ internal static class VsProjectPayloadBuilder
         }
         catch (NuGetProjectNotReadyException ex) when (ex.TimedOut)
         {
-            // Issue #1031: a stalled NuGet service is unexpected (unlike ProjectNotReady below), so
+            // A stalled NuGet service is unexpected (unlike ProjectNotReady below), so
             // it is worth a Warning -- but the package list is just as unknown, so it is retried the
             // same way.
             logger.LogWarning(
@@ -162,7 +161,7 @@ internal static class VsProjectPayloadBuilder
         catch (NuGetProjectNotReadyException)
         {
             // Routine during solution load, not a failure -- logging it as a Warning is what made
-            // issue #679's output-pane auto-activation fire on ordinary startup for issue #690.
+            // the output pane auto-activate on ordinary startup.
             logger.LogDebug(
                 "VsProjectPayloadBuilder: NuGet reports {ProjectName} is not ready yet (not nominated/restored); " +
                 "sending an empty package list for now.",
@@ -185,6 +184,6 @@ internal static class VsProjectPayloadBuilder
 
 /// <summary>
 /// A built <c>reqnroll/projectLoaded</c> payload plus whether its NuGet package references were
-/// actually available (issue #690) -- see <see cref="VsProjectPayloadBuilder.BuildProjectLoadedParamsJsonAsync"/>.
+/// actually available -- see <see cref="VsProjectPayloadBuilder.BuildProjectLoadedParamsJsonAsync"/>.
 /// </summary>
 internal readonly record struct ProjectLoadedPayload(string Json, bool PackageReferencesReady);

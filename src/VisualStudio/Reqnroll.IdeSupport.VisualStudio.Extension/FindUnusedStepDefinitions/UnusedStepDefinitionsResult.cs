@@ -24,8 +24,8 @@ internal sealed class StepDefinitionListItem
     public int     SourceChar        { get; set; }  // 0-based
     /// <summary>
     /// Whether <see cref="SourceFile"/> names a file that exists here. False when the assembly was
-    /// built elsewhere and the source path it recorded could not be mapped onto this machine
-    /// (issue #540); such a row is listed but not navigable. Defaults to true so a response from an
+    /// built elsewhere and the source path it recorded could not be mapped onto this machine;
+    /// such a row is listed but not navigable. Defaults to true so a response from an
     /// older server, which omits the field, behaves exactly as before.
     /// </summary>
     public bool    IsResolved        { get; set; } = true;
@@ -33,7 +33,7 @@ internal sealed class StepDefinitionListItem
     public string? RecordedSourceFile { get; set; }
     /// <summary>
     /// The binding's step keyword (<c>"Given"</c>/<c>"When"</c>/<c>"Then"</c>), shown as the
-    /// attribute name; null when unknown or from an older server (issue #757).
+    /// attribute name; null when unknown or from an older server.
     /// </summary>
     public string? StepDefinitionType { get; set; }
 }

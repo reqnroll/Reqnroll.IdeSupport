@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <remarks>
 /// No debounce/rate-limit here, unlike <see cref="CodeLensRefreshInterceptor"/>: this notification
 /// doesn't call VS.Extensibility's <c>CodeLens.Invalidate()</c> (the classic VSSDK tagger it drives
-/// has no equivalent reconnect risk — see issue #156), and the server already throttles how often it
+/// has no equivalent reconnect risk — see <see cref="CodeLensRefreshInterceptor"/>), and the server already throttles how often it
 /// sends this notification (<c>TestOutcomeTcpListener.ScheduleRefresh</c>), so there is nothing left
 /// to coalesce on this side.
 /// </remarks>

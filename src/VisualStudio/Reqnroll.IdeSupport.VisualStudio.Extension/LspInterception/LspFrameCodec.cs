@@ -10,9 +10,8 @@ using Newtonsoft.Json.Linq;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
-/// Pure LSP wire-protocol codec (<c>Content-Length: N\r\n\r\nBODY</c>) — the first of the seams
-/// <c>LspInterceptingPipe</c> is being split into (issue #587, step 1 of the issue's own ordered,
-/// low-risk-first list). Carries no session state: everything here operates only on the
+/// Pure LSP wire-protocol codec (<c>Content-Length: N\r\n\r\nBODY</c>) — one of the seams
+/// <c>LspInterceptingPipe</c> is split into. Carries no session state: everything here operates only on the
 /// <see cref="PipeReader"/>/<see cref="PipeWriter"/> or raw bytes passed in, which is what makes it
 /// independently testable against captured frames — including the partial/malformed/oversized cases
 /// that are awkward to reach through the full pipe.

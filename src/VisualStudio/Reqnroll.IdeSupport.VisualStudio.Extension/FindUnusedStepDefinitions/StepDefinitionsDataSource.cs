@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>
 /// Provides step-definition rows to the VS Find All References table window — the unused step
-/// definitions, or the step definitions matching a step (Go To Definition, issue #757).
+/// definitions, or the step definitions matching a step (Go To Definition).
 /// </summary>
 internal sealed class StepDefinitionsDataSource : ITableDataSource
 {
@@ -67,7 +67,7 @@ internal sealed class StepDefinitionsDataSource : ITableDataSource
 
     /// <summary>
     /// Builds the Code-column text: <c>ClassName.MethodName - [Given("expression")]</c>, the attribute
-    /// written as it would appear on the method (issue #757). A method-name-style binding has no
+    /// written as it would appear on the method. A method-name-style binding has no
     /// expression and shows just <c>[Given]</c>; with no known keyword the expression is shown quoted
     /// on its own. Missing class/method parts fall back gracefully.
     /// </summary>
@@ -98,8 +98,8 @@ internal sealed class StepDefinitionsDataSource : ITableDataSource
         var text = attribute is null ? identifier : $"{identifier} - {attribute}";
 
         // A row with no DocumentName has no File column and does nothing on double-click. Saying so
-        // in the one content column VS gives us is the only place a user can find out why
-        // (issue #540); the recorded path itself goes to the log, since it would swamp this column.
+        // in the one content column VS gives us is the only place a user can find out why;
+        // the recorded path itself goes to the log, since it would swamp this column.
         return isResolved ? text : $"{text} - (source not on this machine — rebuild locally)";
     }
 

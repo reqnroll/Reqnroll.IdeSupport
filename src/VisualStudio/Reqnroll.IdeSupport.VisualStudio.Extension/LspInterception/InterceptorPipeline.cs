@@ -7,10 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
-/// Runs one direction's interceptor list over a message (issue #587, step 3).
+/// Runs one direction's interceptor list over a message.
 /// </summary>
 /// <remarks>
-/// Extracted because both pumps and both injection methods need it, and after step 3 the pumps live
+/// Extracted because both pumps and both injection methods need it, and the pumps live
 /// in their own types. It also gives the fault-tolerance rule below a test target that does not
 /// require a running pump.
 /// </remarks>

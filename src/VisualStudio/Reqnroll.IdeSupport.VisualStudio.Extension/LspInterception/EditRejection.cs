@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.VisualStudio.Utilities;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
-/// Client side of the server's "edit rejected" contract (issue #1132): classifies a JSON-RPC error and
+/// Client side of the server's "edit rejected" contract: classifies a JSON-RPC error and
 /// presents a rejection to the user. One place, so each call site does not invent its own
 /// status-bar/log combination.
 /// </summary>

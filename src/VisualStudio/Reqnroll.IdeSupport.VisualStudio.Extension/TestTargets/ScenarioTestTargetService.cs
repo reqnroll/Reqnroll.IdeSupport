@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 
 /// <summary>
 /// Sends the custom <c>reqnroll/resolveTestTargets</c> request to the LSP server and maps the
-/// result to <see cref="ScenarioTestTarget"/>s (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — the VS-side
+/// result to <see cref="ScenarioTestTarget"/>s (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages")) — the VS-side
 /// counterpart to <c>ResolveTestTargetsHandler</c>. Consumed by <c>RunTestCodeLensService</c> to
 /// build the classic Run CodeLens bridge's data.
 /// </summary>
@@ -49,7 +49,7 @@ internal sealed class ScenarioTestTargetService
             .SendRequestAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1017: a failure must fault, not read as "no targets" — RunTestCodeLensResultCache
+        // A failure must fault, not read as "no targets" — RunTestCodeLensResultCache
         // reuses a completed result but retries a faulted one (and restarts on ContentModified).
         var mapped = MapResult(outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, cancellationToken) as JObject);
         _logger.LogDebug(
@@ -60,7 +60,7 @@ internal sealed class ScenarioTestTargetService
 
     /// <summary>
     /// Queries the LSP server for the generated test method(s) of every scenario/Outline contained
-    /// in the Feature or Rule whose full body is <paramref name="containerRange"/> (issue #744, "Run
+    /// in the Feature or Rule whose full body is <paramref name="containerRange"/> ("Run
     /// scenarios") — the container-scoped counterpart to <see cref="ResolveTestTargetsAsync"/>. Pass
     /// the container symbol's own <c>Range</c> (its whole body), not its <c>SelectionRange</c>
     /// (header line only) — the server resolves every scenario/Outline tag fully contained within

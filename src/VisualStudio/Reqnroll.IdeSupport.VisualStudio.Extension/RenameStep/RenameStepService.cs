@@ -47,7 +47,7 @@ internal sealed class RenameStepService
             .SendRequestAsync(CustomLspMethodNames.ReqnrollRenameTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1019: a failed request throws rather than reading as "no renameable binding here".
+        // A failed request throws rather than reading as "no renameable binding here".
         var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollRenameTargets, fileUri, cancellationToken);
 
         try
@@ -100,7 +100,7 @@ internal sealed class RenameStepService
         string fileUri, int version, int attributeIndex, int line, int character,
         CancellationToken cancellationToken)
     {
-        // `position` (issue #671, R5) lets the server resolve `attributeIndex` to the binding it
+        // `position` lets the server resolve `attributeIndex` to the binding it
         // denotes while that candidate list is still current, instead of carrying a bare index
         // across the rename prompt and re-applying it to a list rebuilt later.
         var paramsJson =
@@ -117,19 +117,19 @@ internal sealed class RenameStepService
     /// <summary>
     /// Sends the standard <c>textDocument/rename</c> request. Returning normally means the server
     /// accepted the rename; the edit itself arrives separately, pushed by the server via
-    /// <c>workspace/applyEdit</c> a moment after this response (issue #671, R1). The response
+    /// <c>workspace/applyEdit</c> a moment after this response. The response
     /// body is deliberately empty for Visual Studio — VS's native rename client applies whatever
     /// WorkspaceEdit a rename response carries, and with the push in play that applied the edit
     /// twice — so there is nothing in it to parse.
     /// </summary>
     /// <exception cref="OperationCanceledException">The caller's token was cancelled before the server answered.</exception>
     /// <exception cref="EditRejectedException">
-    /// The server rejected the rename with a user-correctable reason (issue #650, #1132) — e.g. a
+    /// The server rejected the rename with a user-correctable reason — e.g. a
     /// step-rename validation rule failed. Carries the server's human-readable reason as
     /// <see cref="Exception.Message"/>, to be shown to the user verbatim.
     /// </exception>
     /// <exception cref="RenameFailedException">
-    /// The server failed the rename for any other reason, or gave no answer (issue #1019); the
+    /// The server failed the rename for any other reason, or gave no answer; the
     /// message is generic or describes why no answer arrived.
     /// </exception>
     public async Task SendRenameRequestAsync(
@@ -152,7 +152,7 @@ internal sealed class RenameStepService
 
             case LspRequestStatus.ServerError:
                 // A user-correctable rejection (-32803) carries a message meant to be shown verbatim; any
-                // other error is an unexpected failure — logged, and reported only generically (issue #1132).
+                // other error is an unexpected failure — logged, and reported only generically.
                 if (EditRejection.TryCreateException(outcome.Error!) is { } rejection)
                     throw rejection;
 
@@ -165,7 +165,7 @@ internal sealed class RenameStepService
                 throw new OperationCanceledException(cancellationToken);
 
             default:
-                // Issue #1019: no answer at all (timeout, no server) is not a successful rename. The
+                // No answer at all (timeout, no server) is not a successful rename. The
                 // edit may still have been applied if the server was merely slow, so don't claim it wasn't.
                 _logger.LogWarning(
                     "RenameStepService: {RenameMethod} got no answer: {Status}",

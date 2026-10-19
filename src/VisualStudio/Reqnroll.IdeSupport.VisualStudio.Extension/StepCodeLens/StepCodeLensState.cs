@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
 /// <summary>
 /// Implemented by any VS.Extensibility <c>CodeLens</c> that wants to participate in
-/// <see cref="StepCodeLensState"/>'s shared invalidation registry (issue #400) — currently
+/// <see cref="StepCodeLensState"/>'s shared invalidation registry — currently
 /// <c>StepCodeLens</c> and <c>HookMatchCountCodeLens</c>, both of which live in the same combined
 /// <c>textDocument/codeLens</c> response for a <c>.cs</c> file.
 /// </summary>
@@ -76,7 +76,7 @@ internal sealed class StepCodeLensState
 
     // ── Lens invalidation ────────────────────────────────────────────────────
     //
-    // Track IInvalidatableLens instances (StepCodeLens and HookMatchCountCodeLens, issue #400) so
+    // Track IInvalidatableLens instances (StepCodeLens and HookMatchCountCodeLens) so
     // they can be invalidated when the binding registry changes (triggering VS to re-call
     // GetLabelAsync).  Without this, the codeLens count would only refresh when the user navigates
     // away and back to the .cs file.
@@ -114,7 +114,7 @@ internal sealed class StepCodeLensState
     /// </summary>
     internal void InvalidateLensesForFile(string fileUri)
     {
-        // Always drop the cached server response for this file first (issue #552 follow-up),
+        // Always drop the cached server response for this file first,
         // even when no lens instance is currently tracked for it below (e.g. the file isn't
         // open) -- otherwise a stale cache entry would outlive this invalidation and get served
         // to the next GetLensesAsync call regardless of the relabel this triggers.

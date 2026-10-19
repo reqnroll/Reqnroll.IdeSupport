@@ -31,14 +31,13 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <see cref="GetConnectionAsync"/> instead of paying launch latency on that path.
 /// </para>
 /// <para>
-/// <b>Issue #156:</b> <see cref="GetConnectionAsync"/> used to hand out the exact same
-/// <see cref="IDuplexPipe"/> on every call — fine as long as VS only ever calls
-/// <c>CreateServerConnectionAsync</c> once, but VS.Extensibility can and does call it again mid
-/// session (confirmed by decompiling VS's own LSP client host: it's by-design extension hot-reload
-/// support, not a VS bug). A second caller getting the same, already-in-use pipe corrupted the
-/// connection outright — <c>System.InvalidOperationException: Writing is not allowed after writer
-/// was completed</c> — the moment that happened. <see cref="GetConnectionAsync"/> now still awaits
-/// the same eagerly-started server process/pipe construction (only ever done once), but calls
+/// <b>Fresh pipe per call:</b> VS.Extensibility can call <c>CreateServerConnectionAsync</c> again
+/// mid session (confirmed by decompiling VS's own LSP client host: it's by-design extension
+/// hot-reload support, not a VS bug). Handing the same, already-in-use <see cref="IDuplexPipe"/> to
+/// a second caller corrupts the connection outright —
+/// <c>System.InvalidOperationException: Writing is not allowed after writer was completed</c>.
+/// <see cref="GetConnectionAsync"/> therefore awaits the same eagerly-started server
+/// process/pipe construction (only ever done once), but calls
 /// <see cref="LspInterceptingPipe.CreateFreshVsFacingPipe"/> fresh on every invocation, matching
 /// every Microsoft sample's <c>CreateServerConnectionAsync</c> implementation (each builds a new
 /// local duplex pipe pair per call rather than caching one). See that method's remarks for how the
@@ -52,7 +51,7 @@ internal sealed class LspServerConnectionService : IDisposable
     private readonly StepCodeLensState _stepCodeLensState;
     private readonly DocumentActivationState _activationState = new();
 
-    // Launch seams (issue #1024): production uses the bundled server exe, Process.Start and the real
+    // Launch seams: production uses the bundled server exe, Process.Start and the real
     // LspInterceptingPipe; tests substitute a harmless process and a pipe factory that throws, to
     // exercise the failure-after-Process.Start path without a real server.
     private readonly Microsoft.VisualStudio.Threading.JoinableTaskFactory _joinableTaskFactory;
@@ -64,12 +63,12 @@ internal sealed class LspServerConnectionService : IDisposable
     // VSTHRD003 "awaiting a foreign task" analyzer error for a task started outside the awaiting
     // method's own async context. StartAsync itself never touches the UI thread.
     // The result is the launched generation's LspInterceptingPipe, not the IDuplexPipe handed to VS
-    // — that is still built per call by CreateFreshVsFacingPipe (issue #156). Returning it from the
-    // task rather than only assigning a field matters for issue #555: a concurrent relaunch can null
+    // — that is still built per call by CreateFreshVsFacingPipe. Returning it from the
+    // task rather than only assigning a field matters: a concurrent relaunch can null
     // that field mid-swap, and a caller that read it then would return no connection at all, which
     // disables the provider for the session. GetConnectionAsync validates this result against the
     // current generation instead.
-    // No longer readonly (issue #555): a server that VS has ended with `exit` is replaced by a new
+    // Not readonly: a server that VS has ended with `exit` is replaced by a new
     // launch, and this field points at whichever generation's launch is current. Guarded by
     // _startLock.
     private Microsoft.VisualStudio.Threading.JoinableTask<LspInterceptingPipe?> _startTask;
@@ -85,7 +84,7 @@ internal sealed class LspServerConnectionService : IDisposable
     private volatile TelemetryEventInterceptor? _telemetryInterceptor;
     private bool _disposed;
 
-    // Client-originated server-lifecycle telemetry (issue #845). Holds events raised before
+    // Client-originated server-lifecycle telemetry. Holds events raised before
     // TelemetryTransmitter is resolved, which is the normal case for a start failure.
     private readonly ServerLifecycleReporter _lifecycleReporter = new();
     // Highest generation whose unexpected exit has been reported; the process Exited handler and
@@ -121,7 +120,7 @@ internal sealed class LspServerConnectionService : IDisposable
     }
 
     /// <summary>
-    /// Creates the service with substitutable launch steps (issue #1024). Only the public
+    /// Creates the service with substitutable launch steps. Only the public
     /// constructor is used by DI; this one exists so tests can fail the start sequence after the
     /// process has been started.
     /// </summary>
@@ -158,7 +157,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
     /// <summary>
     /// Whether any of the current generation's server process, job object, inspector log or pipe is
-    /// still held. Lets tests check that a failed start released everything (issue #1024).
+    /// still held. Lets tests check that a failed start released everything.
     /// </summary>
     internal bool HoldsServerResources =>
         _serverProcess is not null || _childJob is not null || _inspectorLogger is not null || _interceptingPipe is not null;
@@ -171,7 +170,7 @@ internal sealed class LspServerConnectionService : IDisposable
     public ITelemetryTransmitter? TelemetryTransmitter
     {
         get => _lifecycleReporter.Transmitter;
-        // Assigning also flushes any server-lifecycle events (issue #845) raised before it was known,
+        // Assigning also flushes any server-lifecycle events raised before it was known,
         // and any server telemetry the interceptor held while waiting for it.
         set
         {
@@ -192,14 +191,14 @@ internal sealed class LspServerConnectionService : IDisposable
     /// Shared with <see cref="VsProjectEventMonitor"/> (constructed later, post-init) so both the
     /// send-pump-driven <see cref="DocumentActivationTrackingInterceptor"/> and the UI-thread
     /// <c>WindowActivated</c> listener observe/update the same per-file activation state
-    /// (issue #85). Owned here rather than by either consumer since it must outlive and be
+    /// Owned here rather than by either consumer since it must outlive and be
     /// constructed before both.
     /// </summary>
     public DocumentActivationState ActivationState => _activationState;
 
     /// <summary>
     /// Awaits the (already-started) server process and pipe construction, then hands back a fresh
-    /// VS-facing <see cref="IDuplexPipe"/> for this call (issue #156 — see type remarks).
+    /// VS-facing <see cref="IDuplexPipe"/> for this call (see type remarks).
     /// </summary>
     /// <returns>
     /// A new <see cref="IDuplexPipe"/> each call, or <c>null</c> if server startup failed.
@@ -241,7 +240,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
     /// <summary>
     /// Returns the launch task for a usable server, starting a replacement first if the current one
-    /// has gone (issue #555).
+    /// has gone.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -263,7 +262,7 @@ internal sealed class LspServerConnectionService : IDisposable
     /// <para>
     /// The trigger is deliberately "the previous session was terminated", not "VS called
     /// <c>CreateServerConnectionAsync</c> again". VS also makes that call mid-session for extension
-    /// hot-reload without any solution change (issue #156), and relaunching a healthy server on
+    /// hot-reload without any solution change, and relaunching a healthy server on
     /// every call would thrash; in that case the live server is reused exactly as before, with only
     /// a fresh VS-facing pipe.
     /// </para>
@@ -280,7 +279,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
             var previousGeneration = _generation;
             // Evaluated before DiscardDeadGeneration nulls the interceptors it reads. A server VS ended
-            // with shutdown+exit is a normal session turnover, not a failure (issue #555).
+            // with shutdown+exit is a normal session turnover, not a failure.
             var wasUnexpected = IsUnexpectedExit(
                 _disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated);
             if (wasUnexpected)
@@ -418,7 +417,7 @@ internal sealed class LspServerConnectionService : IDisposable
     internal static bool IsUnexpectedExit(bool disposed, bool shutdownObserved, bool? pipeTerminated) =>
         !disposed && !shutdownObserved && pipeTerminated == false;
 
-    /// <summary>Reports that the server process started but VS's LSP initialize handshake with it failed (issue #845).</summary>
+    /// <summary>Reports that the server process started but VS's LSP initialize handshake with it failed.</summary>
     internal void ReportHandshakeFailed() =>
         _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.StartFailed, _generation);
 
@@ -522,8 +521,8 @@ internal sealed class LspServerConnectionService : IDisposable
             };
             _serverProcess.BeginErrorReadLine();
 
-            // Detect a crash when it happens rather than only when VS next asks for a connection
-            // (issue #845); a dead server cannot report itself, so the client does.
+            // Detect a crash when it happens rather than only when VS next asks for a connection;
+            // a dead server cannot report itself, so the client does.
             var startedProcess = _serverProcess;
             startedProcess.EnableRaisingEvents = true;
             startedProcess.Exited += (_, _) =>
@@ -551,7 +550,7 @@ internal sealed class LspServerConnectionService : IDisposable
             // bypassing VS's fixed built-in token-type→classification table. One instance is shared
             // by both pipelines so it sees requests (VS→Server) and their responses (Server→VS).
             // Drops didOpen/didChange/didClose for shadow documents under %TEMP% or a
-            // copilot-named path (issue #562) before any other interceptor — or the server
+            // copilot-named path before any other interceptor — or the server
             // itself — ever sees them.
             var shadowDocumentFilterInterceptor = new ShadowDocumentFilterInterceptor(
                 _loggerFactory.CreateLogger<ShadowDocumentFilterInterceptor>());
@@ -575,7 +574,7 @@ internal sealed class LspServerConnectionService : IDisposable
             var testOutcomesChangedInterceptor = new TestOutcomesChangedInterceptor(
                 _loggerFactory.CreateLogger<TestOutcomesChangedInterceptor>());
 
-            // Drives DocumentActivationState's didOpen/didClose transitions (issue #85) and, in
+            // Drives DocumentActivationState's didOpen/didClose transitions and, in
             // the activation-before-open case, sends reqnroll/documentActivated itself right
             // after re-forwarding didOpen. Uses a lazy reference for the same reason as above:
             // this pipe doesn't exist yet at the point the interceptor is constructed.
@@ -590,9 +589,9 @@ internal sealed class LspServerConnectionService : IDisposable
             // Send pipeline:   VS → [logger, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
             // Receive pipeline: Server → [logger, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
-            // push. It used to sit on the send pipeline as well, watching .cs didChange to invalidate
-            // per edit, but that path was removed for issue #156 and the class has been a no-op on
-            // send ever since; the server-pushed signal (issue #343) covers the same need.
+            // push. It is not on the send pipeline: invalidating per .cs didChange would have VS
+            // reactivate the language client on every edit (a second CreateServerConnectionAsync),
+            // so the debounced, server-pushed signal is the only trigger.
             // shutdownHandshake is on both pipelines: send captures the outgoing shutdown request id;
             // receive watches for the matching response.
             var sendInterceptors = new ILspMessageInterceptor[]
@@ -627,7 +626,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
     /// <summary>
     /// Stops the server process a failed <see cref="StartAsync"/> may already have started, and
-    /// releases its job object, inspector log and pipe (issue #1024).
+    /// releases its job object, inspector log and pipe.
     /// </summary>
     /// <remarks>
     /// <para>

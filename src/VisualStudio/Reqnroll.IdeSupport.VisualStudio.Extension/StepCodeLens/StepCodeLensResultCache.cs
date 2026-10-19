@@ -21,19 +21,18 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// VS.Extensibility's <c>ICodeLensProvider</c> is called once per method-level <c>CodeElement</c>
 /// in a file, and every one of those calls wants the same whole-document response — without this,
 /// a file with N step-definition methods triggers N redundant full <c>textDocument/codeLens</c>
-/// round trips on every paint (issue #552 follow-up).
+/// round trips on every paint.
 /// </para>
 /// <para>
-/// Mirrors <see cref="RunTestCodeLens.RunTestCodeLensResultCache"/>'s design (issue #491/#495) —
+/// Mirrors <see cref="RunTestCodeLens.RunTestCodeLensResultCache"/>'s design —
 /// the same class of problem (VS.Extensibility calling once per code element, all wanting the same
-/// shared result) got its fix there first, including the exactly-once-under-contention guarantee
+/// shared result) solved the same way there, including the exactly-once-under-contention guarantee
 /// a bare <c>ConcurrentDictionary.GetOrAdd</c> does NOT give: its factory can run more than once
 /// concurrently on a cold key, so wrapping the real work in <see cref="Lazy{T}"/> is what actually
-/// serialises it to one evaluation. Kept as its own type rather than generalising both into one
-/// shared generic cache in the same change that adds this second consumer — a reasonable
-/// follow-up, not attempted here to avoid touching that already-shipped, tested cache. Differs
+/// serialises it to one evaluation. Kept as its own type rather than generalised into one
+/// shared generic cache with it (a reasonable future refactor). Differs
 /// from it in two ways: keyed by file alone (one <c>textDocument/codeLens</c> call already returns
-/// every method's lens in that file, so there is no equivalent to its #495 per-line split), and no
+/// every method's lens in that file, so there is no equivalent to its per-line split), and no
 /// runaway-work timeout (the fetch here is a single JSON-RPC round trip, not an unbounded
 /// whole-corpus walk) — the constructor's <see cref="JoinableTaskFactory"/> parameter is still
 /// required, though, since <see cref="AsyncLazy{T}"/> itself needs a real instance regardless of
@@ -110,7 +109,7 @@ internal sealed class StepCodeLensResultCache
             catch (LspContentModifiedException) when (
                 !callerToken.IsCancellationRequested && restarts < MaxContentModifiedRestarts)
             {
-                // The server's state changed under the fetch (issue #1017). Nothing re-asks on its
+                // The server's state changed under the fetch. Nothing re-asks on its
                 // own: the lens's element description is unchanged, so VS does not request the label
                 // again, and the blank result would stand until some later refresh. The faulted entry
                 // is not reused (IsUsable), so the next pass starts a fresh fetch; the short pause

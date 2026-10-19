@@ -60,14 +60,14 @@ internal static class LspProjectPreloadPusher
 
             // Materialised on the UI thread before the writes below, which resume off it. The walk
             // descends into solution folders; a flat Solution.Projects loop drops every nested
-            // project (issue #729).
+            // project.
             var projects = VsUtils.GetAllProjects(solution).ToList();
 
             foreach (var project in projects)
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-                // A ProjectNotReady baseline here (issue #690) is fine to leave as-is: this preload
+                // A ProjectNotReady baseline here is fine to leave as-is: this preload
                 // push is a best-effort head start (see class remarks), always superseded by
                 // VsProjectEventMonitor.SendInitialProjectsAsync's own baseline once the real LSP
                 // connection exists — that path is what subscribes for a NuGet-restore-finished resend.
@@ -89,7 +89,7 @@ internal static class LspProjectPreloadPusher
         catch (IOException ex)
         {
             // The server closes the preload pipe once VS's real initialize handshake completes, and
-            // with the language server now activated at restore time (issue #78) that can happen
+            // with the language server now activated at restore time that can happen
             // mid-push. Expected, and harmless: the same baseline goes over the LSP channel.
             logger.LogDebug(
                 "LspProjectPreloadPusher: preload pipe closed before the push finished ({Message}); the LSP channel delivers the project baseline instead.",

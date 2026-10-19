@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.DocumentLinks;
 
 /// <summary>
 /// Requests <c>textDocument/documentLink</c> for a <c>.feature</c> file over the owned
-/// <see cref="LspInterceptingPipe"/> (issue #755). VS's built-in LSP client does not consume the
+/// <see cref="LspInterceptingPipe"/>. VS's built-in LSP client does not consume the
 /// capability, so the clickable-tag Ctrl+Click is wired through <see cref="TagLinkRedirect"/> instead.
 /// </summary>
 internal sealed class DocumentLinkService

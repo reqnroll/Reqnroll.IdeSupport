@@ -21,35 +21,34 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The problem this fixes (live report, 2026-08-26; re-scoped per issue #495):</b>
-/// <c>RunTestCodeLensService</c> used to have a single <c>GetTargetsAsync(fileUri)</c> that resolved
-/// <i>every</i> scenario in a <c>.feature</c> file on every call — called from two independent
-/// places that both went through one shared delegate: <c>RunTestCodeLensTaggerProvider</c>
+/// <b>The problem this solves (live report, 2026-08-26):</b>
+/// resolving <i>every</i> scenario in a <c>.feature</c> file on every call (a single
+/// whole-file <c>GetTargetsAsync(fileUri)</c>) is called from two independent
+/// places that both go through one shared delegate: <c>RunTestCodeLensTaggerProvider</c>
 /// (in-process, once per tagger refresh) and, for every <i>visible Scenario line's own</i>
 /// <c>RunTestCodeLensDataPoint.GetDataAsync</c>, an out-of-process ServiceHub callback that only
 /// ever used its own line's entry out of the whole-file result. On a large feature file with N
 /// visible scenario lines, that meant N+1 concurrent full-document walks, each redoing all of it
-/// from scratch — confirmed live: with #491's cache already making each
+/// from scratch — confirmed live: with this cache already making each
 /// <c>reqnroll/resolveTestTargets</c> call ~4ms instead of ~150ms, a single walk of ~1,300 scenarios
 /// still took long enough — repeated 5x concurrently — that individual <c>GetDataAsync</c> calls hit
 /// VS's own classic-CodeLens timeout (observed at ~26s) and were cancelled.
 /// </para>
 /// <para>
-/// Issue #495 split the whole-file walk in two: <c>RunTestCodeLensService.GetTagLocationsAsync</c>
+/// The whole-file walk is therefore split in two: <c>RunTestCodeLensService.GetTagLocationsAsync</c>
 /// (symbol tree only, no <c>resolveTestTargets</c> calls, used by the tagger to place tags) and
 /// <c>GetTargetsForLineAsync(fileUri, line)</c> (one <c>resolveTestTargets</c> call for exactly the
-/// line a data point needs). This cache now de-dupes the latter, keyed by <c>(fileUri, line)</c>
-/// instead of just <c>fileUri</c> — concurrent visible lines in the same file no longer contend on
-/// one shared computation, since each now only does its own line's (already cheap) work.
+/// line a data point needs). This cache de-dupes the latter, keyed by <c>(fileUri, line)</c>
+/// instead of just <c>fileUri</c> — concurrent visible lines in the same file do not contend on
+/// one shared computation, since each only does its own line's (already cheap) work.
 /// </para>
 /// <para>
-/// <b>A completed result is reused until an explicit invalidation, not a time-based TTL.</b> An
-/// earlier version of this cache expired a completed result after a fixed few seconds, on the
-/// theory that a short TTL would only need to absorb one initial burst of near-simultaneous
-/// <c>GetDataAsync</c> calls. In practice (live report, 2026-08-26) a single walk on a large corpus
+/// <b>A completed result is reused until an explicit invalidation, not a time-based TTL.</b> A
+/// TTL of a few seconds, meant to absorb one initial burst of near-simultaneous
+/// <c>GetDataAsync</c> calls, does not work (live report, 2026-08-26): a single walk on a large corpus
 /// (~2,400 scenarios) can itself take 30-45 seconds — far longer than the TTL — so scrolling to a
-/// newly-visible region more than a few seconds after the last completed walk discarded a perfectly
-/// good result and forced an entirely new one, which then reliably outlived every individual
+/// newly-visible region more than a few seconds after the last completed walk would discard a perfectly
+/// good result and force an entirely new one, which then reliably outlived every individual
 /// caller's own VS-imposed timeout. There is no correctness reason for a TTL here: real staleness is
 /// already reported explicitly via <see cref="InvalidateFile"/>/<see cref="InvalidateAll"/>, called
 /// from <c>CodeLensRefreshInterceptor</c> whenever the server's <c>reqnroll/refreshCodeLens</c>
@@ -70,7 +69,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 /// </remarks>
 internal sealed class RunTestCodeLensResultCache
 {
-    /// <summary>One line's worth of shared computation — keyed by file plus line since #495, not file alone.</summary>
+    /// <summary>One line's worth of shared computation — keyed by file plus line, not file alone.</summary>
     internal readonly record struct Key(string FileUri, int Line);
 
     private sealed class Entry
@@ -191,7 +190,7 @@ internal sealed class RunTestCodeLensResultCache
             catch (LspContentModifiedException) when (
                 !callerToken.IsCancellationRequested && restarts < MaxInvalidationRestarts)
             {
-                // The server's state changed under the lookup (issue #800 follow-up). The faulted
+                // The server's state changed under the lookup. The faulted
                 // entry is not reused (IsUsable), so the next pass starts a fresh computation. A
                 // short pause lets the burst of notifications that caused it finish first.
                 _logger.LogDebug(

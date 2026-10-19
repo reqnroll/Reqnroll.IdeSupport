@@ -43,8 +43,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 // FileNotFound. The Microsoft.VisualStudio.Assembly manifest assets are not honored as
 // codebases in the VSSDK+VisualStudio.Extensibility hybrid, so a BindingPath is required.
 [ProvideBindingPath]
-// Backs HookCodeLensCommands.vsct's <CommandFlag>CommandWellOnly</CommandFlag> button (issue
-// #372): the hook-match-count CodeLens's Details popup invokes it, routed through this package's
+// Backs HookCodeLensCommands.vsct's <CommandFlag>CommandWellOnly</CommandFlag> button:
+// the hook-match-count CodeLens's Details popup invokes it, routed through this package's
 // IOleCommandTarget below, exactly as Microsoft's own CodeLensOopSample does.
 [ProvideMenuResource("Menus.ctmenu", 1)]
 [Guid(PackageGuidString)]
@@ -64,7 +64,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
-        // MEF-independent breadcrumb (issue #263): written via VS's own Activity Log
+        // MEF-independent breadcrumb: written via VS's own Activity Log
         // (Help > About > "View Activity Log" or %AppData%\...\ActivityLog.xml), so
         // package activation is observable even if the MEF-exported IIdeSupportLogger
         // below never resolves. Emitted before anything else so it survives whatever
@@ -73,7 +73,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         await base.InitializeAsync(cancellationToken, progress);
 
-        // Resolve the shared MEF-exported IIdeSupportLogger (issue #84) rather than a private
+        // Resolve the shared MEF-exported IIdeSupportLogger rather than a private
         // ad-hoc SynchronousFileLogger + a second, unlistened-to TraceSource. Resolved early
         // (alongside ITelemetryTransmitter below) so it's available for the full package lifecycle.
         // If it never becomes available, falls back to the no-op logger but says so loudly via
@@ -82,18 +82,18 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
 
-        // Issue #741: MTP reporter registration is project-local now (obj\<Project>.csproj.reqnroll-ide.targets,
-        // written once the solution is loaded, below). Remove the per-user ImportAfter file earlier
-        // versions dropped, which affected every MSBuild build for this Windows user.
+        // MTP reporter registration is project-local (obj\<Project>.csproj.reqnroll-ide.targets,
+        // written once the solution is loaded, below). Remove the per-user ImportAfter file that
+        // earlier versions dropped, which affected every MSBuild build for this Windows user.
         MtpProjectStubs.TryRemoveLegacyImportAfterFile(_logger);
 
         // Advise before the solution-load wait, not after: the restored .feature stubs we want to
         // observe are realized *during* restore, so a subscription taken afterwards would miss the
-        // very transitions this is here to time (issue #533, phase 2). Diagnostic only — it never
+        // very transitions this is here to time. Diagnostic only — it never
         // forces a document to initialize.
         await AdviseDocumentInitializationMonitorAsync(cancellationToken);
 
-        // Issue #78: before the solution-load wait, for the same reason — restored .feature tabs
+        // Before the solution-load wait, for the same reason — restored .feature tabs
         // exist by now, and one without the Gherkin content type stays inert for its whole life.
         await StartFeatureBufferContentTypeGuardAsync(cancellationToken);
 
@@ -119,10 +119,10 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
         VsWellKnownIdsSelfCheck.Run(this, _logger, _telemetryTransmitter);
 
-        // Issue #533: if VS restored a .feature tab but never activated the language server
+        // If VS restored a .feature tab but never activated the language server
         // provider, open and close a scratch .feature file to activate it. Not awaited: it waits
-        // out a grace period first, and package initialization must not wait for that. A fallback
-        // since issue #78 fixed the restored tab's content type; see the trigger's remarks.
+        // out a grace period first, and package initialization must not wait for that. It is only
+        // a fallback now that the restored tab's content type is corrected; see the trigger's remarks.
         _ = JoinableTaskFactory.RunAsync(() => ScratchFileActivationTrigger.RunAsync(
             this, LanguageServerActivationSignal.Shared, _logger, DisposalToken));
 
@@ -139,13 +139,13 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     /// Resolves <see cref="_logger"/> and <see cref="_telemetryTransmitter"/> from MEF.
     /// </summary>
     /// <remarks>
-    /// Root cause of issue #263/#266: <see cref="AsyncPackage.GetServiceAsync(Type)"/> called with
+    /// <see cref="AsyncPackage.GetServiceAsync(Type)"/> called with
     /// <see cref="SComponentModel"/> returns the <see cref="IComponentModel"/> service object
     /// itself — not some other <see cref="IServiceProvider"/> through which <c>SComponentModel</c>
-    /// could be looked up again. The original code cast that result <c>as IServiceProvider</c>,
-    /// which <see cref="IComponentModel"/> does not implement, so the cast silently produced null
-    /// on every call, 100% reproducibly (confirmed live: 8/8 attempts null over 2s in a #266
-    /// diagnostic run) — not the intermittent startup race originally suspected. Casting directly
+    /// could be looked up again. Casting that result <c>as IServiceProvider</c> is a pitfall:
+    /// <see cref="IComponentModel"/> does not implement it, so the cast silently produces null
+    /// on every call, 100% reproducibly (confirmed live: 8/8 attempts null over 2s) — it looks like
+    /// an intermittent startup race but is not. Casting directly
     /// to <see cref="IComponentModel"/> and calling <see cref="IComponentModel.GetService{T}"/> is
     /// the correct pattern (contrast <see cref="VsUtils.ResolveMefDependency{T}"/>, which is for
     /// the different case of already holding some other <see cref="IServiceProvider"/> — e.g.
@@ -155,7 +155,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     /// registered yet this early in activation, but is not expected to be needed in practice.
     /// </remarks>
     /// <remarks>
-    /// Must run on the UI thread (issue #266 follow-up): the first-ever resolution of
+    /// Must run on the UI thread: the first-ever resolution of
     /// <see cref="ITelemetryTransmitter"/> in a session eagerly constructs <c>TelemetryTransmitter</c>,
     /// whose constructor calls <c>VersionProvider.GetVsVersion()</c> — which throws if not on the
     /// UI thread. MEF caches a faulted part permanently for the composition container's lifetime,
@@ -214,7 +214,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     /// <summary>
     /// Writes a breadcrumb to VS's built-in Activity Log, independent of MEF/<see cref="_logger"/>,
     /// so this class's activation and MEF-resolution failures stay observable even when the
-    /// MEF-exported logger itself is unavailable (issue #263). Best-effort: swallows failures
+    /// MEF-exported logger itself is unavailable. Best-effort: swallows failures
     /// since this is a diagnostic aid, not something that should abort package initialization.
     /// </summary>
     private static void TryLogActivity(bool isError, string message)
@@ -241,7 +241,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
             var sp = ServiceProvider.GlobalProvider;
 
-            // Resolve the next command target in the routing chain (issue #372): needed so this
+            // Resolve the next command target in the routing chain: needed so this
             // package's IOleCommandTarget override — which handles only the hook-match-count
             // lens's own navigate-to-hook command — can forward everything else, exactly like
             // Microsoft's own CodeLensOopSample.
@@ -295,10 +295,10 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             _logger.LogInfo("RunWelcomeServiceAsync: IVsUIShell resolved OK.");
 
             var telemetryService = ideScope.TelemetryService;
-            // Restores the legacy "Extension loaded" signal (previously fired from
+            // Restores the legacy "Extension loaded" signal (from the legacy
             // MonitoringService.MonitorOpenProjectSystem, which also triggered the welcome flow
-            // itself in the old architecture — here that triggering already happens explicitly
-            // below via WelcomeService, so this call is telemetry-only, issue #255/#259).
+            // itself — here that triggering already happens explicitly
+            // below via WelcomeService, so this call is telemetry-only).
             telemetryService.MonitorOpenProjectSystem(ideScope);
             var dialogService = new VsWizardDialogService(vsUiShell, telemetryService);
 
@@ -318,7 +318,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
     /// <summary>
     /// Subscribes <see cref="DocumentInitializationMonitor"/> to the Running Document Table so the
-    /// document inventory and every stub realization are logged (issue #533, phase 2).
+    /// document inventory and every stub realization are logged.
     /// Best-effort: a failure here must not abort package initialization.
     /// </summary>
     private async Task AdviseDocumentInitializationMonitorAsync(CancellationToken cancellationToken)
@@ -331,7 +331,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             _documentInitializationMonitor = DocumentInitializationMonitor.TryAdvise(rdt, _logger);
 
             // Lets the Format Document filter tell a format fired from the save sequence from an explicit
-            // one, so a rejection of the former is never shown in a dialog (issue #1132).
+            // one, so a rejection of the former is never shown in a dialog.
             _saveTrackingListener = SaveTrackingRdtListener.TryAdvise(rdt, _logger);
         }
         catch (OperationCanceledException)
@@ -346,7 +346,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
     /// <summary>
     /// Starts <see cref="FeatureBufferContentTypeGuard"/>, which logs the content type VS gave each
-    /// <c>.feature</c> buffer and re-types any that are not <c>Gherkin</c> (issue #78).
+    /// <c>.feature</c> buffer and re-types any that are not <c>Gherkin</c>.
     /// Best-effort: a failure here must not abort package initialization.
     /// </summary>
     private async Task StartFeatureBufferContentTypeGuardAsync(CancellationToken cancellationToken)
@@ -394,7 +394,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     }
 
     /// <summary>
-    /// Issue #741: resolves the bundled MTP reporter source bundle and starts
+    /// Resolves the bundled MTP reporter source bundle and starts
     /// <see cref="MtpProjectStubSolutionListener"/>, which writes each C# project's project-local
     /// <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub now and on every later solution
     /// open / project load. Best-effort — any failure here is logged and otherwise ignored; this must
@@ -456,7 +456,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         base.Dispose(disposing);
     }
 
-    // ── IOleCommandTarget: hook-match-count CodeLens navigation (issue #372) ──────────────────
+    // ── IOleCommandTarget: hook-match-count CodeLens navigation ──────────────────
     //
     // The classic CodeLens Details popup (see HookCodeLensDataPoint.GetDetailsAsync in the
     // VSSDKIntegration project) invokes each entry's NavigationCommand via raw OLE command

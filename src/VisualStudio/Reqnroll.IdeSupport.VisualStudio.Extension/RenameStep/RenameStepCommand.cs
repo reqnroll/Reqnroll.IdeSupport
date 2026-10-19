@@ -160,12 +160,12 @@ internal sealed class RenameStepCommand : Command
             }
             catch (EditRejectedException ex)
             {
-                // The server rejected the rename with a specific, user-correctable reason (issue
-                // #650) — e.g. a step-rename validation failure. Show it in a modal (issue #1132)
+                // The server rejected the rename with a specific, user-correctable reason
+                // — e.g. a step-rename validation failure. Show it in a modal
                 // rather than a status bar message that is easy to miss.
                 //
-                // No longer includes "VS failed to apply the edit": the server now returns the
-                // rename response before pushing workspace/applyEdit (issue #671, R1), so a
+                // There is no "VS failed to apply the edit" case: the server returns the
+                // rename response before pushing workspace/applyEdit, so a
                 // rejected push has no in-flight request left to fail and is logged server-side
                 // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
                 await EditRejection.ReportAsync(_logger, "RenameStepCommand", ex.Message, cancellationToken)
@@ -180,9 +180,9 @@ internal sealed class RenameStepCommand : Command
             }
 
             // Nothing to apply here: the server pushes the edit to VS itself via
-            // workspace/applyEdit. That push now follows this response rather than preceding it
-            // (issue #671, R1 — pushing from inside the request made the edit's own didOpen cancel
-            // that request with ContentModified, issue #654), so the edit lands a moment after this
+            // workspace/applyEdit. That push follows this response rather than preceding it
+            // (pushing from inside the request made the edit's own didOpen cancel
+            // that request with ContentModified), so the edit lands a moment after this
             // message is shown.
             _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
             await VsUtils.ShowStatusBarMessageAsync("Reqnroll: Step renamed successfully.");
@@ -193,7 +193,7 @@ internal sealed class RenameStepCommand : Command
         }
         catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
         {
-            // Issue #1019: the target lookup failed - say so rather than "no step definition found".
+            // The target lookup failed - say so rather than "no step definition found".
             _logger.LogWarning("RenameStepCommand: request failed: {Reason}", reason);
             await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Rename Step failed - {reason}.");
         }

@@ -47,7 +47,7 @@ internal sealed class FindHooksService
     /// Queries the LSP server for applicable hooks at <paramref name="line0"/> /
     /// <paramref name="char0"/> in <paramref name="fileUri"/> (all 0-based), optionally restricted
     /// to hooks native to the resolved context level — set by the hook-match-count CodeLens
-    /// (classic-CodeLens bridge, issue #372) so its Details popup shows exactly the hooks the lens
+    /// (classic-CodeLens bridge) so its Details popup shows exactly the hooks the lens
     /// counted, matching what <c>reqnroll.goToHooks</c>-invoking clients already do.
     /// </summary>
     /// <exception cref="LspRequestFailedException">The request failed (server error, timeout, no server).</exception>
@@ -70,7 +70,7 @@ internal sealed class FindHooksService
             .SendRequestAsync(CustomLspMethodNames.ReqnrollFindHooks, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1020: a failed request throws rather than reading as "no hooks".
+        // A failed request throws rather than reading as "no hooks".
         var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindHooks, fileUri, cancellationToken);
 
         _logger.LogTrace("FindHooksService: raw server result = {Result}", result.ToString());
