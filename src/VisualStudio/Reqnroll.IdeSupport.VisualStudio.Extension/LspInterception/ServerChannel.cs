@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <summary>
 /// The write side of the connection to the real server process: sole owner of the server's stdin
 /// <see cref="PipeWriter"/>, the lock that serialises writes to it, and the "this server is gone"
-/// flag (issue #587, step 2).
+/// flag.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <see cref="LspInterceptingPipe.SendRequestToServerAsync"/> target the same unsynchronised
 /// <see cref="PipeWriter"/> from different threads; without a single owner holding one lock, two
 /// writers can interleave mid-frame and corrupt the framing. And whether writing is worth doing at
-/// all depends on the termination flag, which is why issue #555's lifetime rule lives here rather
+/// all depends on the termination flag, which is why the server-lifetime rule lives here rather
 /// than beside the routing rules it was tangled with.
 /// </para>
 /// <para>
@@ -39,7 +39,7 @@ internal sealed class ServerChannel
     /// Never disposed, on purpose. <see cref="SemaphoreSlim.Dispose"/> only has to be called when
     /// <see cref="SemaphoreSlim.AvailableWaitHandle"/> has been used, which nothing in this codebase
     /// does. Disposing it at shutdown without first awaiting in-flight writers is what produced the
-    /// <see cref="ObjectDisposedException"/> the send pump used to have to swallow (issue #165):
+    /// <see cref="ObjectDisposedException"/> the send pump would have to swallow:
     /// the pump could still be inside <see cref="SemaphoreSlim.WaitAsync(CancellationToken)"/> when
     /// the semaphore went away underneath it.
     /// </remarks>
@@ -47,7 +47,7 @@ internal sealed class ServerChannel
 
     private volatile bool _terminated;
 
-    /// <summary>1 once a failed write has been logged at Warning (issue #1023).</summary>
+    /// <summary>1 once a failed write has been logged at Warning.</summary>
     private int _writeFailureReported;
 
     /// <summary>Creates the channel over the server process's stdin writer.</summary>
@@ -108,19 +108,19 @@ internal sealed class ServerChannel
     /// </returns>
     /// <remarks>
     /// <para>
-    /// Issue #555: after <c>exit</c> the server is on its way out, so this would write into a stream
+    /// After <c>exit</c> the server is on its way out, so this would write into a stream
     /// nothing is reading. Observed in the wild — StepCodeLens and navigation-bar traffic kept being
     /// injected for ~200ms after VS's <c>exit</c> and on through the following session, each request
     /// awaiting a response that could never arrive.
     /// </para>
     /// <para>
-    /// Issue #1023: the flag is checked again once the lock is held, because a caller that passed the
+    /// The flag is checked again once the lock is held, because a caller that passed the
     /// first check can wait behind another write while the server is marked terminated. A write that
     /// fails because the server's stdin is gone is reported the same way, as <see langword="false"/>,
     /// rather than thrown: an <see cref="IOException"/> is a crashed server's closed pipe, an
     /// <see cref="ObjectDisposedException"/> a write racing the disposal of a discarded generation's
     /// process. Neither marks the channel terminated: that flag means the server was <em>asked</em> to
-    /// go, and setting it for a crash would suppress the unexpected-exit report (issue #845).
+    /// go, and setting it for a crash would suppress the unexpected-exit report.
     /// </para>
     /// </remarks>
     public async Task<bool> InjectAsync(byte[] rawFrame, string method, CancellationToken cancellationToken)

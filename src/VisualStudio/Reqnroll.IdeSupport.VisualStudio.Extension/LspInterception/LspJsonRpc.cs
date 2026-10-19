@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
-/// Pure JSON-RPC shape classifiers and message builders (issue #587, step 2). No session state, no
+/// Pure JSON-RPC shape classifiers and message builders. No session state, no
 /// I/O: everything here is a function of the <see cref="JObject"/> or strings passed in, which is
 /// what lets the correlation and routing rules that depend on these be tested without standing up a
 /// pipe.
@@ -27,8 +27,7 @@ internal static class LspJsonRpc
     /// An <c>id</c> present but JSON-null counts as absent: <c>JObject["id"]</c> returns a
     /// <see cref="JTokenType.Null"/> token for <c>"id":null</c>, not a C# <see langword="null"/>, so
     /// testing for the latter alone would miss such a frame and leave the connection looking alive
-    /// after its server had been told to leave — the whole failure this detection exists to prevent
-    /// (issue #555).
+    /// after its server had been told to leave — the whole failure this detection exists to prevent.
     /// </remarks>
     public static bool IsExitNotification(JObject body) =>
         (body["id"] is null || body["id"]!.Type == JTokenType.Null) &&
@@ -36,7 +35,7 @@ internal static class LspJsonRpc
 
     /// <summary>
     /// True if <paramref name="body"/> is a JSON-RPC <b>request</b> (has both <c>id</c> and
-    /// <c>method</c>). Used to record which VS-facing session sent each request (issue #395).
+    /// <c>method</c>). Used to record which VS-facing session sent each request.
     /// </summary>
     public static bool TryGetRequestId(JObject body, out string id)
     {

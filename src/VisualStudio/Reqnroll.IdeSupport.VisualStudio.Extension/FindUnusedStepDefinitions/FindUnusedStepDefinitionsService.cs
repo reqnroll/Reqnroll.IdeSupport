@@ -42,7 +42,7 @@ internal sealed class FindUnusedStepDefinitionsService
             .SendRequestAsync(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, emptyParams, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1020: a failed request throws (LspRequestFailedException / LspContentModifiedException)
+        // A failed request throws (LspRequestFailedException / LspContentModifiedException)
         // rather than reading as "0 unused step definitions".
         var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, "workspace", cancellationToken);
 
@@ -87,7 +87,7 @@ internal sealed class FindUnusedStepDefinitionsService
                 SourceLine        = item["sourceLine"]?.Value<int>() ?? 0,
                 SourceChar        = item["sourceChar"]?.Value<int>() ?? 0,
                 // Absent on an older server, which never reported an unresolvable source; default
-                // to true there so the row stays navigable exactly as it was (issue #540).
+                // to true there so the row stays navigable exactly as it was.
                 IsResolved        = item["isResolved"]?.Value<bool>() ?? true,
                 RecordedSourceFile = item["recordedSourceFile"]?.Value<string>(),
                 StepDefinitionType = item["stepDefinitionType"]?.Value<string>(),

@@ -160,7 +160,7 @@ internal sealed class RunTestCodeLensService
     /// visible line, via <see cref="GetTargetsForLineAsync"/> when that line's own CodeLens data
     /// point is created. Splitting these two concerns is what keeps this feature's cost
     /// proportional to the number of currently-visible lines rather than the whole document (a
-    /// 2,000+ scenario file used to make every refresh call the resolver once per scenario).
+    /// 2,000+ scenario file would make every refresh call the resolver once per scenario).
     /// </summary>
     public async Task<IReadOnlyList<RunTestLensLocation>> GetTagLocationsAsync(string fileUri, CancellationToken cancellationToken)
     {

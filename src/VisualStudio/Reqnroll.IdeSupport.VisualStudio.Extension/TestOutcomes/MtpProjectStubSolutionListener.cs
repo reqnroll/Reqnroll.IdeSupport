@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
 /// <summary>
 /// Keeps every Reqnroll C# project of the open solution connected to the bundled Microsoft.Testing.Platform
 /// reporter through its project-local <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub
-/// (issue #741, <see cref="MtpProjectStubs.TrySyncStub"/>), and keeps other projects free of one: once
+/// (<see cref="MtpProjectStubs.TrySyncStub"/>), and keeps other projects free of one: once
 /// for the projects already loaded when the package initializes, then on every solution open (a solution
 /// switch), every project load/add, and every NuGet restore — which is when a project's Reqnroll use
 /// becomes known on a fresh clone, or changes when a Reqnroll package is added or removed. Syncs are

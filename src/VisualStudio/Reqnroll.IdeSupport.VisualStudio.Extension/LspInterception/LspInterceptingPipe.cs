@@ -34,7 +34,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// but the wiring between them.
 /// </para>
 /// <list type="table">
-///   <item><term><see cref="LspFrameCodec"/></term><description>the wire format (step 1)</description></item>
+///   <item><term><see cref="LspFrameCodec"/></term><description>the wire format</description></item>
 ///   <item><term><see cref="ServerChannel"/></term><description>the server's stdin, the lock serialising writes to it, and the termination flag</description></item>
 ///   <item><term><see cref="LspRequestCorrelator"/></term><description>owned-RPC ids and their waiters</description></item>
 ///   <item><term><see cref="VsSessionRouter"/></term><description>which session owns each outstanding response</description></item>

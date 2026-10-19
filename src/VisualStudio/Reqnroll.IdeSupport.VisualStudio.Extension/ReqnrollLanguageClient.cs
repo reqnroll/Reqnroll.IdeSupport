@@ -128,7 +128,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     /// Kept as a deliberate call rather than a proven fix, with a known cost: VS will now activate
     /// this provider — full <c>initialize</c>, plus document sync for every C# file — in any
     /// solution where a <c>.cs</c> file is opened, including solutions with no Reqnroll in them at
-    /// all, where the provider would previously have stayed dormant. The server process itself
+    /// all, where the provider would otherwise stay dormant. The server process itself
     /// already starts eagerly regardless (see <c>LspServerConnectionService</c>), so the added cost
     /// is the handshake and <c>.cs</c> sync, not a new process. If that shows up as a complaint,
     /// this filter is the first thing to reconsider.

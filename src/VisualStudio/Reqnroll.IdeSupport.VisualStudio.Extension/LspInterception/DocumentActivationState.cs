@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
 /// Tracks, per <c>.feature</c> file path, whether a <c>reqnroll/documentActivated</c>
-/// notification (issue #85) still needs to be sent for the current open-lifetime of that file.
+/// notification still needs to be sent for the current open-lifetime of that file.
 /// Shared between <see cref="DocumentActivationTrackingInterceptor"/> (drives
 /// <see cref="OnDidOpen"/>/<see cref="OnDidClose"/> from LSP traffic on the send-pump thread)
 /// and a VS-side <c>WindowActivated</c> listener (drives <see cref="OnWindowActivated"/> from
@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <item><see cref="DocumentActivationPhase.Opened"/> — <c>didOpen</c> seen, not yet notified.</item>
 /// <item><see cref="DocumentActivationPhase.ActivationPending"/> — <c>WindowActivated</c> fired
 /// before <c>didOpen</c> arrived (a real ordering VS can produce for a restored tab that is
-/// already the active one at solution load — see #85 design discussion). Remembered so the
+/// already the active one at solution load). Remembered so the
 /// notification still fires the moment <c>didOpen</c> catches up, instead of being silently
 /// treated as "already handled".</item>
 /// <item><see cref="DocumentActivationPhase.Activated"/> — notification already sent for this
@@ -30,7 +30,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// </list>
 /// </para>
 /// <para>
-/// Log data from the #78 repro (see #85 design discussion) shows VS actually sends
+/// Log data shows VS actually sends
 /// <c>didOpen</c> for every restored tab immediately at solution load, not lazily on click —
 /// so <see cref="DocumentActivationPhase.ActivationPending"/> is defensive insurance for an
 /// ordering that wasn't observed in practice, not the primary path this exists to fix.
@@ -121,8 +121,7 @@ internal sealed class DocumentActivationState
     }
 
     /// <summary>
-    /// Forgets every file's phase, as when the server this state described has been replaced
-    /// (issue #555).
+    /// Forgets every file's phase, as when the server this state described has been replaced.
     /// </summary>
     /// <remarks>
     /// This state is "what has this server already been told", so it only means anything relative to

@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 /// Opens the VS Find All References tool window and populates it with step-definition rows
 /// (<see cref="StepDefinitionsDataSource"/>): the unused step definitions (Find Unused Step
 /// Definitions) and the step definitions matching a step (Go To Definition with several
-/// matches, issue #757).
+/// matches).
 /// </summary>
 internal sealed class StepDefinitionsRenderer
 {
@@ -67,8 +67,8 @@ internal sealed class StepDefinitionsRenderer
         // The Code column is the window's own fixed "linetext" column, which reads each entry's
         // Text value without it being declared here. Declaring StandardTableKeyNames.Text would add
         // the separate "text" column — VS's wrapping, Error-List-style "Description" column — showing
-        // the same value again (confirmed by decompiling TextColumnDefinition / LineTextColumnDefinition,
-        // issue #757). StandardTableKeyNames.Definition is not declared either: grouping needs a
+        // the same value again (confirmed by decompiling TextColumnDefinition / LineTextColumnDefinition).
+        // StandardTableKeyNames.Definition is not declared either: grouping needs a
         // DefinitionBucket value, which these entries do not supply.
         window.Manager.AddSource(new StepDefinitionsDataSource(items),
             StandardTableKeyNames.DocumentName,

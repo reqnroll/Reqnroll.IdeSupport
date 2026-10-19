@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <c>BuildParams</c> string-concatenation method that had been duplicated across
 /// <c>CommentToggleService</c>, <c>FindStepUsagesService</c>, <c>FindHooksService</c>,
 /// <c>FindMatchingScenariosService</c>, <c>HookFeatureCodeLensService</c>,
-/// <c>GherkinNavigationBarSymbolService</c>, and <c>StepCodeLensService</c> (issue #447).
+/// <c>GherkinNavigationBarSymbolService</c>, and <c>StepCodeLensService</c>.
 /// </summary>
 /// <remarks>
 /// Deliberately stays a thin JSON-object writer rather than a typed-DTO/serializer layer: every

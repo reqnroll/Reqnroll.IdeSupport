@@ -26,12 +26,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// <para>
 /// Mirrors <see cref="RunTestCodeLens.RunTestCodeLensResultCache"/>'s design —
 /// the same class of problem (VS.Extensibility calling once per code element, all wanting the same
-/// shared result) got its fix there first, including the exactly-once-under-contention guarantee
+/// shared result) solved the same way there, including the exactly-once-under-contention guarantee
 /// a bare <c>ConcurrentDictionary.GetOrAdd</c> does NOT give: its factory can run more than once
 /// concurrently on a cold key, so wrapping the real work in <see cref="Lazy{T}"/> is what actually
-/// serialises it to one evaluation. Kept as its own type rather than generalising both into one
-/// shared generic cache in the same change that adds this second consumer — a reasonable
-/// follow-up, not attempted here to avoid touching that already-shipped, tested cache. Differs
+/// serialises it to one evaluation. Kept as its own type rather than generalised into one
+/// shared generic cache with it (a reasonable future refactor). Differs
 /// from it in two ways: keyed by file alone (one <c>textDocument/codeLens</c> call already returns
 /// every method's lens in that file, so there is no equivalent to its per-line split), and no
 /// runaway-work timeout (the fetch here is a single JSON-RPC round trip, not an unbounded

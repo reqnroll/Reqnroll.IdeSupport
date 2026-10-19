@@ -8,11 +8,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
 /// Owns the local, in-memory pipes that face Visual Studio, and the generation counter that
-/// identifies them (issue #587, step 3 — extracted from <see cref="LspInterceptingPipe"/>).
+/// identifies them (extracted from <see cref="LspInterceptingPipe"/>).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Issue #156: VS can call <c>CreateServerConnectionAsync</c> more than once per session — its own
+/// VS can call <c>CreateServerConnectionAsync</c> more than once per session — its own
 /// LSP client host does this by design, for extension hot-reload. An implementation that cached and
 /// returned the same <c>IDuplexPipe</c> every time is fine until VS calls twice, and then corrupts
 /// the connection: a second consumer writing to a <see cref="PipeWriter"/> the first consumer's

@@ -295,7 +295,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
             _logger.LogInformation(
                 "LspServerConnectionService: server generation #{Previous} is gone (VS ended the LSP session, " +
-                "or the process exited); launching generation #{Next} for the new session.",
+                "or the process exited); launching generation #{Next} for the new session (issue #555).",
                 previousGeneration, _generation);
 
             // The previous generation's server knew the previous solution's documents; the new one

@@ -83,8 +83,9 @@ internal static class RdtDocumentInitialization
 /// touches the <c>LanguageServerProvider</c>.
 /// </para>
 /// <para>
-/// Originally scoped to <c>.feature</c> files only, and to initialization events only. Widened
-/// twice as measurement kept outrunning it (all 2026-08-30):
+/// Covers every activation-relevant document and lifecycle event, not only <c>.feature</c>
+/// files and initialization. Two widenings were needed as measurement kept outrunning the narrower
+/// scope (all 2026-08-30):
 /// </para>
 /// <list type="number">
 /// <item>
@@ -273,7 +274,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
     /// Logs <em>every</em> document window show, first or not.
     /// </summary>
     /// <remarks>
-    /// Originally first-show only, which turned out to be unreadable: on a cold start the restored
+    /// Logging only the first show would be unreadable: on a cold start the restored
     /// tab's first show happens before this monitor is advised, so the only line that ever appeared
     /// was for a document the user closed and reopened — easy to mistake for the user clicking the
     /// restored tab. Logging every show makes a plain tab click visible as such, which is what

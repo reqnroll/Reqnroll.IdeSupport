@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
 /// Drives <see cref="DocumentActivationState"/>'s <c>didOpen</c>/<c>didClose</c> transitions
-/// (issue #85) from the VS→Server send pipeline, and — in the one case where a
+/// from the VS→Server send pipeline, and — in the one case where a
 /// <c>reqnroll/documentActivated</c> send needs to happen in direct response to the very
 /// <c>didOpen</c> message being intercepted — sends it itself rather than racing a separate
 /// caller against the pump's own forwarding write.
@@ -45,7 +45,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
     private readonly Func<LspInterceptingPipe?>                      _getPipe;
     private readonly ILogger<DocumentActivationTrackingInterceptor>  _logger;
 
-    // Issue #187: LspInterceptingPipe.SendNotificationToServerAsync re-runs the full
+    // LspInterceptingPipe.SendNotificationToServerAsync re-runs the full
     // send-interceptor pipeline on a synthetic copy of whatever it just wrote, purely so the
     // injected message shows up in the inspector log. That means the didOpen we re-forward
     // below calls back into this very InterceptAsync while the first call is still awaiting it —

@@ -10,8 +10,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
 /// Drops <c>textDocument/didOpen</c>, <c>didChange</c> and <c>didClose</c> notifications for
-/// documents that live under the system temp directory in a <c>CopilotBaseline</c> folder
-/// (issue #562).
+/// documents that live under the system temp directory in a <c>CopilotBaseline</c> folder.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -22,7 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// real (didOpen, semantic tokens, folding ranges, ...), giving VS's own LSP client two
 /// server-tracked buffers for what it treats as one file. That is the only candidate identified
 /// for VS's <c>SnapshotSpan.TranslateTo</c> "doesn't belong to the correct TextBuffer" exception
-/// during completion commit, which silently commits the wrong item (issue #561 is the resulting
+/// during completion commit, which silently commits the wrong item (the resulting
 /// data loss).
 /// </para>
 /// <para>

@@ -13,18 +13,18 @@ internal enum ResponseRouting
     /// <summary>A response for the session currently in effect: forward it to VS.</summary>
     DeliverToCurrentSession,
 
-    /// <summary>A response for a session that has since been abandoned: drop it (issue #395).</summary>
+    /// <summary>A response for a session that has since been abandoned: drop it.</summary>
     DropAbandoned
 }
 
 /// <summary>
 /// Tracks which VS-facing session sent each of VS's own outstanding requests, so a response that
-/// lands after that session was abandoned can be recognised and dropped (issue #587 step 2,
-/// extracted from <see cref="LspInterceptingPipe"/>).
+/// lands after that session was abandoned can be recognised and dropped
+/// (extracted from <see cref="LspInterceptingPipe"/>).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Issue #395: without this, a response arriving after a session swap gets forwarded — via the
+/// Without this, a response arriving after a session swap gets forwarded — via the
 /// receive pump's "whichever pipe is current" policy, correct for server-pushed notifications and
 /// requests but wrong here — to the <em>new</em> session's JsonRpc, which never sent the matching
 /// request. VS's JsonRpc treats an unmatched response as a fatal protocol violation and closes the
@@ -40,7 +40,7 @@ internal enum ResponseRouting
 /// </para>
 /// <para>
 /// The current session id is passed in per call rather than held here, so this type stays a pure
-/// function of what it is told and #395's shape can be tested without a pipe.
+/// function of what it is told and a late-response shape can be tested without a pipe.
 /// </para>
 /// </remarks>
 internal sealed class VsSessionRouter
@@ -59,11 +59,10 @@ internal sealed class VsSessionRouter
     /// <param name="owningSessionId">The session that sent the matching request, when one is tracked; otherwise 0.</param>
     /// <remarks>
     /// A response is delivered <b>only</b> when its id is tracked against the current session.
-    /// An untracked id is dropped rather than forwarded, which is the opposite of what this code did
-    /// when it lived in the pump, and is the fix for a latent recurrence of #395: entries are purged
-    /// two generations back, and the old guard only fired when the entry was <em>found</em>, so a
-    /// response whose entry had been purged fell through and was forwarded to the current session —
-    /// the same unmatched response #395 exists to prevent, delayed by one more generation.
+    /// An untracked id is dropped rather than forwarded: entries are purged
+    /// two generations back, and a guard that only fires when the entry is <em>found</em> would let a
+    /// response whose entry had been purged fall through and be forwarded to the current session —
+    /// the same unmatched response this type exists to prevent, delayed by one more generation.
     /// <para>
     /// Dropping is the safe default because every VS → server request passes through the send pump,
     /// which records it <em>before</em> forwarding: every legitimate in-flight response therefore has
@@ -89,7 +88,7 @@ internal sealed class VsSessionRouter
             : ResponseRouting.DropAbandoned;
     }
 
-    /// <summary>Removes tracked request → session entries older than <paramref name="minimumLiveSessionId"/> (issue #395).</summary>
+    /// <summary>Removes tracked request → session entries older than <paramref name="minimumLiveSessionId"/>.</summary>
     /// <remarks>
     /// Bounds growth: a request still in flight when its session is abandoned, and which never
     /// receives a response, would otherwise leak its entry forever.

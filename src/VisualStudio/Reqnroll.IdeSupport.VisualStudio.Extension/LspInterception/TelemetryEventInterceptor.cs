@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <see cref="ScaffoldTrackingInterceptor"/>) so the transmitter can be resolved
 /// after the MEF composition is ready, rather than requiring it at construction time.
 /// <para>
-/// The server emits events (notably <c>ServerSessionStarted</c>, issue #845) immediately after the LSP
+/// The server emits events (notably <c>ServerSessionStarted</c>) immediately after the LSP
 /// handshake, which can precede the transmitter's resolution by a few hundred milliseconds. Events that
 /// arrive while the transmitter is unavailable are therefore held, in arrival order, and sent once it
 /// resolves (<see cref="Flush"/>, or opportunistically on the next event). A held event older than

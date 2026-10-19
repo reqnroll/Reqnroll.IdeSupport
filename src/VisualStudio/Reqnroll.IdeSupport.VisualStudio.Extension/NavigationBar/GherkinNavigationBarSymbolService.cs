@@ -66,7 +66,7 @@ internal sealed class GherkinNavigationBarSymbolService
     /// <para>
     /// The result is not merely a stale-data cosmetic issue here. This service is the sole source
     /// of scenario ranges for <see cref="RunTestCodeLens.RunTestCodeLensService.GetTargetsForLineAsync"/>
-    /// — a swallowed <c>ContentModified</c> previously came back as an empty symbol list
+    /// — a swallowed <c>ContentModified</c> comes back as an empty symbol list
     /// indistinguishable from "no scenario found," which meant the Run CodeLens for that scenario
     /// silently failed to render, with nothing to tell it apart from a genuine miss.
     /// </para>

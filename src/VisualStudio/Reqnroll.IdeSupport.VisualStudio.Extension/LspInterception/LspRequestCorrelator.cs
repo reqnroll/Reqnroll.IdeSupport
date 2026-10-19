@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
 /// Owns the request/response correlation for requests <em>we</em> inject into the server — the
-/// <c>reqnroll-rpc-</c> id space and the waiters attached to it (issue #587, step 2).
+/// <c>reqnroll-rpc-</c> id space and the waiters attached to it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// </para>
 /// <para>
 /// Deliberately free of I/O and pipe state: the whole point of extracting it is that the failure
-/// shapes behind #395 and #401 become testable without standing up a connection.
+/// shapes of an unmatched or late response become testable without standing up a connection.
 /// </para>
 /// </remarks>
 internal sealed class LspRequestCorrelator
@@ -70,9 +70,9 @@ internal sealed class LspRequestCorrelator
     /// </summary>
     /// <remarks>
     /// Static, and deliberately independent of the pending map: the prefix alone proves the response
-    /// is ours, which is exactly what issue #401 turns on. Split from <see cref="Consume"/> so the
+    /// is ours, which is what makes dropping late responses safe. Split from <see cref="Consume"/> so the
     /// caller can run the response through the receive interceptors in between recognising and
-    /// consuming it (issue #491) — that is how <see cref="LspInspectorLogger"/> sees owned-RPC
+    /// consuming it — that is how <see cref="LspInspectorLogger"/> sees owned-RPC
     /// traffic that never reaches VS.
     /// </remarks>
     public static bool IsOwnedResponse(JObject body, out string id)
@@ -93,12 +93,12 @@ internal sealed class LspRequestCorrelator
     /// Consumes an owned response, completing its waiter when one is still registered.
     /// </summary>
     /// <remarks>
-    /// Issue #401: a response must never be forwarded to VS just because the caller already gave up
+    /// A response must never be forwarded to VS just because the caller already gave up
     /// on it. <see cref="PendingRequest.Dispose"/> removes the id as soon as the caller's token
     /// fires — e.g. a <c>StepCodeLensService</c> request cancelled mid-reconnect — which can race the
-    /// server's real response arriving a few milliseconds later. Previously that race let the
-    /// response fall through and hand VS's JsonRpc a response to a request it never sent: the same
-    /// <c>RemoteProtocolViolation</c> #395 fixed for VS's own peer-session responses, via this side
+    /// server's real response arriving a few milliseconds later. Letting that race fall through would
+    /// hand VS's JsonRpc a response to a request it never sent: the same
+    /// <c>RemoteProtocolViolation</c> as for VS's own peer-session responses, via this side
     /// channel instead. Since the id prefix alone proves the response is ours, it is always safe
     /// (and correct) to consume it here whether or not a waiter survives.
     /// </remarks>
@@ -133,7 +133,7 @@ internal sealed class LspRequestCorrelator
 
     /// <summary>
     /// Releases every waiter with a <see langword="null"/> result — the server behind this
-    /// connection is gone and no response can ever arrive (issue #555).
+    /// connection is gone and no response can ever arrive.
     /// </summary>
     /// <remarks>
     /// Without this they sit until each caller's own <see cref="CancellationToken"/> trips, which is
@@ -186,14 +186,14 @@ internal sealed class LspRequestCorrelator
         public Task<JToken?> Response { get; }
 
         /// <summary>
-        /// Completes with the response's <c>error</c> object (issue #650) when the server rejected
+        /// Completes with the response's <c>error</c> object when the server rejected
         /// the request, or null on success/release/cancellation. Kept separate from
         /// <see cref="Response"/> rather than folded into one result, so every existing caller of
         /// <see cref="Response"/> keeps its current "null on error" behavior unchanged.
         /// </summary>
         public Task<JObject?> Error { get; }
 
-        /// <summary>Unregisters the waiter. A response arriving afterwards is still consumed, never forwarded (issue #401).</summary>
+        /// <summary>Unregisters the waiter. A response arriving afterwards is still consumed, never forwarded.</summary>
         public void Dispose()
         {
             _registration.Dispose();

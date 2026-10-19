@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
-/// The persistent, single-instance pump for the server → VS direction (issue #587, step 3): reads
+/// The persistent, single-instance pump for the server → VS direction: reads
 /// the real server process's stdout for the lifetime of the connection and forwards each frame to
 /// whichever VS-facing pipe is <i>current</i> at that moment.
 /// </summary>
@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <para>
 /// The destination is looked up per frame (<see cref="VsFacingSessionManager.CurrentToVsWriter"/>)
 /// rather than captured once, since <see cref="VsFacingSessionManager.StartNewSession"/> can replace
-/// it from under this long-running pump at any time (issue #156).
+/// it from under this long-running pump at any time.
 /// </para>
 /// </remarks>
 internal sealed class ServerToVsPump
@@ -95,7 +95,7 @@ internal sealed class ServerToVsPump
 
                 // Consume correlated responses before *forwarding* to VS (they must never reach
                 // VS's own JsonRpc, which never sent them) — but still run them through the receive
-                // interceptors first (issue #491) so LspInspectorLogger sees this traffic like
+                // interceptors first so LspInspectorLogger sees this traffic like
                 // everything else on the pipe. Without this, every owned-RPC response (e.g.
                 // reqnroll/resolveTestTargets) is invisible to the inspector log even though it
                 // genuinely crossed the wire, which made a real N+1 request-storm bug look like
@@ -109,8 +109,8 @@ internal sealed class ServerToVsPump
                     continue;
                 }
 
-                // Drop a response that does not belong to the session currently in effect (issue
-                // #395) — forwarding it would hand an unmatched response to a JsonRpc instance that
+                // Drop a response that does not belong to the session currently in effect —
+                // forwarding it would hand an unmatched response to a JsonRpc instance that
                 // never sent that request, which VS treats as a fatal protocol violation and closes
                 // the brand-new connection over. Nothing is listening on an abandoned session's own
                 // pipe either, so there is no destination to correctly deliver it to.
