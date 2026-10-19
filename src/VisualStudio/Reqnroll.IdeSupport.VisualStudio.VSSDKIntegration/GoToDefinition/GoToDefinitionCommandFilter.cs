@@ -30,7 +30,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 /// results with a title naming the whole step.
 /// <para>
 /// Only the command is intercepted; Ctrl+Click goes through VS's navigable-symbol path and still
-/// shows the one-word title (deliberately left as a follow-up). When the redirect is not set (server
+/// shows the one-word title (this filter does not cover that path). When the redirect is not set (server
 /// not yet initialized) the command is forwarded unchanged so VS's own handler still runs.
 /// </para>
 /// </remarks>

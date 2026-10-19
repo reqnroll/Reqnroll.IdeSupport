@@ -76,7 +76,7 @@ internal static class DiffViewDetector
 /// for caret tracking/navigation) can be unavailable at <c>VsTextViewCreated</c> time — most visibly
 /// when a solution is opened with <c>.feature</c> files already restored from a previous session,
 /// where many views are created back-to-back before VS finishes wiring up their WPF/frame plumbing.
-/// A single missed resolution used to mean the drop-down bar for that view was silently never
+/// A single missed resolution would otherwise mean the drop-down bar for that view was silently never
 /// attached at all. Every step below (attach, then LSP fetch) retries on the same 300ms debounce
 /// timer until it succeeds, rather than giving up after one failed attempt.
 /// </remarks>

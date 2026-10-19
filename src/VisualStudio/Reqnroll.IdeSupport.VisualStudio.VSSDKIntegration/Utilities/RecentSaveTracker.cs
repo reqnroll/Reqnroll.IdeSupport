@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 /// <summary>
 /// Remembers when each file last began a save, so a format request that an <i>automatic</i> trigger
 /// (a format-on-save extension, Code Cleanup on save) fires from the save sequence can be told apart
-/// from an explicit Format Document (issue #1132). A rejection of such an automatic format must be
+/// from an explicit Format Document. A rejection of such an automatic format must be
 /// logged, never shown in a dialog.
 /// </summary>
 /// <remarks>

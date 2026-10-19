@@ -26,7 +26,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 /// Core/Common so the cross-platform server's dependency graph never pulls in AppInsights.
 /// </para>
 /// <para>
-/// Delivery policy (#859): best-effort and silent. Events are handed to an in-memory channel that is
+/// Delivery policy: best-effort and silent. Events are handed to an in-memory channel that is
 /// never persisted, and a send that cannot reach the endpoint is dropped by the SDK without any
 /// signal reaching this class — so VS neither queues for later nor tells the user. Only shutdown is
 /// actively bounded (see <see cref="DisposeAsync"/>). The one-line "telemetry is being dropped"
@@ -85,7 +85,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
 
     private static TelemetryClient CreateClient(IUserUniqueIdStore userStore, IVersionProvider versionProvider)
     {
-        // Best-effort delivery (#859). InMemoryChannel is already what a default
+        // Best-effort delivery. InMemoryChannel is already what a default
         // TelemetryConfiguration uses (TelemetrySink creates one), so naming it here only makes the
         // delivery policy explicit and lets both knobs be seen:
         // - SendingInterval: how often the buffered items are POSTed (the SDK default, 30 s);
@@ -115,7 +115,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     /// <summary>
     /// Replaces the machine name with a constant. Left alone, the Application Insights SDK stamps
     /// <c>Cloud.RoleInstance</c> with <see cref="Environment.MachineName"/> on every event and exception,
-    /// and a hostname can identify the user or their employer (issue #1141).
+    /// and a hostname can identify the user or their employer.
     /// </summary>
     internal static void ApplyPrivacyDefaults(TelemetryContext context)
     {
@@ -123,7 +123,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     }
 
     /// <summary>
-    /// Stamps the host's client identity on every event (issue #844). <c>IdeClient</c> is the
+    /// Stamps the host's client identity on every event. <c>IdeClient</c> is the
     /// canonical cross-IDE key, also stamped server-side on server-originated events with the same
     /// <c>visualstudio</c>/<c>vscode</c>/<c>rider</c> vocabulary; stamping it here as well covers
     /// host-originated events the server never sees. Per-event properties take precedence over
@@ -135,7 +135,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         properties["Ide"] = "Microsoft Visual Studio";
         properties["IdeVersion"] = versionProvider.GetVsVersion();
         properties["ExtensionVersion"] = versionProvider.GetExtensionVersion();
-        properties[ClientSession.PropertyName] = ClientSession.Id; // issue #1199: joins host events to the server's ServerSessionStarted
+        properties[ClientSession.PropertyName] = ClientSession.Id; // joins host events to the server's ServerSessionStarted
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         catch (Exception ex)
         {
             // Never report a failed transmission as a new exception event: it would go to the same
-            // unreachable endpoint (#859). This catch is defensive only — the channel hands the
+            // unreachable endpoint. This catch is defensive only — the channel hands the
             // event off to a background sender and does not throw for an unreachable endpoint, so
             // in practice a dead endpoint shows up here only as a synchronous channel fault.
             _debugLog.Record("host", telemetryEvent.EventName, MirroredProperties(telemetryEvent.Properties.Select(p => new KeyValuePair<string, object?>(p.Key, p.Value))),
@@ -217,7 +217,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             {
                 // Never TrackException(new ExceptionTelemetry(exception)): that serialises the raw message,
                 // the full stack (with file names and line numbers) and inner exceptions, none of which are
-                // privacy-safe (issue #1140). Send the same sanitised UnhandledException event the LSP server does.
+                // privacy-safe. Send the same sanitised UnhandledException event the LSP server does.
                 var eventTelemetry = new EventTelemetry(TelemetryEvents.UnhandledException) { Timestamp = DateTime.UtcNow };
                 foreach (var prop in BuildSanitizedExceptionProps(exception, additionalPropsArray))
                 {
@@ -323,7 +323,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
 
     /// <summary>
     /// Flushes any queued telemetry to Application Insights before this transmitter is disposed,
-    /// bounded so an unreachable endpoint cannot delay host shutdown (#859).
+    /// bounded so an unreachable endpoint cannot delay host shutdown.
     /// </summary>
     /// <remarks>
     /// The flush is the only place where this class can observe an unreachable endpoint: the channel

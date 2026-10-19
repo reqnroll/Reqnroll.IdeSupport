@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 /// whenever it processes a Serial notification — for example the extension's own
 /// <c>reqnroll/projectLoaded</c>/<c>reqnroll/projectFiles</c> at startup. Mapping that to "no
 /// result" let the Run CodeLens briefly cache "no scenario on this line" for a real scenario
-/// (issue #800 follow-up, the same failure mode as the swallowed cancellation fixed in #778).
+/// (the same failure mode as a swallowed cancellation).
 /// Lives here, not in the Extension project, so the VSSDK-side navigation bar can recognize it.
 /// </remarks>
 public sealed class LspContentModifiedException : Exception

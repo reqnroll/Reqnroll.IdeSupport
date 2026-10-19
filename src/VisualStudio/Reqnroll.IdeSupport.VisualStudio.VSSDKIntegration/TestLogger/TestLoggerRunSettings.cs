@@ -126,9 +126,9 @@ internal static class TestLoggerRunSettings
     /// vstest splits <c>TestAdaptersPaths</c> on <c>;</c> (RunSettingsUtilities.GetTestAdaptersPaths).
     /// Existing entries are preserved verbatim; ours is appended unless an equivalent path is already
     /// listed — equivalence via <see cref="PathUtils.IsSamePath"/>, the one path-comparison routine
-    /// the extension uses everywhere else (issue #515 lesson: two independent normalizations always
-    /// end up disagreeing on some input eventually; this used to be its own weaker trailing-separator
-    /// trim that didn't collapse <c>..</c>/<c>.</c> segments or unify <c>/</c> vs <c>\</c>).
+    /// the extension uses everywhere else (two independent normalizations always end up
+    /// disagreeing on some input eventually, e.g. a bare trailing-separator trim would not collapse
+    /// <c>..</c>/<c>.</c> segments or unify <c>/</c> vs <c>\</c>).
     /// </summary>
     private static string AppendPath(string? existing, string loggerDirectory)
     {

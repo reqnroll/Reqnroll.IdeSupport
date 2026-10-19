@@ -72,11 +72,10 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
-            // Previously swallowed with no logging at all — this catch is the only place a failure
-            // in the OOP-to-devenv.exe callback round trip (ServiceHub activation, RPC/serialization
-            // fault, etc.) could ever surface, and losing it here meant the lens rendered forever in
-            // its unresolved/loading state with zero trace anywhere of why (live report: no Details
-            // popup ever appeared on click).
+            // Must be logged: this catch is the only place a failure in the OOP-to-devenv.exe callback
+            // round trip (ServiceHub activation, RPC/serialization fault, etc.) can surface, and
+            // swallowing it would leave the lens rendered forever in its unresolved/loading state with
+            // no trace of why (symptom: no Details popup ever appears on click).
             _logger.LogException(ex, $"RunTestCodeLensDataPoint: GetDataAsync — callback to {RunTestCodeLensCallbackListener.GetTargetsForLineMethod} failed for {_fileUri} line={_line}");
             onThisLine = Array.Empty<RunTestTargetEntry>();
         }

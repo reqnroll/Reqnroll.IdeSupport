@@ -121,7 +121,7 @@ public static class VsUtils
     /// excluded because, although it does have one, it produces no assembly and owns no files of
     /// its own at build time -- its sources compile into every project that imports its
     /// .projitems, and sending it as a project makes the server treat it as the owner of those
-    /// files (issue #735).
+    /// files.
     /// </remarks>
     public static bool IsSolutionProject(Project project)
     {
@@ -601,7 +601,7 @@ public static class VsUtils
     /// depth. <see cref="EnvDTE.Solution.Projects"/> is flat: it yields solution folders as
     /// <see cref="Project"/> objects, and the projects nested inside them are reachable only via
     /// <see cref="ProjectItem.SubProject"/> — so enumerating it directly silently drops every
-    /// nested project (issue #729). Solution folders themselves are not returned.
+    /// nested project. Solution folders themselves are not returned.
     /// </summary>
     public static IEnumerable<Project> GetAllProjects(Solution solution)
     {
@@ -764,8 +764,8 @@ public static class VsUtils
     }
 
     /// <summary>
-    /// Upper bound on the NuGet brokered-service round trip in <see cref="GetInstalledNuGetPackagesAsync"/>
-    /// (issue #1031). The call normally answers in milliseconds, and when the project isn't restored
+    /// Upper bound on the NuGet brokered-service round trip in <see cref="GetInstalledNuGetPackagesAsync"/>.
+    /// The call normally answers in milliseconds, and when the project isn't restored
     /// yet NuGet answers <c>ProjectNotReady</c> straight away, so this only fires for a stalled
     /// service. Generous rather than tight because a timeout is reported as "not ready" and retried,
     /// while the synchronous <see cref="GetInstalledNuGetPackages"/> blocks the UI thread for up to
@@ -794,10 +794,10 @@ public static class VsUtils
     /// </summary>
     /// <exception cref="NuGetProjectNotReadyException">
     /// NuGet reports <see cref="InstalledPackageResultStatus.ProjectNotReady"/> -- the project
-    /// hasn't been nominated/restored yet. Routine during solution load (issue #690); callers should
+    /// hasn't been nominated/restored yet. Routine during solution load; callers should
     /// treat this as "try again once restore finishes," not as a failure worth surfacing to the user.
     /// Also thrown, with <see cref="NuGetProjectNotReadyException.TimedOut"/> set, when the service
-    /// does not answer within <see cref="NuGetInstalledPackagesTimeout"/> (issue #1031).
+    /// does not answer within <see cref="NuGetInstalledPackagesTimeout"/>.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     public static async Task<IReadOnlyCollection<NuGetInstalledPackage>> GetInstalledNuGetPackagesAsync(
@@ -906,7 +906,7 @@ public static class VsUtils
     /// Switches to the UI thread and then shows <paramref name="message"/> in the VS status bar via
     /// <see cref="ShowStatusBarMessage"/>. Use this from background continuations
     /// (<c>ConfigureAwait(false)</c>) -- such as VS.Extensibility command handlers -- where the
-    /// caller is not guaranteed to be on the UI thread (issue #1021).
+    /// caller is not guaranteed to be on the UI thread.
     /// </summary>
     public static Task ShowStatusBarMessageAsync(string message) =>
         ShowStatusBarMessageAsync(message, CancellationToken.None);
@@ -920,7 +920,7 @@ public static class VsUtils
 
     /// <summary>
     /// Shows the language server's reason for rejecting an edit (rename, format, …) in a modal message
-    /// box, so it cannot be missed the way a status bar message can (issue #1132). Switches to the UI
+    /// box, so it cannot be missed the way a status bar message can. Switches to the UI
     /// thread first, so it is safe to call from background continuations. The single place
     /// edit rejections are presented in Visual Studio.
     /// </summary>

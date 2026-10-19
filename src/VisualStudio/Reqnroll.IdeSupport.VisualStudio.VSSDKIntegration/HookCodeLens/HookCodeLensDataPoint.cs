@@ -104,7 +104,7 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
         // see this type's remarks for why GetDetailsAsync must not make its own callback round-trip.
         // The nav target comes from the resolved entry: the two lens kinds on a Scenario: line point
         // at different places (own-level at the Scenario: tag, step-hooks at its first step), and the
-        // descriptor no longer carries per-lens nav info.
+        // descriptor carries no per-lens nav info.
         _cachedHooks = await FetchHooksAsync(entry.NavLine, entry.NavChar, entry.OwnLevelOnly, token).ConfigureAwait(false);
 
         return new CodeLensDataPointDescriptor { Description = entry.Title, TooltipText = BuildTooltip(_cachedHooks) };

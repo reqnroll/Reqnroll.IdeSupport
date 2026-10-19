@@ -13,8 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// side, so this pipe-delimited string is the one channel a tagger controls end to end.
 /// </summary>
 /// <remarks>
-/// Extracted from what was originally two near-identical copies (<c>HookElementDescription</c>,
-/// <c>RunElementDescription</c>) — the "line index + opaque revision string" envelope is shared;
+/// The "line index + opaque revision string" envelope is shared by the hook and Run lenses;
 /// each feature still builds its own revision-key strings (its own notion of "what changed"), it
 /// just hands them to <see cref="Encode"/> pre-formatted rather than reimplementing the envelope.
 /// The trailing revision component is opaque to data-point providers by design and exists only so

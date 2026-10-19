@@ -41,9 +41,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
 /// than uninstalling the extension.
 /// </para>
 /// <para>
-/// <b>LSP-server outcome pipeline.</b> Run registration used to be a same-process, in-memory call
-/// (<c>TestOutcomeListener.RegisterRun()</c>); the receiver, store, and persistence now live in the
-/// LSP server so every IDE shares one implementation, which makes this call a cross-process JSON-RPC
+/// <b>LSP-server outcome pipeline.</b> The receiver, store, and persistence live in the
+/// LSP server so every IDE shares one implementation, which makes run registration a cross-process JSON-RPC
 /// round trip over <c>LspInterceptingPipe</c>. <see cref="AddRunSettings"/> is a synchronous VS Test
 /// Platform callback with no async overload, so that round trip is awaited synchronously via
 /// <c>ThreadHelper.JoinableTaskFactory.Run</c> (the same sync-over-async bridge this codebase already
