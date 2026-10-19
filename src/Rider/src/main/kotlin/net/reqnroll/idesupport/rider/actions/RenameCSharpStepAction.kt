@@ -7,7 +7,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Rename Step, `.cs`-file side (issue #160) — the Rider-side surface for the
+ * Rename Step, `.cs`-file side — the Rider-side surface for the
  * `reqnroll/renameTargets` disambiguation + standard `textDocument/rename` flow, invoked from the
  * step-definition attribute. Deliberately context-menu-only, no keyboard shortcut: Rider's native
  * Shift+F6 rename already owns that shortcut for ordinary C# symbols, and this action's own

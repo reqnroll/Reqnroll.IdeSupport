@@ -23,8 +23,8 @@ object GoToHooksRunner {
      * Runs the request on a background task and navigates (or shows a chooser) once it
      * completes. [ownLevelOnly] is set only when invoked from a hook-count CodeVision lens
      * (HookCodeVisionProvider/StepHooksCodeVisionProvider), so the picker matches exactly what
-     * the lens counted. [alwaysShowPicker] is likewise set only by those lenses (issue #372
-     * follow-up — mirrors VS Code's `alwaysShowPicker`), so clicking a lens always lets the user
+     * the lens counted. [alwaysShowPicker] is likewise set only by those lenses
+     * (mirrors VS Code's `alwaysShowPicker`), so clicking a lens always lets the user
      * see which hook it refers to rather than jumping straight there; the manual "Go to Hooks"
      * action (GoToHooksAction) keeps the direct-navigate shortcut for a single match.
      */
@@ -37,8 +37,7 @@ object GoToHooksRunner {
 
         // A genuine navigation -- GoToHooksAction and the hook-count lens click are its only callers, and Rider's own
         // hook-count CodeVision lens resolves its counts without ever calling reqnroll/findHooks,
-        // so unlike VS's classic CodeLens there's no prefetch call through here to mislabel
-        // (issue #698).
+        // so unlike VS's classic CodeLens there's no prefetch call through here to mislabel.
         RiderTelemetryTransmitter.transmit(
             RiderTelemetryTransmitter.GO_TO_HOOK_COMMAND_EXECUTED, telemetryProperties(source))
 
@@ -56,7 +55,7 @@ object GoToHooksRunner {
         })
     }
 
-    /** `Source` property of the telemetry event (issue #861); pure so it is testable without a project. */
+    /** `Source` property of the telemetry event; pure so it is testable without a project. */
     internal fun telemetryProperties(source: String): Map<String, String> =
         mapOf(RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_PROPERTY to source)
 

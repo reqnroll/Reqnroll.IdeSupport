@@ -27,15 +27,15 @@ object RenameWorkspaceEditApplier {
      * read-only file only failed when its own turn came to be written - *after* earlier documents
      * in the same `WorkspaceEdit` had already been mutated - leaving a half-applied rename, and the
      * exception propagated out of [apply] so the caller's `renameApplied=false` report was never
-     * sent and the server's staged update hung (issue #995). The write is additionally wrapped by
+     * sent and the server's staged update hung. The write is additionally wrapped by
      * [applyGuarded] so any other mid-apply failure (offset out of range, I/O error) also returns
      * `false` instead of propagating.
      *
      * @return `true` only when [edit] touches at least one URI and **every** one of them resolved
      *   to a `Document` and had its edits applied. An empty edit, or any edit whose document could
-     *   not be resolved, returns `false` (issue #989): the caller must not tell the server the
+     *   not be resolved, returns `false`: the caller must not tell the server the
      *   rename was applied, or it commits a staged registry update for an edit that never reached a
-     *   file - the failure mode #670's `renameApplied` was added to prevent.
+     *   file - the failure mode `renameApplied` exists to prevent.
      */
     fun apply(project: Project, edit: WorkspaceEdit): Boolean {
         val byUri = editsByUri(edit)
@@ -137,14 +137,14 @@ object RenameWorkspaceEditApplier {
 
     /**
      * [documentForUri] without the VFS refresh — for reading a [Document.modificationStamp] to
-     * compare against a previously captured one (issue #671, R4).
+     * compare against a previously captured one.
      *
      * `refreshAndFindFileByPath` performs a synchronous VFS refresh, and a refresh that decides the
      * file changed on disk makes `FileDocumentManager` reload the document, which assigns a **new
      * modification stamp even when the content is byte-identical**. Using it on both sides of a
      * staleness comparison therefore manufactures the very "the file changed" verdict the
      * comparison exists to detect — a false positive that discarded the user's rename and left the
-     * server's binding registry describing a step that exists in no file (issue #670). Bind-mounted
+     * server's binding registry describing a step that exists in no file. Bind-mounted
      * workspaces (the Rider devcontainer's Windows-host mount) make this markedly more likely,
      * since their mtimes are not reliably stable.
      *

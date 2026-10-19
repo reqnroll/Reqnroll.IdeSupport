@@ -47,7 +47,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
         val tabSize = editor.settings.getTabSize(project)
         val uri = localPathToLspUri(virtualFile.path)
         // Captured before the request fires so the edit-application step below can detect
-        // whether the document changed in the meantime (issue #326) -- the server's returned
+        // whether the document changed in the meantime -- the server's returned
         // TextEdit line/character offsets are only valid against the document as it looked at
         // this instant, not whatever it looks like once the (up to ~10s) request returns.
         val requestModificationStamp = document.modificationStamp

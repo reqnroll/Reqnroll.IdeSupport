@@ -32,7 +32,7 @@ object ReqnrollResultPopup {
      * Builds the chooser list's cell renderer. A [ColoredListCellRenderer] (rather than the bare,
      * non-opaque `JLabel` used previously) is required so each row derives its background and
      * foreground from the owning list's selection state; without it, keyboard navigation of the
-     * Find Usages / Go To Hooks popup has no visible selection highlight (issue #992). Exposed for
+     * Find Usages / Go To Hooks popup has no visible selection highlight. Exposed for
      * unit testing, since `show` itself needs a live popup/platform.
      */
     fun <T> resultListCellRenderer(render: (T) -> String): ListCellRenderer<in T> =

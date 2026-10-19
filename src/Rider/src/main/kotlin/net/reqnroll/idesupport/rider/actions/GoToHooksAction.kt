@@ -7,8 +7,8 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Go to Hooks — the Rider-side surface for the position-based `reqnroll/findHooks` request
- * (issue #158). Mirrors VS's GoToHooksCommand and VS Code's `doGoToHooks`: only enabled with the
+ * Go to Hooks — the Rider-side surface for the position-based `reqnroll/findHooks` request.
+ * Mirrors VS's GoToHooksCommand and VS Code's `doGoToHooks`: only enabled with the
  * caret in a `.feature` file editor, sends the current caret position, and navigates directly to
  * the single applicable hook or shows a chooser popup when there are several. The actual
  * request/navigation logic lives in [GoToHooksRunner].

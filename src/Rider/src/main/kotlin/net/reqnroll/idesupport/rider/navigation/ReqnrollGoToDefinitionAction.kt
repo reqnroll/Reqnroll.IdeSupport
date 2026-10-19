@@ -12,7 +12,7 @@ import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 
 /**
  * Makes F12 / Ctrl+B / Ctrl+click Go to Declaration reach the LSP server for `.feature` files on
- * Rider 2026.2+ (#909).
+ * Rider 2026.2+.
  *
  * There the keyboard and mouse shortcuts for `GotoDeclaration` are routed through Rider's
  * `BackendDelegatingAction`, which asks the ReSharper backend first; the backend knows nothing

@@ -28,7 +28,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
  * reasoning as [net.reqnroll.idesupport.rider.inlayhints.ReqnrollFeatureInlayHintsController]'s doc
  * comment: `.feature` files have no [com.intellij.lang.ParserDefinition] registered, so a
  * language-scoped folding builder would never be invoked. Confirmed via bytecode inspection of
- * the pinned Rider 2024.3.5 `com.intellij.platform.lsp.api.LspServerDescriptor` (issue #162) that
+ * the pinned Rider 2024.3.5 `com.intellij.platform.lsp.api.LspServerDescriptor` that
  * there is also no generic-client `LspFoldingRangeSupport`-style opt-in for `textDocument/foldingRange`
  * — same class of gap as CodeLens/inlay hints/on-type formatting, all of which needed the same
  * kind of manual client-side glue.
@@ -46,7 +46,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
  * opened, which on solution/IDE startup happens well before the LSP server process exists —
  * confirmed live, the first request always came back null. With no further document edits there
  * was otherwise nothing to retry it, leaving folding permanently empty for files left open since
- * startup (issue #162 follow-up).
+ * startup.
  */
 class ReqnrollFeatureFoldingController : EditorFactoryListener {
     private class Session(
@@ -111,7 +111,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
             // thread — refresh() runs on the EDT (editorCreated and the SWING_THREAD debounce
             // alarm both dispatch there), so the request itself must run on a background thread,
             // matching ReqnrollFeatureInlayHintsController's identical rationale. The gate renders
-            // only the newest response and skips a failed (null) one (issue #990).
+            // only the newest response and skips a failed (null) one.
             gate.fetchThenApply(
                 fetch = fetch@{
                     if (project.isDisposed || editor.isDisposed) return@fetch null

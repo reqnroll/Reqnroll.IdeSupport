@@ -5,7 +5,7 @@ import org.eclipse.lsp4j.TextEdit
 
 /**
  * Applies LSP [TextEdit]s to a string without touching any platform `Document`, so it has no threading
- * rules and can run on a background formatting thread (issue #1200: the platform `applyTextEdits` helper
+ * rules and can run on a background formatting thread (the platform `applyTextEdits` helper
  * asserts the EDT).
  */
 internal object TextEditApplier {

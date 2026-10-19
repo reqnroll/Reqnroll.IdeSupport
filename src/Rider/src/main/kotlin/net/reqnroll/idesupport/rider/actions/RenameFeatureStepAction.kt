@@ -7,7 +7,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Rename Step, `.feature`-file side (issue #160) — the Rider-side surface for the
+ * Rename Step, `.feature`-file side — the Rider-side surface for the
  * `reqnroll/renameTargets` disambiguation + standard `textDocument/rename` flow. Bound to
  * Shift+F6: nothing else claims that shortcut for `.feature` files (no PSI language is
  * registered for Gherkin in this plugin — see [net.reqnroll.idesupport.rider.commenting.ReqnrollCommentByLineCommentAction]'s doc comment for

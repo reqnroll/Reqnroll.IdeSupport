@@ -153,7 +153,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
             // thread for up to INLAY_HINT_TIMEOUT_MS — refresh() is called from the EDT (both
             // editorCreated and the SWING_THREAD debounce alarm), so the request itself must run
             // on a background thread or every editor open / debounced keystroke freezes the UI.
-            // The gate renders only the newest response and skips a failed (null) one (issue #990).
+            // The gate renders only the newest response and skips a failed (null) one.
             gate.fetchThenApply(
                 fetch = fetch@{
                     if (project.isDisposed || editor.isDisposed) return@fetch null

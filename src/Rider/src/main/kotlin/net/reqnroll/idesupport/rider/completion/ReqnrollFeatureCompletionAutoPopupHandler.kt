@@ -10,7 +10,7 @@ import net.reqnroll.idesupport.rider.isFeatureExtension
 
 /**
  * Starts the completion popup when one of the server's non-identifier trigger characters (`@` and
- * space, advertised by `CompletionHandler.TriggerCharacters`) is typed in a `.feature` file (#902).
+ * space, advertised by `CompletionHandler.TriggerCharacters`) is typed in a `.feature` file.
  *
  * Rider's generic LSP client reads the server's `triggerCharacters` only to label a request that
  * something else already started (confirmed by decompiling `LspCompletionUtilKt` and

@@ -7,8 +7,8 @@ import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 /**
  * Wraps [Messages]' modal info/warning/error dialogs — the Rider-side equivalent of VS Code's
  * popup notifications (`vscode.window.show*Message`) — so every command's one-line result is also
- * mirrored into the curated "Reqnroll" console (issue #662), matching VS Code's
- * `logging/appNotify.ts` (issue #661). Signatures deliberately match the [Messages] methods they
+ * mirrored into the curated "Reqnroll" console, matching VS Code's
+ * `logging/appNotify.ts`. Signatures deliberately match the [Messages] methods they
  * replace (`project`, `message`, `title`) so call sites are a mechanical swap.
  */
 object ReqnrollNotify {
@@ -24,7 +24,7 @@ object ReqnrollNotify {
 
     /**
      * Shows the language server's reason for rejecting an edit (rename, comment toggle, …) in a modal
-     * dialog and mirrors it to the curated "Reqnroll" console (issue #1132). The single place edit
+     * dialog and mirrors it to the curated "Reqnroll" console. The single place edit
      * rejections are presented in Rider; must be called on the EDT.
      */
     fun editRejected(project: Project, message: String, title: String) {

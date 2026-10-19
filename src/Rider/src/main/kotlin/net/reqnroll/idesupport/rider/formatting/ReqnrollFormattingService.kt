@@ -15,9 +15,9 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
  * Whole-document Reformat Code for `.feature` files — replaces the platform's own
- * `LspFormattingService` (issue #1172). That service sends `textDocument/formatting` through
+ * `LspFormattingService`. That service sends `textDocument/formatting` through
  * `LspServer.sendRequestSync`, which swallows JSON-RPC errors, so the server's `-32803` "edit rejected"
- * reason (issue #1132) never reached the user. This one uses the suspend `sendRequest` (see
+ * reason never reached the user. This one uses the suspend `sendRequest` (see
  * [ReqnrollRequestSender.formatDocument]) and can therefore show it.
  *
  * The rejection is shown in a modal only when the reformat was explicitly requested by the user
@@ -87,7 +87,7 @@ class ReqnrollFormattingService : AsyncDocumentFormattingService() {
     }
 
     private fun applyEdits(original: String, outcome: FormatOutcome.Edits): String {
-        // Pure string splice: this runs on a coroutine worker, where the platform Document helper asserts the EDT (#1200).
+        // Pure string splice: this runs on a coroutine worker, where the platform Document helper asserts the EDT.
         return TextEditApplier.apply(original, outcome.edits) ?: run {
             ReqnrollDebugLogger.warn("Reformat Code: the server's edits could not be applied; leaving the text unchanged")
             original

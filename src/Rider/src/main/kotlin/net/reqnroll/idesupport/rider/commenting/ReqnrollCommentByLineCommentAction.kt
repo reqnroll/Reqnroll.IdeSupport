@@ -13,7 +13,7 @@ import net.reqnroll.idesupport.rider.lsp.ToggleCommentOutcome
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Comment/Uncomment toggle for `.feature` files (issues #159, #1151). Neither VS nor VS Code has a
+ * Comment/Uncomment toggle for `.feature` files. Neither VS nor VS Code has a
  * native `#`-comment understanding of Gherkin either — both redirect the IDE's own comment command
  * to the server's `workspace/executeCommand` (`reqnroll.toggleComment`), which replies with a
  * `workspace/applyEdit` the client's built-in LSP infrastructure applies natively. This mirrors
@@ -68,7 +68,7 @@ class ReqnrollCommentByLineCommentAction : CommentByLineCommentAction() {
         // Reqnroll request-sender caller's identical rationale. The actual edit arrives
         // asynchronously via the server's own workspace/applyEdit request, applied natively by
         // Rider's platform Lsp4jClient — once the command is dispatched there is nothing further to
-        // do, except show the reason when the server rejects it (issue #1132).
+        // do, except show the reason when the server rejects it.
         ApplicationManager.getApplication().executeOnPooledThread {
             val outcome = ReqnrollRequestSender.toggleComment(project, uri, startLine, endLine)
             ReqnrollDebugLogger.info(

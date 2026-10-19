@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Remembers which files the user has just asked to reformat explicitly (Code > Reformat Code, or the
  * Reformat File dialog), so [ReqnrollFormattingService] can tell a user-invoked reformat from an
- * implicit one (format on save, on paste, ...) when the server rejects it (issue #1172).
+ * implicit one (format on save, on paste, ...) when the server rejects it.
  *
  * The platform gives a formatting task no such signal: `FormatOnSaveAction` and `ReformatCodeAction`
  * both run `ReformatCodeProcessor`, and `FormattingContext` / `AsyncFormattingRequest` look the same for
