@@ -136,7 +136,7 @@ public class VsProjectScope : IProjectScope
         }
         catch (NuGetProjectNotReadyException e) when (e.TimedOut)
         {
-            // Issue #1031: NuGet's brokered service stalled. Null means "not known yet", which the
+            // NuGet's brokered service stalled. Null means "not known yet", which the
             // project-settings provider retries, same as for ProjectNotReady.
             Logger.LogWarning($"Loading package references for {ProjectName} failed: {e.Message}");
             return null;

@@ -13,12 +13,12 @@ using Reqnroll.IdeSupport.Common.Logging;
 namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 
 /// <summary>
-/// Dedicated "Reqnroll" VS Output Window pane sink (issue #651) — the LSP-based extension's
+/// Dedicated "Reqnroll" VS Output Window pane sink — the LSP-based extension's
 /// counterpart to the legacy Reqnroll.VisualStudio <c>VsDeveroomOutputPaneServices</c>/
-/// <c>OutputWindowPaneLogger</c> pair, which the new architecture never carried over. Previously
-/// the "Reqnroll Language Client" pane visible in VS was VS.Extensibility's own generic LSP-trace
-/// pane, and application-level messages (e.g. the "Rename failed" report that surfaced this) were
-/// only ever written to the per-PID file log under %LOCALAPPDATA%\Reqnroll\logs\.
+/// <c>OutputWindowPaneLogger</c> pair, which the new architecture never carried over. The
+/// "Reqnroll Language Client" pane visible in VS is VS.Extensibility's own generic LSP-trace
+/// pane, so without this sink application-level messages (e.g. a "Rename failed" report) would only
+/// reach the per-PID file log under %LOCALAPPDATA%\Reqnroll\logs\.
 /// </summary>
 /// <remarks>
 /// Pane creation and writes are STA-bound, so <see cref="Log"/> posts the work to the UI thread
@@ -31,7 +31,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 /// <para>
 /// Lives in VSSDKIntegration (not the Extension project) so the one shared instance in
 /// <see cref="ExtensionHostLogger"/> can serve both composition roots - VS.Extensibility DI and
-/// VSSDK MEF (issue #748). It must never be composed into the out-of-process CodeLens host's logger
+/// VSSDK MEF. It must never be composed into the out-of-process CodeLens host's logger
 /// (<see cref="CodeLensHostLogger"/>): that process has no VS shell to write a pane to.
 /// </para>
 /// </remarks>
@@ -76,8 +76,8 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
         var activate = ShouldActivate(message.Level);
 
         // Deliberately fire-and-forget: a log call must never block on the UI thread, and the body
-        // catches everything, so there is no fault to observe. (The Extension project, where this
-        // class lived before issue #748, suppresses VSSDK007 project-wide; VSSDKIntegration doesn't.)
+        // catches everything, so there is no fault to observe. (Unlike the Extension project, which
+        // suppresses VSSDK007 project-wide, VSSDKIntegration does not, hence the pragma.)
 #pragma warning disable VSSDK007
         _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
 #pragma warning restore VSSDK007
@@ -96,7 +96,7 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
 
     /// <summary>
     /// Formats <paramref name="message"/> for the pane: a one-line summary, not the full trace
-    /// (issue #680) -- <see cref="SynchronousFileLogger"/> already writes the full exception,
+    /// -- <see cref="SynchronousFileLogger"/> already writes the full exception,
     /// indented, to the per-process debug log at <see cref="Level"/>-or-Warning, so nothing is
     /// lost by trimming what the pane shows. <paramref name="logPointer"/>, when non-null, is
     /// appended as a trailing line pointing the user at that file; pass it only for the first
@@ -147,8 +147,8 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
 
     /// <summary>
     /// Returns the file-log pointer text the first time an exception-carrying message is logged in
-    /// this pane's lifetime, and <see langword="null"/> every time after (issue #680) -- repeating
-    /// it on every message would itself become the noise this issue is trying to remove.
+    /// this pane's lifetime, and <see langword="null"/> every time after -- repeating
+    /// it on every message would itself become the noise the one-line format avoids.
     /// </summary>
     internal string? ConsumeLogPointerIfNeeded(bool messageHasException)
     {

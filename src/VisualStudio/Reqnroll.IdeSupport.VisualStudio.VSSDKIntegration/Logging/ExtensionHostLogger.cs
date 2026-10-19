@@ -11,11 +11,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 /// </summary>
 /// <remarks>
 /// A static singleton, like <c>SemanticTokenClassificationStore.Instance</c>, because neither
-/// composition root can resolve the other's instances. Before issue #748 each root built its own
-/// composite: two <see cref="SynchronousFileLogger"/>s appended to the same
+/// composition root can resolve the other's instances. A composite per root would be two
+/// <see cref="SynchronousFileLogger"/>s appending to the same
 /// <c>reqnroll-vs-ext-*-&lt;pid&gt;.log</c> file under separate per-instance write locks, so
-/// concurrent writes from the two roots hit a sharing violation and one line was silently dropped.
-/// The two roots also disagreed on the file level (Warning vs. Info), and only the DI side wrote to
+/// concurrent writes from the two roots would hit a sharing violation and one line would be silently dropped.
+/// The two roots would also disagree on the file level (Warning vs. Info), and only the DI side would write to
 /// the "Reqnroll" Output Window pane (<see cref="VsOutputPaneLogger"/>).
 /// Do not construct another <c>("vs", "ext")</c> <see cref="SynchronousFileLogger"/> in this
 /// process - use this instance.

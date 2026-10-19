@@ -13,9 +13,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 /// <see cref="ExtensionHostLogger"/>. It writes to its own <c>codelens-sh</c> role
 /// (<c>reqnroll-vs-codelens-sh-*-&lt;pid&gt;.log</c>) rather than <c>ext</c>, so the file names
 /// say which process wrote them instead of relying on the PID alone. File-only: there is no VS
-/// shell in this process for <see cref="VsOutputPaneLogger"/> to write to. Before issue #748 the
-/// provider and the bridge each built their own <see cref="SynchronousFileLogger"/> for the same
-/// file, so concurrent writes could silently drop a line.
+/// shell in this process for <see cref="VsOutputPaneLogger"/> to write to. The
+/// provider and the bridge share this one instance instead of each building a
+/// <see cref="SynchronousFileLogger"/> for the same file, because concurrent writes from two
+/// loggers could silently drop a line.
 /// </remarks>
 internal static class CodeLensHostLogger
 {

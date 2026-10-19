@@ -21,12 +21,12 @@ namespace Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 /// </summary>
 /// <remarks>
 /// This covers the values no build-time test can: undocumented IDs copied out of VS assemblies
-/// (issue #747 was one of these, and so was the wrong property ID in #774), plus this extension's
+/// (a hand-typed command or property ID silently names nothing, or the wrong thing), plus this extension's
 /// own <c>.vsct</c> registration as VS actually loaded it. It never changes behaviour: every pair is
 /// logged, so a VS update that moves a command shows up in the first log after the update instead of
 /// as a feature that silently stopped working. Problems are logged as warnings (which also brings up
-/// the Reqnroll Output pane). Every entry below was confirmed to resolve in a live VS 18.0 session
-/// (PR #777), so a warning means VS changed, not that an expected name is a guess.
+/// the Reqnroll Output pane). Every entry below was confirmed to resolve in a live VS 18.0 session,
+/// so a warning means VS changed, not that an expected name is a guess.
 /// </remarks>
 public static class VsWellKnownIdsSelfCheck
 {

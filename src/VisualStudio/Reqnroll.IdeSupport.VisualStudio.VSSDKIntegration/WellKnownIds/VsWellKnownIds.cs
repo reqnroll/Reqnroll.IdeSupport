@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 /// <remarks>
 /// <para>
 /// Prefer an SDK constant (<c>VSConstants</c>, <c>VsMenus</c>, <c>__VSPROPID</c>, …) whenever one
-/// exists: the compiler then checks it. Issue #774 was a hand-typed property ID that silently named
+/// exists: the compiler then checks it. A hand-typed property ID can silently name
 /// the wrong property. Only values with no SDK equivalent belong here, each with where it came from.
 /// </para>
 /// <para>
@@ -46,8 +46,8 @@ public static class VsWellKnownIds
     /// The core editor's own command set. <c>Edit.ToggleLineComment</c> is not in VSStd2K and has no
     /// <c>VSConstants</c> entry. Found in the CommandBindings of VS's
     /// <c>Microsoft.VisualStudio.Editor.Implementation.dll</c>, which maps
-    /// <c>{160961B3-909D-4B28-9353-A1BEF587B4A6}:48</c> to <c>ToggleLineCommentCommandArgs</c>
-    /// (issue #747). Undocumented: runtime-checked by <c>VsWellKnownIdsSelfCheck</c>.
+    /// <c>{160961B3-909D-4B28-9353-A1BEF587B4A6}:48</c> to <c>ToggleLineCommentCommandArgs</c>.
+    /// Undocumented: runtime-checked by <c>VsWellKnownIdsSelfCheck</c>.
     /// </summary>
     public static readonly Guid EditorCommandSet = new("160961B3-909D-4B28-9353-A1BEF587B4A6");
 
@@ -60,7 +60,7 @@ public static class VsWellKnownIds
     /// <summary>
     /// MEF <c>[Name(...)]</c> of VS's own <c>INavigableSymbolSourceProvider</c> for Ctrl+Click/Ctrl+hover
     /// (<c>NavigableSymbolSourceProvider</c> in <c>Microsoft.VisualStudio.LanguageServer.Client.Implementation.dll</c>,
-    /// confirmed by decompiling that assembly, issue #761). No SDK constant exists for it. Used as the
+    /// confirmed by decompiling that assembly). No SDK constant exists for it. Used as the
     /// <c>[Order(Before = ...)]</c> target of our own provider so ours runs first for Gherkin views.
     /// </summary>
     public const string LspNavigableSymbolSourceProviderName = "LSP NavigableSymbolSourceProvider";

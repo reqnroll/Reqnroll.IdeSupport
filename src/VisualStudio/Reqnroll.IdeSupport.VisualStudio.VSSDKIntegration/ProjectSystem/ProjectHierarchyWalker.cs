@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 /// <para>
 /// A solution's project list is flat: solution folders appear alongside real projects, and the
 /// projects nested inside a folder are reachable only through that folder's children. Walking the
-/// top level alone therefore silently drops every nested project (issue #729).
+/// top level alone therefore silently drops every nested project.
 /// </para>
 /// <para>
 /// The DTE/COM specifics live in <see cref="VsUtils.GetAllProjects"/>, which supplies the three

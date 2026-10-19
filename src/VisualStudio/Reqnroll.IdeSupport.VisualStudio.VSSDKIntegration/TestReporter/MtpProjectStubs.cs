@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestReporter;
 /// <summary>
 /// Connects a project to the Microsoft.Testing.Platform (MTP) reporter by writing a project-local
 /// stub, <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c>, that imports the bundled
-/// <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c> (issue #741).
+/// <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -37,11 +37,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestReporter;
 /// <b>No MTP detection here.</b> The imported <c>.targets</c> gates itself at build time on the real,
 /// evaluated properties (a resolved <c>Reqnroll.dll</c> reference, language, test host, MTP opt-in, TFM,
 /// LangVersion, resolved Microsoft.Testing.Platform version) and adds nothing to a project that fails
-/// any gate. That replaces the ad hoc text scans that issue #722 showed miss projects made MTP-capable
+/// any gate. That replaces the ad hoc text scans, which miss projects made MTP-capable
 /// through imported props.
 /// </para>
 /// <para>
-/// <b>Known gap (issue #741 risk 4a)</b>: VS may keep using a project evaluation made before the stub
+/// <b>Known gap</b>: VS may keep using a project evaluation made before the stub
 /// existed, so the first build after a stub is first written (a brand-new project, or a deleted obj\)
 /// can run without the reporter; later builds pick it up.
 /// </para>
@@ -277,8 +277,8 @@ public static class MtpProjectStubs
     /// <summary>
     /// Evaluates a project's extensions path via <paramref name="evaluate"/>, caching a successful
     /// result for the session. A null result (a timeout or a transient <c>dotnet msbuild</c> failure)
-    /// is not cached, so a later call retries instead of reusing the failure until restart
-    /// (issue #1037). Extracted so the caching decision is one testable place.
+    /// is not cached, so a later call retries instead of reusing the failure until restart.
+    /// Extracted so the caching decision is one testable place.
     /// </summary>
     internal static string? GetOrEvaluateProjectExtensionsPath(string projectFile, Func<string, string?> evaluate)
     {
