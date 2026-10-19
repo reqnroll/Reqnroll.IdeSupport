@@ -342,8 +342,8 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
 
     // Step Rename refactoring. For .cs files there is no rename provider registered —
     // documentSelector deliberately excludes csharp (see manualDocumentSync.ts) — so
-    // renameStepFromCSharp drives the reqnroll/renameTargets + textDocument/rename flow directly
-    // directly, mirroring the Visual Studio extension's RenameStepCommand. For .feature files
+    // renameStepFromCSharp drives the reqnroll/renameTargets + textDocument/rename flow directly,
+    // mirroring the Visual Studio extension's RenameStepCommand. For .feature files
     // this delegates to VS Code's native rename; collapseActiveSelectionForFeatureStepRename()
     // must run BEFORE editor.action.rename starts — see its doc comment: mutating
     // the selection while that command already has an in-flight prepareRename request cancels
