@@ -4,7 +4,7 @@ import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.SymbolKind
 
 /**
- * Maps a failed step reported by the LSP server's step-trace parser (issue #451) back to its line
+ * Maps a failed step reported by the LSP server's step-trace parser back to its line
  * in the `.feature` file, using the `textDocument/documentSymbol` tree — which already carries
  * Background and Scenario steps as `Field`-kind children (see `DocumentSymbolService.cs`) — so no
  * Gherkin parsing (and no dialect-specific keyword list) is needed on the Kotlin side.

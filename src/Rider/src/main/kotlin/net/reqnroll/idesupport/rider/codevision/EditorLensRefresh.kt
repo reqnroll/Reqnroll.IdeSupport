@@ -11,8 +11,7 @@ import com.intellij.openapi.project.Project
  * `CodeVisionProvider` in this plugin that reacts to `workspace/codeLens/refresh` needs it
  * ([HookCodeVisionProvider.refreshOpenFeatureEditors], [StepUsagesCodeVisionProvider.refreshOpenCsEditors],
  * `RunTestCodeVisionProvider.refreshOpenFeatureEditors`), and until this extraction each one
- * carried its own copy of the identical `EditorFactory`/`FileDocumentManager` walk (issue #262
- * follow-up).
+ * carried its own copy of the identical `EditorFactory`/`FileDocumentManager` walk.
  */
 object EditorLensRefresh {
     /** Invalidates [providerIds] in every open editor in [project] whose file has [extension] (case-insensitive, no leading dot). */

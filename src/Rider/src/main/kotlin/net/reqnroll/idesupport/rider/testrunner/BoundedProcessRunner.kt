@@ -6,8 +6,8 @@ import java.util.concurrent.TimeUnit
 internal class BoundedProcessResult(val exitCode: Int, val output: String)
 
 /**
- * Runs a short-lived child process and captures its stdout with the timeout actually enforced
- * (issue #982). Reading stdout to EOF *before* `waitFor(timeout)` makes the timeout dead code: a
+ * Runs a short-lived child process and captures its stdout with the timeout actually enforced.
+ * Reading stdout to EOF *before* `waitFor(timeout)` makes the timeout dead code: a
  * hung child — or a grandchild that inherited the pipe and outlives the child — keeps the read
  * blocked forever. Here stdout is drained on a daemon thread while the caller waits on the process
  * itself, and a process that overruns is killed together with its descendants.

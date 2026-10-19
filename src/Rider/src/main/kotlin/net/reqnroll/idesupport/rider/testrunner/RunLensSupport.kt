@@ -14,7 +14,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
  * Shared lens-computation logic for [RunTestCodeVisionProvider] — mirrors
- * [net.reqnroll.idesupport.rider.codevision.HookLensSupport]'s shape (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262):
+ * [net.reqnroll.idesupport.rider.codevision.HookLensSupport]'s shape (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"):
  * fetch scenario/Outline ranges via the standard `textDocument/documentSymbol` request (see [net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender.documentSymbol]),
  * then resolve each one's generated test method(s) via the new custom `reqnroll/resolveTestTargets`
  * request. No PSI is used anywhere in this chain — see [RunTestCodeVisionProvider]'s doc comment for
@@ -64,13 +64,13 @@ internal object RunLensSupport {
      *
      * The symbol-tree walk itself runs on every call — `computeCodeVision` is invoked by IntelliJ's
      * platform on its own schedule (edits, file open, etc.) with no way for this plugin to ask for
-     * only the visible range (issue #495's platform survey). What's skipped per call is the
+     * only the visible range. What's skipped per call is the
      * `reqnroll/resolveTestTargets` RPC: [RunTestTargetCache] reuses the previous resolution for any
      * scenario whose identity (kind + name) hasn't changed since the last walk, so a large feature
      * file only pays the RPC cost for scenarios that actually changed, not the whole document every
      * time.
      *
-     * Feature/Rule header lines additionally get a "Run Scenarios" entry (issue #744): the same
+     * Feature/Rule header lines additionally get a "Run Scenarios" entry: the same
      * walk collects Module-kind (Feature) and Namespace-kind (Rule) nodes (including Rules nested
      * inside Features) and resolves each one's whole contained scenario set in a single
      * `reqnroll/resolveContainerTestTargets` call, cached under the same (uri, line) identity rule
@@ -114,7 +114,7 @@ internal object RunLensSupport {
             result.add(TextRange(offset, offset) to entry)
         }
 
-        // "Run Scenarios" lenses on Feature/Rule header lines (issue #744): resolve every
+        // "Run Scenarios" lenses on Feature/Rule header lines: resolve every
         // contained scenario in one container request per block. symbol.range (the block's full
         // body) goes to the server — the same choice VS's RunTestCodeLensService makes, since the
         // handler resolves every scenario/Outline tag fully contained within the range given —
@@ -176,7 +176,7 @@ internal object RunLensSupport {
 
     /**
      * Renders the lens title — the singular "Run" for a scenario, the plural "Run Scenarios" for a
-     * Feature/Rule container (issue #744), each prefixed with the cached last-run outcome glyph the
+     * Feature/Rule container, each prefixed with the cached last-run outcome glyph the
      * same way. `internal` so it's unit-testable without a platform fixture.
      */
     internal fun renderTitle(outcome: RunOutcome?, isContainer: Boolean = false): String {
@@ -190,8 +190,8 @@ internal object RunLensSupport {
     }
 
     /**
-     * Summarizes the failed row(s) from [result]'s per-row detail (LSP-server outcome pipeline,
-     * #700/#702) for the lens tooltip — the plain [title] alone doesn't say *which* Scenario
+     * Summarizes the failed row(s) from [result]'s per-row detail (LSP-server outcome pipeline)
+     * for the lens tooltip — the plain [title] alone doesn't say *which* Scenario
      * Outline row failed or on what step. Falls back to [title] verbatim when [result] has no rows
      * (a TRX-sourced fallback result, or no run yet), same as before this detail existed.
      * `internal` so it's unit-testable without a platform fixture.

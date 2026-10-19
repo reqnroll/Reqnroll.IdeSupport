@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 enum class ProcessWaitResult { COMPLETED, TIMED_OUT, CANCELLED }
 
 /**
- * Waits for the `dotnet test` child process (issue #981). Replaces one blocking `waitFor(timeout)`
+ * Waits for the `dotnet test` child process. Replaces one blocking `waitFor(timeout)`
  * so that the user's cancel button is honoured within [pollMillis], and so that giving up on the
  * process (timeout or cancel) ends the whole process tree — `dotnet test` spawns MSBuild node and
  * testhost children that `destroyForcibly()` on the parent alone leaves running in the background.

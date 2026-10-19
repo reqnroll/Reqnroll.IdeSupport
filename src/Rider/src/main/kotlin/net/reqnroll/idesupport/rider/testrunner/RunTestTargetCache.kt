@@ -4,12 +4,12 @@ import net.reqnroll.idesupport.rider.lsp.protocol.ScenarioTestTargetItem
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Per-(uri, line) cache of resolved `reqnroll/resolveTestTargets` results (issue #495).
+ * Per-(uri, line) cache of resolved `reqnroll/resolveTestTargets` results.
  *
  * Unlike VS's classic CodeLens (async per-line data points) and VS Code's `CodeLensProvider`
  * (`provideCodeLenses` + lazy `resolveCodeLens`), IntelliJ's `CodeVisionProvider.computeCodeVision`
  * has no visible-range parameter and no per-entry resolve phase — it's always asked for the *whole*
- * document, every time CodeVision recomputes (issue #495's platform survey). Rider therefore can't
+ * document, every time CodeVision recomputes. Rider therefore can't
  * skip resolving off-screen scenarios the way the other two clients now do; the only lever available
  * is skipping the RPC itself for a scenario whose *identity* hasn't changed since the last recompute.
  *
