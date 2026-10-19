@@ -100,7 +100,7 @@ public class BindingMatchServiceTests
     {
         // A scenario under a Rule: block has an extra RuleBlock tag between the
         // ScenarioDefinitionBlock and the FeatureBlock, so the feature name is two levels up
-        // from the scenario rather than one (issue #238).
+        // from the scenario rather than one.
         const string feature = "Feature: F\nRule: R\nScenario: S\n    Given my step\n";
         var set = BuildSet(feature, RegistryWith(GivenBinding("my step")));
 
@@ -140,7 +140,7 @@ public class BindingMatchServiceTests
     {
         // DefinedFeature line 2 (0-based) is "    Given my step" — the step text span covers
         // just "my step"; the rest of the line (indentation + keyword, and one-past-the-end)
-        // should still resolve to the same step (issue #101).
+        // should still resolve to the same step.
         var set  = BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step")));
         var step = set.Steps[0];
         var line = step.Range.Snapshot.GetLineFromLineNumber(step.Range.StartLinePosition.Line);
@@ -189,7 +189,7 @@ public class BindingMatchServiceTests
         set.Key.DocumentId.Should().Be(Uri);
     }
 
-    // ── FromTags / Scenarios (issue #373) ───────────────────────────────────────
+    // ── FromTags / Scenarios ───────────────────────────────────────
 
     [Fact]
     public void FromTags_captures_a_scenario()
@@ -534,7 +534,7 @@ public class BindingMatchServiceTests
         usages.Should().HaveCount(2);
     }
 
-    // ── BindingId (issue #471) ──────────────────────────────────────────────────
+    // ── BindingId ──────────────────────────────────────────────────
 
     [Fact]
     public void BindingId_is_stable_for_the_same_binding_identity()
@@ -583,7 +583,7 @@ public class BindingMatchServiceTests
         parsed.Should().Be(id);
     }
 
-    // ── FindUsages(BindingId) (issue #471) ──────────────────────────────────────
+    // ── FindUsages(BindingId) ──────────────────────────────────────
 
     [Fact]
     public void FindUsages_by_BindingId_returns_steps_bound_to_that_binding()
@@ -634,7 +634,7 @@ public class BindingMatchServiceTests
         byId.Should().BeEquivalentTo(byLocation);
     }
 
-    // ── shard-precise eviction (issue #471) ─────────────────────────────────────
+    // ── shard-precise eviction ─────────────────────────────────────
 
     [Fact]
     public void InvalidateAllForDocument_removes_only_that_documents_bindings_from_the_reverse_index()
@@ -665,7 +665,7 @@ public class BindingMatchServiceTests
         sut.FindUsages(BindingId.For(newBinding)).Should().ContainSingle();
     }
 
-    // ── location-index leeway (issue #471) ──────────────────────────────────────
+    // ── location-index leeway ──────────────────────────────────────
 
     [Fact]
     public void FindUsages_by_SourceLocation_resolves_a_click_up_to_two_lines_above_the_binding_start()
@@ -719,7 +719,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_by_SourceLocation_resolves_correctly_at_realistic_file_scale()
     {
-        // Real repro scale (issue #471, Reqnroll.VeryLargeFeature): ~1,300 step-definition
+        // Real-world scale (Reqnroll.VeryLargeFeature): ~1,300 step-definition
         // bindings in a single .cs file. Locks in that the binary-search location lookup (added
         // after profiling showed a linear scan runs ~40x slower at this scale) still resolves
         // correctly across the full range, not just at sizes small enough that a bug would be

@@ -48,8 +48,8 @@ public class CSharpDiagnosticsAggregatorTests
     public void Dedupes_multiple_attributes_on_the_same_method_into_one_diagnostic()
     {
         // Same method, three attributes ([When] x2 + [Then]) — same SourceLocation, same error
-        // (a type-level validation failure applies uniformly). Reproduces the issue #514 spike
-        // finding: without dedup this rendered as triplicate diagnostics on one squiggle.
+        // (a type-level validation failure applies uniformly). Regression guard:
+        // without dedup this rendered as triplicate diagnostics on one squiggle.
         var registry = new ProjectBindingRegistry(
             [
                 StepDefIn(FilePath, "Steps.Method(int)", 10, 5, error: "must be a class", block: ScenarioBlock.When),
@@ -66,7 +66,7 @@ public class CSharpDiagnosticsAggregatorTests
     [Fact]
     public void Attribute_specific_errors_on_the_same_method_are_not_merged()
     {
-        // Issue #514 follow-up: two attributes on one method ([Given] with a malformed
+        // Two attributes on one method ([Given] with a malformed
         // expression, [When] with a valid one) share Implementation.SourceLocation (the method)
         // but each carries its own ErrorLocation (its own attribute) -- these must stay separate
         // squiggles, unlike the pure-structural-error case above which correctly merges.

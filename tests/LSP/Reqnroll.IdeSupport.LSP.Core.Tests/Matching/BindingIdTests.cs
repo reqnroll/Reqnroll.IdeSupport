@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Matching;
 
 public class BindingIdTests
 {
-    // ── Cross-discovery-path identity (issue #547/#548) ────────────────────────
+    // ── Cross-discovery-path identity ────────────────────────
     //
     // The reflection connector and Roslyn source parsing spell the very same method
     // differently: the connector emits "DeclaringType.MethodName(ParamType, ...)" (built from
