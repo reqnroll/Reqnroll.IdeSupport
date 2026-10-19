@@ -73,7 +73,7 @@ public class ProjectBindingRegistryUndefinedTests : ProjectBindingRegistryTestsB
         result.HasUndefined.Should().BeTrue();
     }
 
-    // ── Near-miss error surfacing (issue #514 "cheap first step") ──────────────────
+    // ── Near-miss error surfacing ──────────────────
 
     [Fact]
     public void Undefined_step_surfaces_an_invalid_bindings_error_when_it_would_otherwise_match()

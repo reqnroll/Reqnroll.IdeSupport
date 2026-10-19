@@ -1,7 +1,7 @@
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 
 /// <summary>
-/// Issue #953: several <c>[Scope]</c> attributes on the same method (or type) are alternatives
+/// Several <c>[Scope]</c> attributes on the same method (or type) are alternatives
 /// (OR) at runtime -- Reqnroll's <c>BindingSourceProcessor.ApplyForScope</c> registers one binding
 /// per scope -- while the Tag/Feature/Scenario properties inside a single <c>[Scope(...)]</c> are
 /// AND-ed (<c>BindingScope.Match</c>). These tests parse real C# source with

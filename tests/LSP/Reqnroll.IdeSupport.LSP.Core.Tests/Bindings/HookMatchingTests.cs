@@ -3,9 +3,9 @@ using Reqnroll.IdeSupport.LSP.TestStubs;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 
 /// <summary>
-/// Issue #568: <see cref="HookMatching"/> is the shared logic behind "Go to Hooks" and the
+/// <see cref="HookMatching"/> is the shared logic behind "Go to Hooks" and the
 /// hook-count CodeLens — cumulative vs. own-level hook-type resolution, and the offset-based
-/// context resolution whose comments explicitly reference a prior off-by-one bug (#101) — with
+/// context resolution whose comments guard against an off-by-one at end of line — with
 /// zero direct test coverage anywhere in the codebase.
 /// </summary>
 public class HookMatchingTests
@@ -154,7 +154,7 @@ public class HookMatchingTests
     [Fact]
     public void ResolveContext_at_the_very_last_character_of_a_line_still_resolves_it()
     {
-        // Regression guard for the #101-shaped off-by-one: the block spans are treated as
+        // Regression guard for an end-of-line off-by-one: the block spans are treated as
         // inclusive of their end offset so a click at end-of-line still resolves.
         var tags = ParseTags(SampleFeature);
         var stepLineEnd = SampleFeature.IndexOf('\n', SampleFeature.IndexOf("Given a step", StringComparison.Ordinal));

@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 
 /// <summary>
 /// The Roslyn parser and the connector import must give the same <see cref="BindingScope"/> for the
-/// same source (issues #953, #1133), so overlaying one discovery result on the other (the registry
+/// same source, so overlaying one discovery result on the other (the registry
 /// replaces a file's connector bindings with Roslyn's on every edit) never changes what a binding
 /// matches or how many bindings there are. Each case pairs a C# source with the entries Reqnroll's
 /// runtime registers for it: one per scope, over the type scopes, the method scopes and, for a

@@ -93,7 +93,7 @@ public class ProjectBindingRegistryAmbiguousTests : ProjectBindingRegistryTestsB
     [Fact]
     public void Error_shows_display_expression_not_raw_regex_for_method_name_style_bindings()
     {
-        // Issue #344: VS's Error List rendered the auto-generated regex for method-name-style
+        // VS's Error List rendered the auto-generated regex for method-name-style
         // bindings verbatim, making ambiguous-match diagnostics unreadable. The combined error
         // message must omit the expression entirely for these bindings (via ToString()) and show
         // just "[Given]: MethodName" — not a placeholder and not the raw Expression/regex.
