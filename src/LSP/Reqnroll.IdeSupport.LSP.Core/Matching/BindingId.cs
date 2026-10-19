@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 
 /// <summary>
 /// A stable identity for a discovered step-definition binding, used to key
-/// <see cref="IBindingMatchService"/>'s reverse index (issue #471 — borrows clangd's
+/// <see cref="IBindingMatchService"/>'s reverse index (borrows clangd's
 /// <c>SymbolID</c> shape: identity is hashed from stable content, not from source position).
 /// </summary>
 /// <remarks>
@@ -33,7 +33,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// project's connector run while that referenced project's own registry gets its matching entry
 /// reconciled from source via Roslyn) hashes to two different <see cref="BindingId"/> values —
 /// defeating cross-registry dedup in Find Unused Step Definitions and usage lookups for CodeLens
-/// alike (issue #547/#548).
+/// alike.
 /// </para>
 /// </remarks>
 public readonly record struct BindingId(ulong Value)

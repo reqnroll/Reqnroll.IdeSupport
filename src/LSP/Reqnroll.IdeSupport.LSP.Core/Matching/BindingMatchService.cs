@@ -10,9 +10,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 
 /// <inheritdoc cref="IBindingMatchService"/>
 /// <remarks>
-/// Issue #471: <see cref="FindUsages(BindingId,IReadOnlyCollection{ProjectOwner})"/> and
-/// <see cref="FindUsages(SourceLocation,IReadOnlyCollection{ProjectOwner})"/> used to be an
-/// unindexed full scan over <c>_cache</c>. They're now backed by two indexes maintained
+/// <see cref="FindUsages(BindingId,IReadOnlyCollection{ProjectOwner})"/> and
+/// <see cref="FindUsages(SourceLocation,IReadOnlyCollection{ProjectOwner})"/> are backed by two indexes maintained
 /// alongside <c>_cache</c>, borrowing clangd's index shape (<c>index/Ref.h</c>/<c>FileIndex</c>):
 /// a reverse index from stable <see cref="BindingId"/> identity to the steps that reference it
 /// (clangd's <c>Refs</c> table), and a per-file location index used only to translate a raw
@@ -38,7 +37,7 @@ public sealed class BindingMatchService : IBindingMatchService
     /// background index has for staleness). A binding that moved to a <em>different file</em> also
     /// leaves its old file's entry behind, and that id still has usages (at the new file), so
     /// <see cref="CollectUsages"/> additionally requires each usage to have been indexed at the
-    /// file being asked about (issue #929).
+    /// file being asked about.
     /// </summary>
     private readonly ConcurrentDictionary<string, ImmutableArray<LocationEntry>> _locationIndex = new(StringComparer.OrdinalIgnoreCase);
 
@@ -54,14 +53,14 @@ public sealed class BindingMatchService : IBindingMatchService
 
     /// <summary>
     /// Guards the cache-plus-index invariant: the reverse index holds exactly the steps of the
-    /// match sets currently in <see cref="_cache"/> (issue #554). Each collection is individually
+    /// match sets currently in <see cref="_cache"/>. Each collection is individually
     /// thread-safe, but a store or an invalidation spans all three, so without this lock two
     /// concurrent writers for the same key can interleave — one removing the previous entry's
     /// index contributions while the other is still adding its own — and leave the losing match
     /// set's steps orphaned in the reverse index. That orphan is invisible to every later write
     /// (a <see cref="StepBindingMatch"/> compares by reference, so nothing dedups or evicts it)
-    /// and permanently adds one phantom usage per binding of that document, which is what #554
-    /// reported: four step-usage CodeLens counts one too high for a whole server-process
+    /// and permanently adds one phantom usage per binding of that document, which shows up as
+    /// step-usage CodeLens counts one too high for a whole server-process
     /// lifetime, on some launches and not others. That happens for real because
     /// <c>GherkinDocumentTaggerService.ParseAsync</c> is reachable for one open document from
     /// four unsynchronised pipeline entry points (<c>TextDocumentSyncHandler</c>,
@@ -189,7 +188,7 @@ public sealed class BindingMatchService : IBindingMatchService
         if (bindingLocation == null)
             return Array.Empty<StepBindingMatch>();
 
-        // Shared read: this must not observe a store's index update half-applied (issue #554),
+        // Shared read: this must not observe a store's index update half-applied,
         // but it does run concurrently with every other reader.
         _sync.EnterReadLock();
         try
@@ -240,7 +239,7 @@ public sealed class BindingMatchService : IBindingMatchService
     /// <inheritdoc />
     public IEnumerable<FeatureBindingMatchSet> GetAll(IReadOnlyCollection<ProjectOwner>? projectFilter = null)
     {
-        // Materialised rather than yielded lazily: the read lock (issue #554) must not be held
+        // Materialised rather than yielded lazily: the read lock must not be held
         // across the consumer's own work, and callers enumerate this once into a list anyway.
         var matched = new List<FeatureBindingMatchSet>();
 
@@ -343,7 +342,7 @@ public sealed class BindingMatchService : IBindingMatchService
     /// <param name="sourceFile">
     /// When set, only steps whose binding was indexed at this file are returned. The per-file
     /// location index is upsert-only, so a binding that moved to another file leaves its old file's
-    /// entry behind (issue #929); that entry still resolves to the binding's id, and without this
+    /// entry behind; that entry still resolves to the binding's id, and without this
     /// check the id's usages -- which now belong to the new file -- would be returned for the old one.
     /// A binding id is location-independent and can legitimately be recorded at two paths at once
     /// (for example by two projects' registries), so each indexed step carries the file it was

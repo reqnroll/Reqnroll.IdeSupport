@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 
 /// <summary>
 /// The default <see cref="ISourceFileResolver"/>: resolves against one project's folder, in the
-/// order agreed for issue #540.
+/// order listed below.
 /// </summary>
 /// <remarks>
 /// <list type="number">

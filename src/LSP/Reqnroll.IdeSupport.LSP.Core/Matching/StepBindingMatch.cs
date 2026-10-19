@@ -127,7 +127,7 @@ public sealed class StepBindingMatch
 
     /// <summary>
     /// The stable <see cref="BindingId"/> identity paired with the source location of every
-    /// binding this step resolves to (issue #471's reverse index) — one pair per entry in
+    /// binding this step resolves to (the reverse index) — one pair per entry in
     /// <see cref="BindingLocations"/>, in the same order.
     /// </summary>
     public IEnumerable<(BindingId Id, SourceLocation Location)> BindingIdentities =>

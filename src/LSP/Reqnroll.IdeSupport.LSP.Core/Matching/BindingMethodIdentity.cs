@@ -28,7 +28,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// every identity computed from those raw strings (<see cref="BindingId"/>, and
 /// <c>ProjectBindingRegistry.ReplaceBindings</c>'s own supersede check) treats them as two
 /// unrelated bindings -- producing duplicate/misattributed rows in Find Unused Step Definitions
-/// and false "0 usages" CodeLens counts for a step that is, in fact, used (issue #547/#548).
+/// and false "0 usages" CodeLens counts for a step that is, in fact, used.
 /// </para>
 /// </remarks>
 internal static class BindingMethodIdentity
@@ -77,12 +77,12 @@ internal static class BindingMethodIdentity
     /// punctuation is left as-is, which is already spelled identically on both sides.
     /// </summary>
     /// <remarks>
-    /// Confirmed live against the Quickstart sample (issue #515 follow-up): fixing only the
-    /// top-level type name (treating the whole string as one identifier) corrected parameterless
-    /// and simple-typed methods, but left every generic/array/nullable-typed method duplicated --
-    /// e.g. the connector's "System.Collections.Generic.Dictionary&lt;String,Int32&gt;" never
-    /// matched Roslyn's "Dictionary&lt;string, int&gt;" even after that narrower fix, since neither
-    /// the inner type arguments' spelling nor the space after the comma were normalized.
+    /// Normalizing only the top-level type name (treating the whole string as one identifier)
+    /// would handle parameterless and simple-typed methods, but would leave every
+    /// generic/array/nullable-typed method duplicated -- e.g. the connector's
+    /// "System.Collections.Generic.Dictionary&lt;String,Int32&gt;" would never match Roslyn's
+    /// "Dictionary&lt;string, int&gt;", since neither the inner type arguments' spelling nor the
+    /// space after the comma would be normalized.
     /// </remarks>
     public static string NormalizeParameterType(string type)
     {

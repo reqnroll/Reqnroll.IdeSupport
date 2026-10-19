@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 /// <summary>
 /// A protocol-agnostic diagnostic for a binding-validation error found in a <c>.cs</c> file.
 /// The server layer converts this to an LSP <c>Diagnostic</c> before pushing
-/// <c>textDocument/publishDiagnostics</c> (issue #514).
+/// <c>textDocument/publishDiagnostics</c>.
 /// </summary>
 /// <param name="Message">Human-readable validation failure, from <see cref="Bindings.ProjectBinding.Error"/>.</param>
 /// <param name="Location">The binding method's source span (identifier start through end).</param>

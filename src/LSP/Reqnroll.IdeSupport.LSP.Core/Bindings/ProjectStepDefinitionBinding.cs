@@ -46,7 +46,7 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     /// True when this binding has no explicit attribute expression — a method-name-style binding
     /// (e.g. <c>[Given] public void The_First_Number_Is_P0(int p)</c>) that derives a matching
     /// regex from the method name/parameters instead. That regex is correct for matching but often
-    /// unreadable — dumping it verbatim into UI is the bug reported in issue #344.
+    /// unreadable — it must not be shown verbatim in the UI.
     /// </summary>
     public bool IsMethodNameStyle => SpecifiedExpression is null;
 
@@ -56,7 +56,7 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     /// otherwise <see langword="null"/> — callers should omit the expression from their display
     /// entirely for a <see cref="IsMethodNameStyle"/> binding (the method name in
     /// <see cref="ProjectBinding.Implementation"/> already identifies it) rather than show a
-    /// placeholder or <see cref="Expression"/>'s raw auto-generated regex (issue #344).
+    /// placeholder or <see cref="Expression"/>'s raw auto-generated regex.
     /// </summary>
     public string DisplayExpression => SpecifiedExpression;
 
@@ -101,7 +101,7 @@ public class ProjectStepDefinitionBinding : ProjectBinding
 
     /// <summary>
     /// Like <see cref="Match"/> but ignores <see cref="ProjectBinding.IsValid"/> — used only to
-    /// find a near-miss for diagnostics (issue #514's "cheap first step"): an invalid binding
+    /// find a near-miss for diagnostics (near-miss lookup): an invalid binding
     /// (one with <see cref="ProjectBinding.Error"/> set) whose regex and scope would otherwise
     /// have matched a step that is reported undefined. Never used for real step-execution
     /// matching, which must keep excluding invalid bindings via <see cref="Match"/>.

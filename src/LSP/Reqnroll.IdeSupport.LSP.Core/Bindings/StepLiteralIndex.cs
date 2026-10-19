@@ -4,7 +4,7 @@ using System.Text;
 namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 
 /// <summary>
-/// A literal-substring prefilter for step-definition matching (issue #471). Narrows the set of
+/// A literal-substring prefilter for step-definition matching. Narrows the set of
 /// bindings actually tried against a step's regex to those whose statically-known literal text
 /// fragments are all present in the step text, using a single Aho-Corasick scan over the step
 /// text instead of a per-binding regex attempt.
@@ -23,7 +23,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// plain operator (<c>. ^ $ + |</c>) breaks the current run instead of being included, while a
 /// quantifier that may match zero occurrences (<c>?</c>, <c>*</c>, <c>{...}</c>) additionally drops
 /// the character it applies to before breaking the run, since that character is not required to be
-/// present (issue #947). A depth-zero alternation <c>|</c> instead disqualifies the whole binding,
+/// present. A depth-zero alternation <c>|</c> instead disqualifies the whole binding,
 /// and depth &gt; 0 content is skipped entirely rather than trusted. Because a depth-zero
 /// literal run contains no regex syntax at all, it is — by construction — exactly the text
 /// <see cref="Regex.Escape(string)"/> would have produced, so any string the full regex matches
@@ -117,7 +117,7 @@ public sealed class StepLiteralIndex
         if (_bindingIndexesByLiteralId.Length == 0 || string.IsNullOrEmpty(stepText))
             return _unfilteredBindingIndexes.Select(i => _bindings[i]);
 
-        // Case-insensitive on purpose (issue #471): a binding's regex may be case-insensitive
+        // Case-insensitive on purpose: a binding's regex may be case-insensitive
         // (RegexOptions.IgnoreCase, or an inline (?i) modifier we have no cheap way to detect
         // from the pattern text alone), in which case a literal like "First" is required to match
         // "first" in the step text. Folding both sides to invariant lowercase only ever *widens*
@@ -174,7 +174,7 @@ public sealed class StepLiteralIndex
 
         // A depth-zero "|" makes the pattern a top-level alternation: the step only has to match one
         // branch, so no branch's literal is genuinely required. Disable the literal prefilter for
-        // this binding entirely (issue #950) rather than wrongly requiring every branch.
+        // this binding entirely rather than wrongly requiring every branch.
         if (hasTopLevelAlternation)
             result.Clear();
 
@@ -206,7 +206,7 @@ public sealed class StepLiteralIndex
 
         // Removes the last appended character. Used when a following quantifier ('?', '*', '{...}')
         // means that character may be absent from a matching string and is therefore not required
-        // literal text (issue #947). No-op when the run is empty, which is the case for a quantifier
+        // literal text. No-op when the run is empty, which is the case for a quantifier
         // that directly follows a group/class close (their contents are never appended).
         void DropQuantifiedCharacter()
         {
@@ -231,7 +231,7 @@ public sealed class StepLiteralIndex
             {
                 // Inside a character class nothing contributes a literal and nothing affects
                 // nesting depth: a ')' or '(' here is a class member (or a literal), not a group
-                // delimiter. Skip until the closing ']' (issue #951).
+                // delimiter. Skip until the closing ']'.
                 if (c == ']')
                     inCharClass = false;
                 i++;
@@ -241,7 +241,7 @@ public sealed class StepLiteralIndex
             if (c == '[')
             {
                 // A character class is not a nesting construct -- enter class mode so the stray
-                // brackets inside it can't change depth (issue #951).
+                // brackets inside it can't change depth.
                 Flush();
                 inCharClass = true;
                 i++;
@@ -260,7 +260,7 @@ public sealed class StepLiteralIndex
             {
                 // A quantifier like {0,1}, {2,3} or {2} applies to the single atom just before it.
                 // It may match zero occurrences (e.g. {0,1}), so that character is not guaranteed
-                // to be present -- drop it from the run before flushing (issue #947). Inspecting
+                // to be present -- drop it from the run before flushing. Inspecting
                 // the bounds to keep the character when the minimum is >= 1 would narrow more
                 // tightly but risks nothing by being conservative here: dropping a literal only
                 // ever widens the candidate set, which is safe, whereas keeping one that isn't
@@ -286,7 +286,7 @@ public sealed class StepLiteralIndex
                 if (c is '?' or '*')
                 {
                     // Zero-or-one / zero-or-more: the character this quantifier applies to is not
-                    // required, so remove it from the run before flushing (issue #947). At depth 0
+                    // required, so remove it from the run before flushing. At depth 0
                     // a quantifier can only apply to the character just appended -- one following
                     // a group/class close sees an already-flushed, empty run -- so dropping the last
                     // character targets exactly the quantified one. '+' is deliberately excluded:
@@ -299,7 +299,7 @@ public sealed class StepLiteralIndex
                 else if (c == '|')
                 {
                     // A depth-zero alternation splits the pattern into branches only one of which
-                    // need match -- so no branch's literal text is genuinely required (issue #950).
+                    // need match -- so no branch's literal text is genuinely required.
                     hasTopLevelAlternation = true;
                     Flush();
                 }

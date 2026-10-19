@@ -7,14 +7,14 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// <summary>
 /// One Scenario/Scenario Outline definition discovered in a feature document, with its tag
 /// context retained (as an <see cref="IGherkinDocumentContext"/>) so hook-scope matching
-/// (issue #373's hook-match-count CodeLens) can be evaluated against it directly via
+/// (the hook-match-count CodeLens) can be evaluated against it directly via
 /// <see cref="Bindings.ProjectHookBinding.Match"/>, reusing the exact same scope-matching logic
-/// "Go to Hooks"/#269's hook-match CodeLens already exercise -- no separate matching code needed.
+/// "Go to Hooks" and the hook-match CodeLens already exercise -- no separate matching code needed.
 /// </summary>
 /// <remarks>
 /// Deliberately excludes <c>Background</c> blocks (which share <see cref="IdeSupportTagTypes.ScenarioDefinitionBlock"/>
 /// with real scenarios but aren't independently executed/countable) and counts a Scenario Outline
-/// once regardless of its Examples row count (per #373's decided semantics -- a static count of
+/// once regardless of its Examples row count (a static count of
 /// scenario *definitions*, not expanded runtime executions).
 /// </remarks>
 public sealed class FeatureScenarioInfo

@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// <remarks>
 /// <para>
 /// The reflection connector reports whatever the PDB says, which is the absolute path from the
-/// machine that compiled the assembly. That is routinely not a path this machine has (issue #540):
+/// machine that compiled the assembly. That is routinely not a path this machine has:
 /// a devcontainer build records <c>/workspaces/host-solution/…</c>; a deterministic CI build
 /// (<c>ContinuousIntegrationBuild=true</c>) records <c>/_/…</c>; an external binding assembly from
 /// NuGet was built on someone else's machine by definition; and any solution built on one box and

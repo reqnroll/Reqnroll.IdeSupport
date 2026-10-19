@@ -89,15 +89,15 @@ public class GherkinRange : IEquatable<GherkinRange>
     /// Lines and characters are both 0-based (LSP convention).
     /// </summary>
     /// <remarks>
-    /// Binary search over each line's <c>End</c> offset (issue #471): lines are produced in
+    /// Binary search over each line's <c>End</c> offset: lines are produced in
     /// increasing order by <see cref="IGherkinTextSnapshot.GetLineFromLineNumber"/>'s backing
-    /// store, so a linear scan from line 0 here turned every call into an O(document line count)
-    /// operation -- called several times per symbol/token/range across the codebase (document
-    /// outline, folding, inlay hints, semantic tokens, rename, find-usages, diagnostics), this
-    /// made position resolution the dominant cost on large files (confirmed live: 6.6s for one
+    /// store, so a linear scan from line 0 would make every call O(document line count)
+    /// -- and it is called several times per symbol/token/range across the codebase (document
+    /// outline, folding, inlay hints, semantic tokens, rename, find-usages, diagnostics), so a scan
+    /// would make position resolution the dominant cost on large files (seconds for one
     /// <c>reqnroll/documentSymbolHierarchical</c> call on an 18k-line feature file). Finds the
-    /// smallest line index whose <c>End</c> is &gt;= <paramref name="offset"/>, matching the
-    /// original linear scan's semantics exactly, including its out-of-bounds fallback (an offset
+    /// smallest line index whose <c>End</c> is &gt;= <paramref name="offset"/>, with the
+    /// semantics of a linear scan, including its out-of-bounds fallback (an offset
     /// past the last line's End clamps to that line's length rather than producing a negative or
     /// overlong character offset).
     /// </remarks>

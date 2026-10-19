@@ -7,8 +7,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 
 /// <summary>
 /// Resolves which project scenarios a given hook binding's scope matches -- the inverse of
-/// <c>HookMatching</c> (issue #269, "given a position, which hooks apply"). Backs the
-/// hook-match-count CodeLens and <c>reqnroll/findMatchingScenarios</c> request (issue #373).
+/// <c>HookMatching</c> ("given a position, which hooks apply"). Backs the
+/// hook-match-count CodeLens and <c>reqnroll/findMatchingScenarios</c> request.
 /// </summary>
 public static class HookScenarioMatching
 {
@@ -16,7 +16,7 @@ public static class HookScenarioMatching
     /// True when <paramref name="hookType"/> has a per-scenario concept at all.
     /// <see cref="HookType.BeforeTestRun"/>/<see cref="HookType.AfterTestRun"/> fire once per test
     /// run regardless of any scenario's tags, so "N scenarios matched" is meaningless for them
-    /// (decided in #373: suppress the lens/response entirely for these rather than showing a
+    /// (the lens/response is suppressed entirely for these rather than showing a
     /// misleading count).
     /// </summary>
     public static bool IsScenarioCountable(HookType hookType) =>

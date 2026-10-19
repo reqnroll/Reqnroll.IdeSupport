@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// Shared "does this source location belong to this binding" heuristic, used both when
 /// resolving a single binding at a location (<see cref="ProjectBindingRegistry"/>) and when
 /// checking whether a location has any covering binding at all (used by the LSP server's
-/// registry router for watched-file gating). Previously duplicated by hand in both places.
+/// registry router for watched-file gating). Kept in one place so the two callers cannot drift apart.
 /// </summary>
 public static class BindingLocationMatcher
 {
@@ -32,7 +32,7 @@ public static class BindingLocationMatcher
         // in separators, casing and relative segments for the very same file. This was the strictest
         // comparison in the codebase sitting under the features most likely to see a mismatched pair
         // -- Find All References, Find Step Usages and rename-from-C# all reach here via
-        // ProjectBindingRegistry.FindBindingAtLocation (issue #540 F4).
+        // ProjectBindingRegistry.FindBindingAtLocation.
         if (!PathUtils.IsSamePath(loc.SourceFile, query.SourceFile))
             return false;
 
