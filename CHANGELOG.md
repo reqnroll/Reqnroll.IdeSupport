@@ -1,6 +1,7 @@
 # [vNext]
 
 ## Improvements:
+* Telemetry now follows Marketplace consent rules. Rider telemetry is off by default and is sent only when `REQNROLL_TELEMETRY_ENABLED=1` is set (JetBrains Marketplace requires explicit permission); VS Code telemetry stays on by default but is now also suppressed whenever VS Code's own telemetry setting (`vscode.env.isTelemetryEnabled`) is off, in addition to `REQNROLL_TELEMETRY_ENABLED=0`. Visual Studio is unchanged (Rider, VS Code) - see #1239
 * Client-side `UnhandledException` telemetry is now attributable: VS, VS Code and Rider each generate a per-IDE-session `ClientSessionId`, send it on every event and pass it to the language server as `--client-session-id` so the server's events carry it too (a client exception joins to its `ServerSessionStarted`), and VS Code and Rider now send the same sanitized `StackFrames` as the server and Visual Studio (only the extension's own frames; no paths or file names). `telemetry/queries/error-rates.kql` reports distinct sessions affected (VS, VS Code, Rider, LSP server) - see #1199
 
 * In Rider, the custom Reqnroll Structure tool window and the custom editor breadcrumbs are removed; newer Rider versions render the language server's document outline in their native Structure view and breadcrumbs. Older Rider versions no longer show a Gherkin outline or breadcrumbs (Rider) - see #1183

@@ -316,10 +316,12 @@ bucket) sent for about 5% of operations by default. The full list of events
 and properties is in the
 [telemetry events inventory](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/Telemetry-Events-Inventory.md).
 
-To opt out, set the environment variable `REQNROLL_TELEMETRY_ENABLED=0` for
-the IDE process; this works in Visual Studio, Rider and VS Code. VS Code also
-honors its own `telemetry.telemetryLevel` setting. Visual Studio and Rider do
-not currently consult their own IDE-level telemetry settings.
+To opt out in Visual Studio or VS Code, set the environment variable
+`REQNROLL_TELEMETRY_ENABLED=0` for the IDE process. VS Code also honors its own
+telemetry setting (`vscode.env.isTelemetryEnabled`); nothing is sent when it is
+off. Visual Studio does not currently consult its own IDE-level telemetry
+setting. Rider telemetry is off by default; to opt in, set
+`REQNROLL_TELEMETRY_ENABLED=1` for the IDE process.
 
 `REQNROLL_PERF_TELEMETRY_SAMPLE` overrides only the `PerfSample` rate (a
 fraction from 0 to 1; `0` or `off` disables just that event). To see exactly

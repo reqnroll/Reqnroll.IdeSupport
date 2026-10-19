@@ -62,11 +62,12 @@ turn sending on or off. The `prod` selection is tied to the build kind: a VS `De
 requests; only a Release/packaged build can report to prod. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
 redirect to your own resource.
 
-Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
-kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
-`RiderTelemetryTransmitter.transmit`, VS Code in its transmitter). VS Code *additionally* honors
-`telemetry.telemetryLevel`; Visual Studio and Rider do not currently consult their IDE's own
-telemetry settings (tracked as a follow-up). Debugging: `REQNROLL_TELEMETRY_DEBUG_LOG` mirrors every
+Gate (issue #1239): Visual Studio (`EnableTelemetryChecker`) and VS Code send unless
+`REQNROLL_TELEMETRY_ENABLED` is set to something other than `1`. **Rider is opt-in**: it sends
+only when `REQNROLL_TELEMETRY_ENABLED=1` is set (JetBrains Marketplace guideline 2.2(d) requires
+explicit permission). VS Code additionally requires `vscode.env.isTelemetryEnabled`, evaluated on
+every send. Visual Studio does not currently consult its IDE's own telemetry setting (tracked as a
+follow-up). Debugging: `REQNROLL_TELEMETRY_DEBUG_LOG` mirrors every
 event (server- and host-side) to a local JSONL file — see the archived
 `docs/Archive/build-plan-telemetry-capture.md` §8.
 

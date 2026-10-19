@@ -12,6 +12,7 @@ import {
   deferTelemetryTeardownUntil,
   drainTelemetryTeardown,
   ensureTelemetryReporter,
+  isTelemetryAllowed,
   registerTelemetry,
   resetTelemetryReporterForTests,
   resolveConnectionString,
@@ -66,6 +67,21 @@ async function withStubbedSendTelemetryEvent(
   } finally {
     proto.sendTelemetryEvent = original;
     for (const sub of context.subscriptions) sub.dispose();
+  }
+}
+
+/** Overrides `vscode.env.isTelemetryEnabled` (a getter on the host-provided `env`) for the duration of `fn`. */
+async function withIdeTelemetryEnabled(
+  value: boolean,
+  fn: () => void | Promise<void>,
+): Promise<void> {
+  const original = Object.getOwnPropertyDescriptor(vscode.env, 'isTelemetryEnabled');
+  Object.defineProperty(vscode.env, 'isTelemetryEnabled', { get: () => value, configurable: true });
+  try {
+    await fn();
+  } finally {
+    if (original) Object.defineProperty(vscode.env, 'isTelemetryEnabled', original);
+    else delete (vscode.env as unknown as Record<string, unknown>).isTelemetryEnabled;
   }
 }
 
@@ -306,6 +322,33 @@ suite('telemetry', () => {
 
         assert.strictEqual(calls.length, 1);
       });
+    });
+
+    test('does not forward events when the IDE telemetry setting is off, even if the env var allows (#1239)', async () => {
+      process.env.REQNROLL_TELEMETRY_ENABLED = '1';
+      const { client, fire } = fakeClient();
+      const context = fakeContext();
+
+      await withStubbedSendTelemetryEvent(context, async (calls) => {
+        registerTelemetry(client, context);
+        await withIdeTelemetryEnabled(false, () => fire({ eventName: 'reqnroll/stepDefined' }));
+
+        assert.strictEqual(calls.length, 0);
+      });
+    });
+
+    test('isTelemetryAllowed is the AND of the env var and vscode.env.isTelemetryEnabled (#1239)', async () => {
+      for (const env of [undefined, '1', '0']) {
+        for (const ide of [true, false]) {
+          if (env === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
+          else process.env.REQNROLL_TELEMETRY_ENABLED = env;
+
+          const expected = env !== '0' && ide;
+          await withIdeTelemetryEnabled(ide, () =>
+            assert.strictEqual(isTelemetryAllowed(), expected, `env=${env} ide=${ide}`),
+          );
+        }
+      }
     });
 
     test('forwards events when REQNROLL_TELEMETRY_ENABLED is unset', async () => {

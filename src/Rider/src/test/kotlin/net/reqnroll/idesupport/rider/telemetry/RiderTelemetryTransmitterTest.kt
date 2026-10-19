@@ -8,8 +8,8 @@ import kotlin.test.assertTrue
 
 class RiderTelemetryTransmitterTest {
     @Test
-    fun `isEnabled defaults to true when the env var is unset`() {
-        assertTrue(RiderTelemetryTransmitter.isEnabled(null))
+    fun `isEnabled defaults to false when the env var is unset (opt-in, issue 1239)`() {
+        assertFalse(RiderTelemetryTransmitter.isEnabled(null))
     }
 
     @Test
