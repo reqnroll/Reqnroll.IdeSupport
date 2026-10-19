@@ -318,7 +318,7 @@ and properties is in the
 
 To opt out, set the environment variable `REQNROLL_TELEMETRY_ENABLED=0` for
 the IDE process; this works in Visual Studio, Rider and VS Code. VS Code also
-honors its own `telemetry.telemetryLevel` setting. Visual Studio and Rider do
+honors its own telemetry setting (`vscode.env.isTelemetryEnabled`); nothing is sent when it is off. Visual Studio and Rider do
 not currently consult their own IDE-level telemetry settings.
 
 `REQNROLL_PERF_TELEMETRY_SAMPLE` overrides only the `PerfSample` rate (a

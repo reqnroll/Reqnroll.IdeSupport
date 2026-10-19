@@ -54,13 +54,21 @@ interface TelemetryEventParams {
 
 /**
  * REQNROLL_TELEMETRY_ENABLED is the cross-IDE kill switch (unset or "1" = enabled, anything
- * else = disabled) also honoured by Rider's RiderTelemetryTransmitter and VS's
- * TelemetryTransmitter. VS Code's own `telemetry.telemetryLevel` opt-out is enforced separately
- * by TelemetryReporter itself.
+ * else = disabled) also honoured by VS's TelemetryTransmitter. (Rider is opt-in: it needs "1".)
  */
 function isTelemetryEnabledByEnv(): boolean {
   const value = process.env.REQNROLL_TELEMETRY_ENABLED;
   return value === undefined || value === '1';
+}
+
+/**
+ * Overall gate (issue #1239): the env kill switch AND `vscode.env.isTelemetryEnabled`, which the
+ * VS Code telemetry guide says extensions must always respect. Evaluated on every send, so a
+ * user toggling the IDE setting takes effect immediately without re-subscribing to
+ * `onDidChangeTelemetryEnabled`.
+ */
+export function isTelemetryAllowed(): boolean {
+  return isTelemetryEnabledByEnv() && vscode.env.isTelemetryEnabled;
 }
 
 // Module-scoped so `sendTelemetryEvent` (client-originated events, e.g. goToHooks.ts) can reuse
@@ -251,12 +259,12 @@ export function sendTelemetryEvent(
   eventName: string,
   properties?: Record<string, TelemetryPropertyValue>,
 ): void {
-  const enabled = isTelemetryEnabledByEnv();
+  const enabled = isTelemetryAllowed();
   const debugLog = createTelemetryDebugLogFromEnvironment();
   // The mirror records what would be transmitted, identity keys (IdeClient, ClientSessionId, ...) included.
   const stringProps = withClientIdentity(properties);
 
-  if (!reporter) {
+  if (!reporter || !enabled) {
     debugLog.record('host', eventName, stringProps, enabled, false);
     return;
   }
