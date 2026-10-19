@@ -131,7 +131,7 @@ public class BindingRegistryProviderRouterTests : IDisposable
         act.Should().NotThrow();
     }
 
-    // ── ResolveUsageSearchScope (issue #548 / #552) ───────────────────────────────
+    // ── ResolveUsageSearchScope ───────────────────────────────
     //
     // Exercises the real production expansion logic (not a mock) by patching real
     // ConnectorBindingRegistryProvider instances via ApplyRoslynFileUpdateAsync -- a genuine
@@ -175,7 +175,7 @@ namespace S
         // The .cs file physically lives in _project (a class library, say); referencingProject
         // has no ownership relationship to it at all, but references the library and so
         // discovers the exact same binding (same physical SourceFile, same BindingId) via its own
-        // connector run -- the shape that motivated issue #548.
+        // connector run -- a library referenced by several projects.
         var csPath = Path.Combine(_folder, "ExtraSteps.cs");
         var referencingFolder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         var referencingProject = MakeExtraProject(_ideScope, referencingFolder);
@@ -239,7 +239,7 @@ namespace S
     }
 
     /// <summary>
-    /// Regression guard for issue #552: a project with its own independent physical copy of the
+    /// Regression guard: a project with its own independent physical copy of the
     /// same source (e.g. a parallel multi-targeted sibling project, no reference relationship at
     /// all) normalizes to the identical <see cref="BindingId"/> but must NOT widen the search --
     /// only a project reporting the binding at the EXACT SAME physical SourceFile (the signature

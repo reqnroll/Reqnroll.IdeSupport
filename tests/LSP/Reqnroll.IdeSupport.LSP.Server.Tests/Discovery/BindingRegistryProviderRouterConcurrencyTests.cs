@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 
 /// <summary>
-/// Issue #568: <see cref="BindingRegistryProviderRouter"/> owns a
+/// <see cref="BindingRegistryProviderRouter"/> owns a
 /// <see cref="ConcurrentDictionary{TKey,TValue}"/> of per-project providers, populated and torn
 /// down from <see cref="ILspWorkspaceScopeManager.ProjectDiscovered"/>/<c>ProjectRemoved"</c>
 /// events that can fire from more than one thread as projects load. These tests exercise

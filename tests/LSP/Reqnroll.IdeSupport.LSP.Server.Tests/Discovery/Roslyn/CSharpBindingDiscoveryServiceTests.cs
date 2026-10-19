@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Roslyn;
 
 /// <summary>
 /// Unit tests for <see cref="CSharpBindingDiscoveryService"/>.
-/// Verifies the fan-out to N owning projects (Q17 W3a) and the I2 unowned-gate.
+/// Verifies the fan-out to N owning projects and the unowned-gate.
 /// </summary>
 public class CSharpBindingDiscoveryServiceTests : IDisposable
 {
@@ -240,9 +240,9 @@ namespace S
         project.Dispose();
     }
 
-    // Issue #471: BindingRegistryChangedHandler.RediscoverCsFilesAsync passes notify: false because
+    // BindingRegistryChangedHandler.RediscoverCsFilesAsync passes notify: false because
     // its own caller already reparses every open feature file and notifies unconditionally right
-    // after RediscoverCsFilesAsync returns -- a second independent event here just duplicated that
+    // after RediscoverCsFilesAsync returns -- a second independent event here would duplicate that
     // reparse. The registry must still be patched; only the event is suppressed.
     [Fact]
     public async Task UpdateFromSourceForProjectAsync_still_applies_but_suppresses_the_event_when_notify_is_false()
@@ -378,7 +378,7 @@ namespace S
 
         await sut.UpdateFromSourceAsync(csUri, "class C {}", false, CancellationToken.None);
 
-        // Issue #1123: a user's file name can identify them or their project.
+        // Privacy: a user's file name can identify them or their project.
         telemetry.Received(1).SendEvent(
             TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
@@ -447,7 +447,7 @@ namespace S
         project.Dispose();
     }
 
-    // ── isOpen gated on HasSuccessfulConnectorRun (issue #471) ────────────────────
+    // ── isOpen gated on HasSuccessfulConnectorRun ────────────────────
 
     [Fact]
     public async Task UpdateFromSourceAsync_skips_the_parse_on_didOpen_once_this_file_was_already_reconciled()
@@ -491,7 +491,7 @@ namespace S
         project.Dispose();
     }
 
-    // Issue #517: a didOpen arriving after RediscoverCsFilesAsync's snapshot (but before the user's
+    // Regression guard: a didOpen arriving after RediscoverCsFilesAsync's snapshot (but before the user's
     // first edit) must still parse the file, even though the project already has a successful
     // connector run -- HasSuccessfulConnectorRun alone proves nothing about *this* file.
     [Fact]
@@ -560,7 +560,7 @@ namespace S
     [Fact]
     public async Task UpdateFromSourceAsync_applies_on_didOpen_before_the_connector_has_ever_succeeded()
     {
-        // The VS Code steady state (issue #471): no compiled DLL yet, so
+        // The VS Code steady state: no compiled DLL yet, so
         // HasSuccessfulConnectorRun is false and didOpen must still be the source of bindings.
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var provider = new ConnectorBindingRegistryProvider(project, _logger);

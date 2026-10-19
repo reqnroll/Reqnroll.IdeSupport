@@ -67,7 +67,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
         scope.Properties.Returns(new ConcurrentDictionary<Type, object>());
         scope.IdeScope.FileSystem.Returns(new FileSystemForIDE());
-        // A Reqnroll package reference, so the issue-#731 gate in ConnectorDiscoveryService lets
+        // A Reqnroll package reference, so the Reqnroll-project gate in ConnectorDiscoveryService lets
         // discovery through: every test below except the gate's own is about what happens after it.
         scope.PackageReferences.Returns([
             new NuGetPackageReference("Reqnroll.MsTest", new NuGetVersion("2.1.0", "2.1.0"), null)
@@ -75,7 +75,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         return scope;
     }
 
-    /// <summary>A project the issue-#731 gate must reject: no Reqnroll package reference, and no Reqnroll.dll in its output folder.</summary>
+    /// <summary>A project the Reqnroll-project gate must reject: no Reqnroll package reference, and no Reqnroll.dll in its output folder.</summary>
     private IProjectScope MakeNonReqnrollScope(string assemblyPath)
     {
         var scope = Substitute.For<IProjectScope>();
@@ -112,7 +112,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
 
     private ConnectorDiscoveryService CreateSut() => new(_logger, _factory, new FileSystemForIDE());
 
-    // ── Connector telemetry whitelist (issue #846) ─────────────────────────────
+    // ── Connector telemetry whitelist ─────────────────────────────
 
     [Fact]
     public void RunDiscovery_exposes_only_whitelisted_connector_telemetry()
@@ -176,7 +176,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     public void RunDiscovery_imports_the_runtimes_one_entry_per_scope_as_one_binding_per_attribute()
     {
         // Reqnroll registers one binding per scope, so one attribute with two [Scope]s (or a hook with
-        // two tags) arrives as several otherwise identical DTOs (issues #953, #1133). The registry
+        // two tags) arrives as several otherwise identical DTOs. The registry
         // holds one binding whose scope is the alternatives, the same shape Roslyn discovery produces.
         StepDefinition Step(StepScope scope) => new()
         {
@@ -216,7 +216,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         _factory.Received(1).Create(scope);
     }
 
-    // ── Connector PID correlation (issue #637) ─────────────────────────────────
+    // ── Connector PID correlation ─────────────────────────────────
 
     [Fact]
     public void RunDiscovery_includes_the_connector_pid_in_the_completion_log_line_when_known()
@@ -283,7 +283,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         _factory.DidNotReceive().Create(Arg.Any<IProjectScope>());
     }
 
-    // ── Reqnroll-project gate (issue #731) ───────────────────────────────────────
+    // ── Reqnroll-project gate ───────────────────────────────────────
 
     [Fact]
     public void RunDiscovery_does_not_run_the_connector_for_a_non_reqnroll_test_project()
@@ -387,7 +387,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         hash.Should().Be("prev");
     }
 
-    // ── Outcome status (issue #939) ───────────────────────────────────────────────
+    // ── Outcome status ───────────────────────────────────────────────
     // Every path but a real discovery returns the caller's lastGood/lastHash, so the status is the
     // only thing that tells an unchanged assembly apart from a failed or skipped run.
 
@@ -494,7 +494,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         return registry;
     }
 
-    // ── AttributeSourceLine backfill (#182 / #237) ─────────────────────────────
+    // ── AttributeSourceLine backfill ─────────────────────────────
 
     private string WriteStepsFile(string content)
     {
@@ -586,7 +586,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
                     Method         = "SetFirstNumber",
                     ParamTypes     = "i",
                     // Outside the project folder: a missing file *inside* it is a stale compiled binding and is
-                    // dropped instead (issue #930, ConnectorDiscoveryStaleBindingTests).
+                    // dropped instead (see ConnectorDiscoveryStaleBindingTests).
                     SourceLocation = Path.Combine(Path.GetTempPath(), "no-such-folder", "does-not-exist.cs") + "|3|5"
                 }
             ],
@@ -636,7 +636,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     [Fact]
     public void RunDiscovery_replaces_the_PDB_derived_line_with_the_method_identifiers_own_line()
     {
-        // Regression guard (issue #471 follow-up): the connector's own wire-format SourceLocation
+        // Regression guard: the connector's own wire-format SourceLocation
         // is a PDB sequence point, which can land a line or more into the method body rather than
         // on the declaration itself -- simulated here by pointing the wire location at line 5
         // (inside the body) even though the method identifier is actually on line 4. CodeLens (and
@@ -685,7 +685,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         // DiscoveryResultTransformer.GetMethodReference (connector side) actually emits
         // "{DeclaringTypeName}.{MethodName}({ParamTypeNames})" -- e.g. "Steps.SetFirstNumber(Int32)"
         // -- not a bare method name, unlike every other fixture in this file. Regression guard
-        // (issue #484 follow-up): passing that straight through to
+        //: passing that straight through to
         // TryGetMethodIdentifierLocation/TryGetAttributeSourceLine (which compare against the bare
         // Roslyn identifier only) made both backfills silently miss on every real
         // connector-discovered binding -- they only ever matched in tests, because every other
