@@ -74,8 +74,8 @@ A `prod` build fails fast while a prod connection string is still a `TODO` place
 are `dev` unless the workflow is started manually with `telemetry_env = prod`. Every CI workflow also sets `REQNROLL_TELEMETRY_ENABLED=0`, so test runs never send events to either resource. The
 connection strings are not secrets (they ship inside every client), so they are committed.
 
-Whether telemetry is sent is controlled only by `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on,
-anything else = off). A build you launch from the IDE (VS Debug, VS Code F5, Rider `runIde`) always
+Whether telemetry is sent is controlled only by `REQNROLL_TELEMETRY_ENABLED` (VS and VS Code: unset or `1` = on,
+anything else = off; Rider is opt-in: only `1` = on). A build you launch from the IDE (VS Debug, VS Code F5, Rider `runIde`) always
 sends to the dev resource — there is no extra step. Optionally set
 `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` to your own Application Insights connection string to
 redirect it, replacing the embedded one — see [src/LSP/CONTRIBUTING.md](src/LSP/CONTRIBUTING.md#debugging) and

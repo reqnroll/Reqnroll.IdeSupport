@@ -317,9 +317,10 @@ and properties is in the
 [telemetry events inventory](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/Telemetry-Events-Inventory.md).
 
 To opt out, set the environment variable `REQNROLL_TELEMETRY_ENABLED=0` for
-the IDE process; this works in Visual Studio, Rider and VS Code. VS Code also
-honors its own `telemetry.telemetryLevel` setting. Visual Studio and Rider do
-not currently consult their own IDE-level telemetry settings.
+the IDE process; this works in Visual Studio and VS Code. VS Code also
+honors its own `telemetry.telemetryLevel` setting. Visual Studio does not
+currently consult its own IDE-level telemetry setting. Rider telemetry is off by
+default; to opt in, set `REQNROLL_TELEMETRY_ENABLED=1` for the IDE process.
 
 `REQNROLL_PERF_TELEMETRY_SAMPLE` overrides only the `PerfSample` rate (a
 fraction from 0 to 1; `0` or `off` disables just that event). To see exactly
