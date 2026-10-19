@@ -10,8 +10,8 @@ public interface IInlayHintService
     /// <paramref name="startLine"/>/<paramref name="endLine"/> are both given, steps whose line
     /// span doesn't overlap [<paramref name="startLine"/>, <paramref name="endLine"/>] are skipped
     /// before any hint is built for them — the actual cost reduction for a viewport-scoped
-    /// <c>textDocument/inlayHint</c> request (issue #471): the caller previously built hints for
-    /// every step in the document, then filtered the *output* by range.
+    /// <c>textDocument/inlayHint</c> request: building hints for
+    /// every step and then filtering the *output* by range would do all the work first.
     /// </summary>
     IReadOnlyList<GherkinInlayHint> Build(FeatureBindingMatchSet matchSet, int? startLine = null, int? endLine = null);
 }

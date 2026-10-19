@@ -42,7 +42,7 @@ public static class StepDefinitionFileBuilder
 
         // Using directives. `Task` is only referenced by an async snippet's rendered signature
         // (`public async Task ...`), so the Tasks namespace is imported exactly when the file
-        // contains one — avoiding an unused using in the common synchronous case (#961).
+        // contains one — avoiding an unused using in the common synchronous case.
         sb.Append("using System;").Append(newLine);
         if (AnySnippetIsAsync(snippets))
             sb.Append("using System.Threading.Tasks;").Append(newLine);
@@ -81,7 +81,7 @@ public static class StepDefinitionFileBuilder
     /// <summary>
     /// Determines whether any rendered <paramref name="snippets"/> declares an async method, so
     /// <see cref="BuildNewFile"/> can import <c>System.Threading.Tasks</c> exactly when the
-    /// generated file needs it (issue #961).
+    /// generated file needs it.
     /// </summary>
     /// <remarks>
     /// Matches the signature <see cref="StepSkeletonRenderer.Render"/> emits for an async style —
@@ -108,10 +108,10 @@ public static class StepDefinitionFileBuilder
     /// in <paramref name="existingContent"/>, immediately before its closing brace.
     /// </summary>
     /// <remarks>
-    /// The class body is located with Roslyn (issue #586). This previously used a hand-rolled
-    /// character scan that masked out literals and comments before brace-matching. That scan was
-    /// the single most complex method in the repository (CX=32) and got most cases right, but its
-    /// naive quote pairing mis-tracked raw string literals whose body contains a quote run — a
+    /// The class body is located with Roslyn rather than a hand-rolled
+    /// character scan that masks out literals and comments before brace-matching. Such a scan is
+    /// complex and gets most cases right, but its
+    /// naive quote pairing mis-tracks raw string literals whose body contains a quote run — a
     /// four-quote-delimited literal containing a three-quote sequence, say — so a brace inside
     /// such a literal was treated as real code, the class braces failed to balance, and the
     /// append was abandoned. <c>LSP.Core</c> already references <c>Microsoft.CodeAnalysis.CSharp</c>
@@ -173,9 +173,9 @@ public static class StepDefinitionFileBuilder
     /// unterminated construct is lexed as part of it.
     /// </summary>
     /// <remarks>
-    /// Deliberately a narrow list rather than "any error diagnostic": the previous hand-rolled
-    /// scan bailed only on an unterminated literal/comment and tolerated every other kind of
-    /// malformed source, and widening that here would turn appends into new-file fallbacks for
+    /// Deliberately a narrow list rather than "any error diagnostic": it bails only on an unterminated
+    /// literal/comment and tolerates every other kind of
+    /// malformed source, and widening that would turn appends into new-file fallbacks for
     /// files that are merely mid-edit. Note that an unterminated <em>string</em> does not
     /// necessarily leave the closing brace missing — Roslyn recovers and still reports a
     /// close-brace token — so the brace check alone is not sufficient and this list is load-bearing.

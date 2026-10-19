@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestTargets;
 /// </summary>
 /// <remarks>
 /// Kept as one union rather than keyed by framework: the resolver reads the generated code-behind
-/// as ground truth and doesn't need to know which provider wrote it (issue #455).
+/// as ground truth and doesn't need to know which provider wrote it.
 /// </remarks>
 public static class RowAttributeTypeNames
 {

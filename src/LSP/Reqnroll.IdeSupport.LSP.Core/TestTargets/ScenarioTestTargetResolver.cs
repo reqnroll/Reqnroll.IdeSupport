@@ -91,11 +91,11 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         if (generatedFilePath is null)
             return null; // not built yet — see Test-Runner-Integration-Design, pitfall 1
 
-        // Cached across calls within the same resolution pass (issue #491): resolving every
-        // scenario/row in a large .feature file used to re-read and re-parse this same,
+        // Cached across calls within the same resolution pass: resolving every
+        // scenario/row in a large .feature file would otherwise re-read and re-parse this same,
         // unchanged generated file once per scenario. The cache's own last-write-time check
         // keeps this correct across an actual rebuild. Checked before the tag/scenario-name work
-        // below (same short-circuit order as the original file-existence check) so a not-yet-built
+        // below (a short-circuit on file existence) so a not-yet-built
         // project doesn't pay for that work on every scenario in the file.
         var root = _syntaxTreeCache.GetOrParseFromDisk(generatedFilePath, _fileSystem);
         if (root is null)
@@ -296,7 +296,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         object? scenarioData, (Examples Examples, TableRow Row)? selectedRow)
     {
         // Counts every known provider's row attribute rather than first detecting the project's
-        // framework from its package references and counting only that one (issue #455). Only
+        // framework from its package references and counting only that one. Only
         // Reqnroll's generator writes this file, so any of these attributes on the method is
         // unambiguous — and the detection step it replaces failed closed (0 rows, so a row-tests
         // Outline collapsed to one unparameterized target) whenever the framework package wasn't a

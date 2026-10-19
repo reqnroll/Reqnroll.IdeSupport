@@ -62,7 +62,7 @@ public static class FeatureStepTextBuilder
     /// <paramref name="stepText"/> and injects them into the parameter slots of
     /// <paramref name="newExpression"/>, via <see cref="StepExpressionParameters.ReplaceSlotsWithValues"/>
     /// — the same slot model <see cref="TryBuildViaOutlinePlaceholders"/> uses, rather than a
-    /// second, independent scan for slot boundaries (issue #591). Returns <c>null</c> when the
+    /// second, independent scan for slot boundaries. Returns <c>null</c> when the
     /// regex is absent, does not match, or yields no captures, so the caller can try another
     /// strategy.
     /// </summary>

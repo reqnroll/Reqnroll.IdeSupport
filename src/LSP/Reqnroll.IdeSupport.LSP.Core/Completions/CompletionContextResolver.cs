@@ -75,7 +75,7 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
         // DefinitionLineKeyword tag spanning just the keyword and its colon (e.g. "Scenario:").
         // Once the cursor is at or past that span it's editing the block's free-text title, not
         // composing the keyword -- offering keyword completion there would suggest replacing the
-        // keyword and title with a new keyword, deleting both (issue #818). Mirrors the step case
+        // keyword and title with a new keyword, deleting both. Mirrors the step case
         // above, which stops offering keyword completion at the equivalent boundary
         // (stepTextStart) for the same reason.
         var definitionKeywordTag = tags.FirstOrDefault(t =>

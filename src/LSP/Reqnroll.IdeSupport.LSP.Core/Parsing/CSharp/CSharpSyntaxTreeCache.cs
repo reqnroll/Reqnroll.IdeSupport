@@ -104,7 +104,7 @@ public sealed class CSharpSyntaxTreeCache : ICSharpSyntaxTreeCache
         // a Count taken slightly before the copy — a concurrent Store growing the dictionary in that
         // window throws ArgumentException ("index is equal to or greater than the length of the
         // array"). Sorting/removing from this snapshot instead keeps the whole pass safe under
-        // concurrent Store calls, matching the non-atomic-cache shape that caused issue #554.
+        // concurrent Store calls, avoiding the torn-read race of a non-atomic cache.
         var snapshot = _entries.ToArray();
         if (snapshot.Length <= MaxEntries)
             return;

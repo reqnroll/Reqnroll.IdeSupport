@@ -96,7 +96,7 @@ public sealed class CompletionService : ICompletionService
                 // A bare "@" tag-prefix entry. Real tag completions (built-in @ignore plus the
                 // tags already used across the project) are served by GetTagCompletions — this
                 // placeholder remains only as the ParserErrorActionBuilder quick-fix candidate
-                // ("Insert '@'") for a position where Gherkin expected a tag (issue #828).
+                // ("Insert '@'") for a position where Gherkin expected a tag.
                 entries.Add(Kw("@", "Tag prefix — completes to a tag used in the project or the built-in @ignore"));
                 break;
         }
@@ -127,7 +127,7 @@ public sealed class CompletionService : ICompletionService
             // Method-name-style bindings (no explicit attribute expression, e.g. [Given] public
             // void The_First_Number_Is_P0(int p)) have no authored step text to offer as a
             // completion sample — their auto-generated regex isn't valid Gherkin step text, so
-            // inserting it would corrupt the .feature file rather than help the user (issue #344).
+            // inserting it would corrupt the .feature file rather than help the user.
             if (sd.SpecifiedExpression is null)
                 continue;
 

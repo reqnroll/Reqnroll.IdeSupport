@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 
 /// <summary>
 /// Renders text as a C# string literal. Shared by the rename edit (re-emitting a step-definition
-/// attribute literal, #935) and step scaffolding (emitting a new attribute literal, #944).
+/// attribute literal) and step scaffolding (emitting a new attribute literal).
 /// </summary>
 public static class CSharpStringLiteral
 {

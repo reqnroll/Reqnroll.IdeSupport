@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 /// <summary>
 /// Keeps <see cref="TestOutcomeStore"/>'s contents across server restarts in one JSON file under the
 /// Reqnroll application directory (<c>%LOCALAPPDATA%\Reqnroll\test-outcomes.json</c> — a sibling of
-/// the <c>logs</c> subfolder, not inside it; issue #726), keyed by test-container
+/// the <c>logs</c> subfolder, not inside it), keyed by test-container
 /// path like the store itself — so no per-solution or per-IDE bookkeeping is needed: whichever solution
 /// owns a container, its outcomes are found by the container's path. One file shared by every IDE the
 /// server serves, since the server process (not the IDE) now owns this state.
@@ -44,7 +44,7 @@ public sealed class TestOutcomePersistence
     /// <c>REQNROLL_TESTLOGGER_FILE</c>'s role for their own state files. Unset in every normal
     /// session, so a user always gets <see cref="ResolveDefaultFilePath"/> — this exists so the
     /// performance benchmark suite can point the server at a per-run temp file and never read or
-    /// write the developer's real 30-day outcome history (issue #714).
+    /// write the developer's real 30-day outcome history.
     /// </summary>
     public const string FilePathEnvironmentVariable = "REQNROLL_TEST_OUTCOMES_PATH";
 
@@ -85,7 +85,7 @@ public sealed class TestOutcomePersistence
     /// Uses <see cref="Logging.ReqnrollLogPaths.ResolveApplicationDirectory"/>, not
     /// <c>ResolveLogDirectory</c> — this file is persisted state, not a log, so it belongs in the
     /// application directory's root alongside the telemetry <c>userid</c> file rather than under
-    /// the <c>logs</c> subfolder (issue #726); it is also exempt from the 10-day log-retention
+    /// the <c>logs</c> subfolder; it is also exempt from the 10-day log-retention
     /// pruning that directory gets. Resolution is broadly safe (its own file enumeration is
     /// already guarded) but still combines environment-dependent paths via
     /// <see cref="Path.Combine(string, string)"/>, which can throw on a sufficiently unusual

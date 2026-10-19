@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 /// Shared cache of parsed C# <see cref="SyntaxNode"/> roots, keyed by file path, so that repeated
 /// resolutions against the same unchanged file within one logical operation (e.g. resolving Run
 /// CodeLens targets for every scenario in a large <c>.feature</c> file) reuse the same Roslyn parse
-/// instead of re-parsing the file from scratch on every call — see issue #491.
+/// instead of re-parsing the file from scratch on every call.
 /// </summary>
 /// <remarks>
 /// Two entry points reflect the two kinds of file this cache serves:

@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 /// <para>
 /// Uses <see cref="IBindingMatchService.FindUsages(BindingId,IReadOnlyCollection{ProjectOwner})"/>
 /// with no project filter (intersection semantics: an expression is considered used if any
-/// project's feature files reference it) — an O(1) reverse-index lookup per binding (issue #471),
+/// project's feature files reference it) — an O(1) reverse-index lookup per binding,
 /// keyed by <see cref="BindingId"/> so it's inherently per-expression-specific; no separate
 /// per-location cache or post-hoc expression filter is needed. Bindings sharing the same
 /// <see cref="BindingId"/> across multiple registries are deduplicated to a single row.
@@ -28,7 +28,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 /// up credited to whichever registry happened to be enumerated first — typically the referencing
 /// project, not the one that actually declares the binding. When more than one registry reports
 /// the same <see cref="BindingId"/>, the row is attributed to whichever candidate's own project
-/// folder actually contains the binding's resolved source file (issue #547) — falling back to
+/// folder actually contains the binding's resolved source file — falling back to
 /// first-seen only when no candidate's folder contains it (an unresolved source, or a binding
 /// whose declaring project isn't loaded in this workspace at all).
 /// </para>
@@ -54,7 +54,7 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
     ///
     /// Cross-project deduplication: the same binding appearing in multiple project registries
     /// (a linked .cs file, or a referenced assembly's bindings picked up by the referencing
-    /// project's own discovery run — issue #547) would otherwise produce duplicate rows for the
+    /// project's own discovery run) would otherwise produce duplicate rows for the
     /// same expression; <see cref="PickOwningCandidate"/> collapses these to one, attributed to
     /// whichever project's own folder actually contains the source.
     /// </remarks>
@@ -99,7 +99,7 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
             // The entry is still reported — "this step definition is unused" is true and useful
             // regardless of where its source lives — but it travels with IsResolved so the
             // client can say why it cannot be opened instead of appearing to do nothing when
-            // the user clicks it (issue #540).
+            // the user clicks it.
             if (!loc.IsResolved)
                 _logger.LogInfo(
                     $"FindUnusedStepDefinitionsService: '{className}.{methodName}' is unused, but the " +
@@ -112,7 +112,7 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
                 MethodName: methodName,
                 // Display-only field (shown in the Find Unused Step Definitions result list) —
                 // uses DisplayExpression, not the `expression` identity key above, so a
-                // method-name-style binding's raw auto-generated regex isn't shown (issue #344).
+                // method-name-style binding's raw auto-generated regex isn't shown.
                 BindingExpression: sd.DisplayExpression,
                 // Null, not the recorded path, when it cannot be opened here: every client
                 // already guards SourceFile for emptiness before navigating, so this alone stops
@@ -143,7 +143,7 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
 
     /// <summary>
     /// Chooses which of two candidates reporting the same <see cref="BindingId"/> "owns" it for
-    /// attribution purposes (issue #547).
+    /// attribution purposes.
     /// </summary>
     /// <remarks>
     /// The reflection connector reports every binding loaded into its discovery process, not just

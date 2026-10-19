@@ -49,7 +49,7 @@ public sealed class RegexStepDefinitionExpressionAnalyzer
                 unescaped.Append(regexString, position, index - position);
                 unescaped.Append(regexString[index + 1]);
 
-                // Issue #958: character classes such as \d, \w and \s (and their negations, plus
+                // Character classes such as \d, \w and \s (and their negations, plus
                 // the \b word-boundary assertion) are regex operators, not literal characters. Marking
                 // the containing text part as non-simple stops the StepDefinitionSampler from emitting
                 // the escaped letter literally (e.g. "I have d apples" for @"I have \d apples").
@@ -113,7 +113,7 @@ public sealed class RegexStepDefinitionExpressionAnalyzer
     private static bool IsNonCapturingGroup(string s, int index)
         => index + 2 < s.Length && s[index + 1] == '?' && s[index + 2] == ':';
 
-    /// <summary>Escaped character classes that are regex operators rather than literal characters (issue #958).</summary>
+    /// <summary>Escaped character classes that are regex operators rather than literal characters.</summary>
     private static bool IsEscapedCharacterClass(char c)
         => c is 'd' or 'w' or 's' or 'D' or 'W' or 'S' or 'b';
 }

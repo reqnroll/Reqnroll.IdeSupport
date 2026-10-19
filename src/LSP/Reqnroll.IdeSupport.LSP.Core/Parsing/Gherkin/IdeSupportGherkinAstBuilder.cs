@@ -78,7 +78,7 @@ internal class IdeSupportGherkinAstBuilder : AstBuilder<IdeSupportGherkinDocumen
         ResetBlock();
         // Outline-ness is decided from the keyword, not from the presence of Examples: a
         // "Scenario Outline:" with no Examples block must still be a ScenarioOutline so the
-        // "no examples defined" check can fire (issue #956) and it gains outline placeholder
+        // "no examples defined" check can fire and it gains outline placeholder
         // handling. A plain "Scenario:" keeps the examples-based fallback for robustness.
         var isOutline = _documentDialectProvider()?.ScenarioOutlineKeywords.Contains(keyword) == true;
         if (!isOutline && (examples == null || !examples.Any()))

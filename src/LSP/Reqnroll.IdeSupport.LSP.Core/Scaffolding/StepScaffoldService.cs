@@ -30,7 +30,7 @@ public sealed class StepScaffoldService : IStepScaffoldService
 
                 // A step consisting of only a keyword (e.g. "Given" with no following text) has
                 // no step text to build a skeleton from — offering a code action here would
-                // generate a meaningless `[Given(@"")]`-style binding (issue #622).
+                // generate a meaningless `[Given(@"")]`-style binding.
                 if (string.IsNullOrWhiteSpace(step.StepText)) continue;
 
                 var descriptor = StepSkeletonRenderer.BuildDescriptor(step, style);

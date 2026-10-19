@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Discovery;
 
 /// <summary>
 /// Answers whether a project is a Reqnroll test project, gating the out-of-process connector so
-/// it is never launched against an assembly whose bindings nothing would match (issue #731).
+/// it is never launched against an assembly whose bindings nothing would match.
 /// </summary>
 /// <remarks>
 /// Extracted as an interface so <see cref="ConnectorDiscoveryService"/> can be unit-tested with
