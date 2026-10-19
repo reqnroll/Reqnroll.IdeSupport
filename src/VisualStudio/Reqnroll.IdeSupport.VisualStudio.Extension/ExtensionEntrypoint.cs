@@ -26,7 +26,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
     {
         /// <inheritdoc />
         /// <remarks>
-        /// Deliberately no <c>LoadedWhen</c> (issue #533). It was tried — a total
+        /// Deliberately no <c>LoadedWhen</c>. Tried once — a total
         /// <c>SolutionState.NoSolution | SolutionState.Exists</c> union, meant to make extension
         /// load deterministic rather than depending on whichever contribution VS activates first —
         /// and measurement rejected it on both counts:
@@ -34,7 +34,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
         /// <item>
         /// It fixed nothing. Without it, VS activates the <c>LanguageServerProvider</c> ~1.1–1.4s
         /// after extension load for a solution whose only restored tab is a <c>.feature</c> file
-        /// (three runs, 2026-08-30). The delayed activation the issue was filed about did not
+        /// (three runs, 2026-08-30). The delayed activation it was meant to cure did not
         /// reproduce.
         /// </item>
         /// <item>
@@ -57,12 +57,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
         {
             base.InitializeServices(serviceCollection);
 
-            // Single, shared logging sink for the whole extension (issue #84): previously ~20
-            // classes each `new`'d their own SynchronousFileLogger (mostly defaulting to
-            // TraceLevel.Warning, silently dropping LogInfo) while also taking a DI-injected
-            // TraceSource that nothing ever attached a listener to. One IdeSupportCompositeLogger,
-            // registered once and consumed everywhere via ILogger<T>, replaces both. It is the same
-            // process-wide instance the VSSDK/MEF side exports (issue #748), so both composition
+            // Single, shared logging sink for the whole extension. One IdeSupportCompositeLogger,
+            // registered once and consumed everywhere via ILogger<T>, so classes must not `new` their
+            // own SynchronousFileLogger (it would default to TraceLevel.Warning and silently drop
+            // LogInfo) nor rely on a DI-injected TraceSource (nothing attaches a listener to it).
+            // It is the same process-wide instance the VSSDK/MEF side exports, so both composition
             // roots share one file logger and one "Reqnroll" Output Window pane.
             serviceCollection.AddSingleton<IIdeSupportLogger>(ExtensionHostLogger.Instance);
             serviceCollection.AddSingleton<ILoggerFactory>(sp =>

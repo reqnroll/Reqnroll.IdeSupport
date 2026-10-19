@@ -61,7 +61,7 @@ internal sealed class FormatDocumentService
 
         // A user-correctable rejection (-32803: e.g. the file has no parsable Feature) is surfaced to
         // the caller to show; any other error keeps the old "no edits" contract (already logged by the
-        // pipe), so an unexpected failure or ContentModified never pops a dialog (issue #1132).
+        // pipe), so an unexpected failure or ContentModified never pops a dialog.
         if (EditRejection.TryCreateException(error) is { } rejection)
             throw rejection;
 

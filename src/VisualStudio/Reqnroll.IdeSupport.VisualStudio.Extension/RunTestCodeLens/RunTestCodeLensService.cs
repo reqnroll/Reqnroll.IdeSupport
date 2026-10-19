@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 /// Composes <see cref="GherkinNavigationBarSymbolService"/> (scenario/Outline ranges) and
 /// <see cref="ScenarioTestTargetService"/> (per-scenario <c>reqnroll/resolveTestTargets</c>) into
 /// the flat <see cref="RunTestTargetEntry"/> list the classic Run CodeLens bridge needs (design doc
-/// §5/§6, issue #262), plus the owning project's build-output assembly path — needed for VS Test
+/// §5/§6), plus the owning project's build-output assembly path — needed for VS Test
 /// Explorer's own <see cref="Microsoft.VisualStudio.TestWindow.TestMethodIdentifier"/> — resolved
 /// via VS's DTE automation model, since the LSP protocol itself has no notion of it.
 /// </summary>
@@ -44,8 +44,8 @@ internal sealed class RunTestCodeLensService
     }
 
     /// <summary>
-    /// Resolves the single Run-able target at <paramref name="line"/> in <paramref name="fileUri"/>
-    /// (issue #495): fetches the symbol tree, finds the one Method-kind (Scenario/Scenario Outline)
+    /// Resolves the single Run-able target at <paramref name="line"/> in <paramref name="fileUri"/>:
+    /// fetches the symbol tree, finds the one Method-kind (Scenario/Scenario Outline)
     /// node whose header starts on <paramref name="line"/>, and calls
     /// <c>reqnroll/resolveTestTargets</c> for that node alone — never for every other scenario in
     /// the file. Returns an empty list (no Run lens will render) when the owning project or its
@@ -60,7 +60,7 @@ internal sealed class RunTestCodeLensService
             return await ResolveScenarioTargetsAsync(fileUri, line, methodNode, cancellationToken).ConfigureAwait(false);
 
         // No Scenario/Outline starts here — check whether it's a Feature/Rule header line instead
-        // (issue #744, "Run scenarios"). Every Method-kind node is checked first since it's the
+        // ("Run scenarios"). Every Method-kind node is checked first since it's the
         // overwhelmingly common case and CollectContainerNodes walks the same tree again.
         var containerNode = CollectContainerNodes(symbols).FirstOrDefault(n => n.SelectionRange.Start.Line == line);
         if (containerNode is not null)
@@ -73,7 +73,7 @@ internal sealed class RunTestCodeLensService
 
     /// <summary>
     /// Resolves the single Run-able scenario/Outline target at <paramref name="node"/> — the
-    /// original issue #495 behavior, unchanged by issue #744's container support.
+    /// per-scenario behavior, separate from the container ("Run scenarios") support.
     /// </summary>
     private async Task<IReadOnlyList<RunTestTargetEntry>> ResolveScenarioTargetsAsync(
         string fileUri, int line, GherkinSymbolNode node, CancellationToken cancellationToken)
@@ -114,7 +114,7 @@ internal sealed class RunTestCodeLensService
 
     /// <summary>
     /// Resolves every Run-able target under a Feature/Rule <paramref name="node"/> in one
-    /// <c>reqnroll/resolveContainerTestTargets</c> call (issue #744, "Run scenarios") — reuses the
+    /// <c>reqnroll/resolveContainerTestTargets</c> call ("Run scenarios") — reuses the
     /// exact same <see cref="RunTestTargetEntry"/> shape and the same downstream
     /// <c>RunTestCodeLensDataPoint</c>/Test Explorer execution path as a single scenario's Run,
     /// just with a broader target set. <see cref="RunTestTargetEntry.IsScenarioOutline"/> is set
@@ -153,7 +153,7 @@ internal sealed class RunTestCodeLensService
     }
 
     /// <summary>
-    /// Fetches every Run-lens tag placement for <paramref name="fileUri"/> (issue #495): the
+    /// Fetches every Run-lens tag placement for <paramref name="fileUri"/>: the
     /// symbol-tree walk alone, with no <c>reqnroll/resolveTestTargets</c> calls at all. Used by
     /// <c>RunTestCodeLensTaggerProvider</c>, which only needs to know which lines get a tag and a
     /// cheap change-detection key — the actual resolved target(s) are only fetched lazily, per
@@ -169,7 +169,7 @@ internal sealed class RunTestCodeLensService
         var methodLocations = CollectMethodNodes(symbols)
             .Select(node => new RunTestLensLocation(node.SelectionRange.Start.Line, BuildLensKey(node)));
 
-        // Feature/Rule header lines get their own "Run scenarios" lens too (issue #744) — always a
+        // Feature/Rule header lines get their own "Run scenarios" lens too — always a
         // distinct line from any Scenario/Outline header, so no key collision with methodLocations.
         var containerLocations = CollectContainerNodes(symbols)
             .Select(node => new RunTestLensLocation(node.SelectionRange.Start.Line, BuildContainerLensKey(node)));
@@ -184,7 +184,7 @@ internal sealed class RunTestCodeLensService
     /// </summary>
     private static string BuildLensKey(GherkinSymbolNode node) => $"{node.Detail}|{node.Name}";
 
-    /// <summary>Opaque per-node key for a Feature/Rule "Run scenarios" lens (issue #744) — Kind stands in for Detail, which server-side Feature/Rule symbols never set.</summary>
+    /// <summary>Opaque per-node key for a Feature/Rule "Run scenarios" lens — Kind stands in for Detail, which server-side Feature/Rule symbols never set.</summary>
     private static string BuildContainerLensKey(GherkinSymbolNode node) => $"container:{node.Kind}|{node.Name}";
 
     /// <summary>
@@ -207,7 +207,7 @@ internal sealed class RunTestCodeLensService
 
     /// <summary>
     /// Recursively collects Feature (root) and Rule (nested) nodes at any depth — the "Run
-    /// scenarios" containers (issue #744). Mirrors <see cref="CollectMethodNodes"/>'s shape;
+    /// scenarios" containers. Mirrors <see cref="CollectMethodNodes"/>'s shape;
     /// Feature maps to LSP <c>SymbolKind.Module</c> and Rule to <c>SymbolKind.Namespace</c>
     /// (<c>DocumentSymbolHandler.ToSymbolKind</c>) since both collapse Feature/Rule to those
     /// standard kinds rather than a custom one.
@@ -253,7 +253,7 @@ internal sealed class RunTestCodeLensService
         catch (OperationCanceledException)
         {
             // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while this
-            // lookup was still in flight (issue #679) -- VS re-requests the label on its own, so
+            // lookup was still in flight -- VS re-requests the label on its own, so
             // this isn't a failure worth surfacing to the output pane.
             return null;
         }
@@ -267,7 +267,7 @@ internal sealed class RunTestCodeLensService
     /// <summary>
     /// Prefers the currently active document's own <see cref="ProjectItem.ContainingProject"/> over
     /// <c>Solution.FindProjectItem(path)</c>, which returns an arbitrary match when the same physical
-    /// file is linked into more than one project (issue #262 live testing — a <c>.feature</c> file
+    /// file is linked into more than one project (a <c>.feature</c> file
     /// linked via <c>&lt;ReqnrollFeatureFile Include="..\Other\Foo.feature"&gt;</c> resolves to
     /// whichever project DTE enumerates first, not necessarily the one whose tab is actually open,
     /// sending Run CodeLens to the wrong project's build output). Only used when the active document

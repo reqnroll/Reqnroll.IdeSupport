@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 
 /// <summary>
 /// Sends a custom <c>reqnroll/findMatchingScenarios</c> request to the LSP server and maps the
-/// result to a <see cref="FindMatchingScenariosResult"/> (issue #373's hook-match-count CodeLens
+/// result to a <see cref="FindMatchingScenariosResult"/> (the hook-match-count CodeLens
 /// click action) — the inverse of <see cref="FindHooks.FindHooksService"/>.
 /// </summary>
 internal sealed class FindMatchingScenariosService

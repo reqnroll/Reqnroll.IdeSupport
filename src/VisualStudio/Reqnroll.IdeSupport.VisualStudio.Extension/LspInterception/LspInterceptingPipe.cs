@@ -29,16 +29,16 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// the message — forwards.
 /// </para>
 /// <para>
-/// After the decomposition in issue #587 this type is the <b>composition root</b>: it builds the
+/// This type is the <b>composition root</b>: it builds the
 /// collaborators, keeps the public surface its ten consuming services depend on, and owns nothing
 /// but the wiring between them.
 /// </para>
 /// <list type="table">
 ///   <item><term><see cref="LspFrameCodec"/></term><description>the wire format (step 1)</description></item>
-///   <item><term><see cref="ServerChannel"/></term><description>the server's stdin, the lock serialising writes to it, and the #555 termination flag</description></item>
-///   <item><term><see cref="LspRequestCorrelator"/></term><description>owned-RPC ids and their waiters (#401)</description></item>
-///   <item><term><see cref="VsSessionRouter"/></term><description>which session owns each outstanding response (#395)</description></item>
-///   <item><term><see cref="VsFacingSessionManager"/></term><description>the VS-facing pipe pairs and their generations (#156)</description></item>
+///   <item><term><see cref="ServerChannel"/></term><description>the server's stdin, the lock serialising writes to it, and the termination flag</description></item>
+///   <item><term><see cref="LspRequestCorrelator"/></term><description>owned-RPC ids and their waiters</description></item>
+///   <item><term><see cref="VsSessionRouter"/></term><description>which session owns each outstanding response</description></item>
+///   <item><term><see cref="VsFacingSessionManager"/></term><description>the VS-facing pipe pairs and their generations</description></item>
 ///   <item><term><see cref="InterceptorPipeline"/></term><description>one direction's interceptor list</description></item>
 ///   <item><term><see cref="ServerToVsPump"/> / <see cref="VsToServerPump"/></term><description>the two loops</description></item>
 /// </list>
@@ -59,7 +59,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// How long an injected request may wait for its response before it is abandoned and logged at
-    /// Warning (issue #764).
+    /// Warning.
     /// </summary>
     /// <remarks>
     /// Deliberately generous: it exists to stop a hung server handler leaving a request pending
@@ -69,9 +69,9 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// </remarks>
     public static readonly TimeSpan DefaultOwnedRequestTimeout = TimeSpan.FromSeconds(60);
 
-    // ── Extracted collaborators (issue #587, step 2) ─────────────────────────
+    // ── Extracted collaborators ─────────────────────────
     // The write side of the server connection (its stdin writer, the lock serialising every write to
-    // it, and the #555 termination flag), the owned-RPC correlation, and the #395 peer-session
+    // it, and the termination flag), the owned-RPC correlation, and the peer-session
     // routing each now live in their own type. What stays here is the orchestration between them.
     private readonly ServerChannel          _serverChannel;
     private readonly LspRequestCorrelator   _correlator;
@@ -90,7 +90,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// otherwise known to be gone), meaning this connection can never serve another request.
     /// </summary>
     /// <remarks>
-    /// Issue #555: VS ends an LSP session by sending <c>shutdown</c> then <c>exit</c> — which it does
+    /// VS ends an LSP session by sending <c>shutdown</c> then <c>exit</c> — which it does
     /// on a solution close, not only at IDE shutdown. Those go through to the real server, which
     /// obeys and terminates. <see cref="LspServerConnectionService"/> reads this to know the
     /// connection is spent and a fresh server must be launched for the next session. The flag itself
@@ -166,7 +166,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// </summary>
     /// <remarks>
     /// The pipes themselves, the generation counter, and abandoning the previous session belong to
-    /// <see cref="VsFacingSessionManager"/> (issue #156 — see its remarks). What is left here is the
+    /// <see cref="VsFacingSessionManager"/> (see its remarks). What is left here is the
     /// wiring that needs the rest of this connection: bounding the router's tracking, and starting a
     /// send pump for the new session. The connection to the real server process is untouched.
     /// </remarks>
@@ -174,7 +174,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         var session = _sessions.StartNewSession(_lifetimeToken);
 
-        // Bound the router's growth (issue #395): a request that's still in flight when its session
+        // Bound the router's growth: a request that's still in flight when its session
         // gets abandoned and never receives a response (e.g. genuinely dropped, not just delayed)
         // would otherwise leak its entry forever. Two generations is enough slack for the straggler
         // this tracking exists to catch — a response landing shortly after its own session was
@@ -194,7 +194,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Records that the server behind this pipe is terminating, and releases everything still
-    /// waiting on it (issue #555).
+    /// waiting on it.
     /// </summary>
     /// <param name="reason">Why the server is considered gone; logged.</param>
     /// <remarks>
@@ -233,7 +233,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
         var body = LspJsonRpc.BuildNotification(method, paramsJson);
 
-        // Refused outright once the server has terminated (issue #555) — see ServerChannel.
+        // Refused outright once the server has terminated — see ServerChannel.
         if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, cancellationToken)
                                  .ConfigureAwait(false))
             return;
@@ -280,8 +280,8 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// The level a server-rejected request is logged at. <c>ContentModified</c> is Debug: the
     /// server raises it for every in-flight request whenever it processes a Serial notification
     /// (e.g. the startup project baseline), and callers retry it, so at Warning it only put
-    /// false alarms in the Output pane (issue #800 follow-up). A user-correctable edit rejection
-    /// (<see cref="EditRejectedException.ErrorCode"/>, issue #1132) is Information: the user is told
+    /// false alarms in the Output pane. A user-correctable edit rejection
+    /// (<see cref="EditRejectedException.ErrorCode"/>) is Information: the user is told
     /// in a dialog and the caller logs it too, so it is not a fault. Every other error stays Warning.
     /// </summary>
     internal static LogLevel ServerErrorLogLevel(JObject error) =>
@@ -292,7 +292,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Like <see cref="SendRequestToServerAsync"/>, but also surfaces the JSON-RPC <c>error</c>
-    /// object when the server rejected the request (issue #650). A timeout, cancellation or missing
+    /// object when the server rejected the request. A timeout, cancellation or missing
     /// server is still <c>(null, null)</c> — prefer <see cref="SendRequestAsync"/>, which says which
     /// of them it was.
     /// </summary>
@@ -311,7 +311,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     }
 
     /// <summary>
-    /// Injects a request and reports exactly how it ended (issues #1017, #1019, #1020): a result
+    /// Injects a request and reports exactly how it ended: a result
     /// (possibly JSON <c>null</c>), a server error, a timeout, a cancellation, or no server. Prefer
     /// this over the two older overloads, which collapse the failure cases into a <see langword="null"/>
     /// result that cannot be told from a server that answered JSON <c>null</c>.
@@ -323,7 +323,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         if (_disposed) return LspRequestOutcome.Unavailable();
 
-        // Issue #764: bound every owned request, whatever token the caller passed — several pass
+        // Bound every owned request, whatever token the caller passed — several pass
         // CancellationToken.None (the VSSDK command-filter redirects, the shared CodeLens fetch), so
         // a hung server handler would otherwise leave the request pending forever with no log line.
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -336,14 +336,14 @@ internal sealed class LspInterceptingPipe : IDisposable
         {
             var body = LspJsonRpc.BuildRequest(pending.Id, method, paramsJson);
 
-            // Issue #555: a request is the worse of the two injection cases — it would await a
+            // A request is the worse of the two injection cases — it would await a
             // response that can never arrive, so the caller blocks until its own token trips rather
             // than finding out immediately that there is no server.
             if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, requestToken)
                                      .ConfigureAwait(false))
                 return LspRequestOutcome.Unavailable();
 
-            // Notify interceptors about the injected request (issue #491), the same way
+            // Notify interceptors about the injected request, the same way
             // SendNotificationToServerAsync already does, so it appears in the inspector log —
             // otherwise every owned-RPC request (e.g. reqnroll/resolveTestTargets) is invisible to
             // LspInspectorLogger even though it genuinely crossed the wire. Runs outside the
@@ -360,7 +360,7 @@ internal sealed class LspInterceptingPipe : IDisposable
                 "LspInterceptingPipe: request {Method} id={Id} completed in {ElapsedMs} ms{Outcome}",
                 method, pending.Id, stopwatch.ElapsedMilliseconds, error is null ? string.Empty : " with a JSON-RPC error");
 
-            // Issue #764: the plain overload collapses an error to null, so without this a handler
+            // The plain overload collapses an error to null, so without this a handler
             // that threw reads to 13 of the 15 callers as "no result" and is only discoverable in
             // the inspector log. Logged once, here, rather than in every caller.
             if (error is not null)
@@ -374,7 +374,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
             // A real response always carries a result token (JSON null included — see
             // LspRequestCorrelator.Consume), so a null here means the waiter was released because the
-            // server terminated (issue #555): there is no answer and none is coming.
+            // server terminated: there is no answer and none is coming.
             return result is null ? LspRequestOutcome.Unavailable() : LspRequestOutcome.Success(result);
         }
         catch (OperationCanceledException) when (

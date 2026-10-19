@@ -56,7 +56,7 @@ internal sealed class CommentToggleService
 
         // A user-correctable rejection (-32803: the document is not open in the server) is surfaced to
         // the caller to show; any other error keeps the old behaviour (already logged by the pipe), so
-        // an unexpected failure or ContentModified never pops a dialog (issue #1132).
+        // an unexpected failure or ContentModified never pops a dialog.
         if (EditRejection.TryCreateException(error) is { } rejection)
             throw rejection;
 

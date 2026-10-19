@@ -25,7 +25,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// property, type) in the active document.  Because VS's built-in C# tagger places code
 /// elements at method level (not attribute level), this provider shows one lens per method.
 /// The server aggregates usage counts across all of that method's step-binding attributes
-/// into a single lens (issue #552); this provider just renders it.
+/// into a single lens; this provider just renders it.
 /// </para>
 /// <para>
 /// Clicking a lens delegates to <see cref="FindStepUsagesService"/> + <see cref="FindStepUsagesRenderer"/>,
@@ -86,8 +86,8 @@ internal sealed class StepCodeLensProvider : ExtensionPart, ICodeLensProvider
 
 /// <summary>
 /// A single step-usage code lens created for a C# method.  Renders the server's one lens for
-/// that method (its usage count already aggregated across every step-binding attribute on it,
-/// issue #552), matched by falling within a window just above the method declaration.
+/// that method (its usage count already aggregated across every step-binding attribute on it),
+/// matched by falling within a window just above the method declaration.
 /// </summary>
 internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
 {
@@ -123,7 +123,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
 
     /// <summary>
     /// Returns this method's step-usage label (already aggregated server-side across every
-    /// binding attribute on it, issue #552), or an empty label if the method is not a step binding.
+    /// binding attribute on it), or an empty label if the method is not a step binding.
     /// </summary>
     public override async Task<CodeLensLabel> GetLabelAsync(
         CodeElementContext context,
@@ -154,11 +154,11 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
                 currentStartLine, nextMethod, upperBound, string.Join(",", lenses.Select(l => l.RangeLine)));
 
             // The server returns at most one step-usage lens per method, its title already the
-            // aggregated "N step usages" text across every binding attribute on it (issue #552) --
+            // aggregated "N step usages" text across every binding attribute on it --
             // OrderBy+FirstOrDefault (rather than Single) is just a defensive tie-break, not a
             // real "pick among several" case. Server lens lines are at the method-declaration
             // line (>= currentStartLine); filtered to step-usage lenses by command name since
-            // #373, the combined textDocument/codeLens response for a .cs file can also carry
+            // the combined textDocument/codeLens response for a .cs file can also carry
             // hook-match-count lenses (reqnroll.goToMatchingScenarios) when a [Binding] class
             // mixes step and hook methods — this must never pick one of those up.
             var methodLens = lenses
@@ -178,14 +178,14 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
         catch (OperationCanceledException)
         {
             // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while the
-            // shared fetch was still in flight (issue #679) -- VS re-requests the label on its
+            // shared fetch was still in flight -- VS re-requests the label on its
             // own, so this isn't a failure worth surfacing to the output pane.
             return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
         }
         catch (LspContentModifiedException)
         {
-            // The server's state changed under the fetch even after the cache's bounded restarts
-            // (issue #1017). Routine during a refresh storm, so not a Warning with a stack trace.
+            // The server's state changed under the fetch even after the cache's bounded restarts.
+            // Routine during a refresh storm, so not a Warning with a stack trace.
             _logger.LogDebug(
                 "StepCodeLens.GetLabelAsync: ContentModified for {FileUri}:{MethodStartLine}", _fileUri, _methodStartLine);
             return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
@@ -228,7 +228,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
             var nextMethod2      = _state.GetNextMethodLine(_fileUri.ToString(), currentStartLine);
             var upperBound2      = nextMethod2 >= 0 ? nextMethod2 : currentStartLine + AttributeLookahead;
 
-            // The server's single step-usage lens for this method (issue #552) — same
+            // The server's single step-usage lens for this method — same
             // position-window match GetLabelAsync uses above, filtered to step-usage lenses by
             // command name so a hook-match-count lens in the same window is never clicked instead.
             var methodLens = lenses
@@ -262,7 +262,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
         }
         catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
         {
-            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            // Say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("StepCodeLens.ExecuteAsync: request failed: {Reason}", reason);
             await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Step Usages failed - {reason}.");
         }

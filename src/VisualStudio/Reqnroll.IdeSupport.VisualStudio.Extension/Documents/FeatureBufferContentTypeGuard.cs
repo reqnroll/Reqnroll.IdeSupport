@@ -78,7 +78,7 @@ internal static class FeatureBufferContentTypePolicy
 
 /// <summary>
 /// Makes sure every <c>.feature</c> text buffer has the <c>Gherkin</c> content type, and logs the
-/// content type Visual Studio assigned before changing anything (issue #78).
+/// content type Visual Studio assigned before changing anything.
 /// </summary>
 /// <remarks>
 /// <para>

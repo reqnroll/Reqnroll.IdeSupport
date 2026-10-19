@@ -18,7 +18,7 @@ internal enum RdtDocumentKind
     /// <summary>A Gherkin <c>.feature</c> file.</summary>
     Feature,
 
-    /// <summary>A C# file — a potential binding source, and (since issue #533 phase 1) an activation trigger.</summary>
+    /// <summary>A C# file — a potential binding source, and an activation trigger.</summary>
     CSharp,
 }
 
@@ -68,7 +68,7 @@ internal static class RdtDocumentInitialization
 /// lifecycle event for the documents that can activate the language server provider — locks,
 /// window shows and hides, and initialization — each timestamped relative to package load, so the
 /// distance between "package loaded", "the document became real", "the tab was shown" and "VS
-/// activated the language server provider" is measurable (issue #533).
+/// activated the language server provider" is measurable.
 /// </summary>
 /// <remarks>
 /// Two log levels on purpose. The inventory and initialization lines are <c>Info</c>: one-off, and
@@ -327,7 +327,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
             // A stale RDT cookie (the document was released or closed during restore) makes
             // GetDocumentMoniker throw ArgumentException. In an observe-only monitor this is an
             // expected race, not an error — log at Verbose so it does not surface as a spurious
-            // [Error] in the output pane (issue #814).
+            // [Error] in the output pane.
             _logger.LogDebugException(ex, $"DocumentInitializationMonitor: logging '{what}' failed (stale RDT cookie).");
         }
         catch (Exception ex)

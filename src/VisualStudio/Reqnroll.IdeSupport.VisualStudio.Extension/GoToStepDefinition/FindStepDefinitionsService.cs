@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 
 /// <summary>
 /// Sends <c>reqnroll/findStepDefinitions</c> for a <c>.feature</c> caret position over the owned
-/// <see cref="LspInterceptingPipe"/> and maps the result to step-definition rows (issue #757).
+/// <see cref="LspInterceptingPipe"/> and maps the result to step-definition rows.
 /// </summary>
 /// <remarks>
 /// The custom request returns the same bindings as <c>textDocument/definition</c> but with class,
@@ -54,7 +54,7 @@ internal sealed class FindStepDefinitionsService
             .SendRequestAsync(CustomLspMethodNames.ReqnrollFindStepDefinitions, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1020: a failed request throws rather than reading as "no step definition found".
+        // A failed request throws rather than reading as "no step definition found".
         var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindStepDefinitions, fileUri, cancellationToken);
 
         _logger.LogTrace("FindStepDefinitionsService: raw server result = {Result}", result.ToString());
@@ -66,7 +66,7 @@ internal sealed class FindStepDefinitionsService
 
     /// <summary>
     /// True when the step at the position has at least one binding whose source file exists on this
-    /// machine - i.e. Go To Definition would take the user somewhere (issue #898). An ordinary
+    /// machine - i.e. Go To Definition would take the user somewhere. An ordinary
     /// <c>reqnroll/findStepDefinitions</c> query, so the server measures and counts it like any other lookup.
     /// </summary>
     public async Task<bool> HasNavigableDefinitionAsync(

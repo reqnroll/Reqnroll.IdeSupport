@@ -56,7 +56,7 @@ internal sealed class FindStepUsagesRenderer
 
         // Text is deliberately not declared: the window's fixed Code ("linetext") column already
         // shows each entry's Text, and declaring it adds VS's separate wrapping "Description"
-        // column with the same content (issue #757; see StepDefinitionsRenderer).
+        // column with the same content (see StepDefinitionsRenderer).
         var dataSource = new FeatureReferencesDataSource(result.Locations);
         window.Manager.AddSource(dataSource,
             StandardTableKeyNames.DocumentName,

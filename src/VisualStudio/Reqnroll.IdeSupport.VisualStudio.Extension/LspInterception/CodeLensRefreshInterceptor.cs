@@ -22,17 +22,16 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Acts on incremental refreshes too</b> (issue #343), so editing a binding's expression or
+/// <b>Acts on incremental refreshes too</b>, so editing a binding's expression or
 /// <c>[Scope]</c> repaints the <c>.cs</c> lens once the edit settles, rather than staying stale
-/// until the next build. This was gated to <c>isFullReplacement</c>-only for a long time because
-/// the VS SDK's <c>CodeLens.Invalidate()</c> was root-caused (by decompiling VS 18) as the trigger
-/// for VS.Extensibility reactivating <c>ReqnrollLanguageClient</c>, forcing a second
-/// <c>CreateServerConnectionAsync</c> on the same session — issue #156. That reconnect is now
-/// survivable rather than fatal: #310 hands out a fresh VS-facing pipe per call instead of the
-/// shared cached one, #399 stopped a peer session's late <c>shutdown</c> response being
-/// misdelivered to the new connection (which VS's JsonRpc treats as a fatal protocol violation),
-/// and #402 drops late responses to cancelled owned requests. #156's link 2 is still unidentified,
-/// so the reconnect itself has not been eliminated — only made safe.
+/// until the next build. The VS SDK's <c>CodeLens.Invalidate()</c> triggers VS.Extensibility to
+/// reactivate <c>ReqnrollLanguageClient</c> (found by decompiling VS 18), forcing a second
+/// <c>CreateServerConnectionAsync</c> on the same session. That reconnect is survivable rather
+/// than fatal: a fresh VS-facing pipe is handed out per call instead of a shared cached one, a peer
+/// session's late <c>shutdown</c> response is not misdelivered to the new connection (VS's JsonRpc
+/// treats that as a fatal protocol violation), and late responses to cancelled owned requests are
+/// dropped. The reconnect itself has not been eliminated (why VS reactivates the client is not
+/// fully understood), only made safe.
 /// </para>
 /// <para>
 /// <b>Why the added cost is acceptable.</b> The incremental signal is not per-keystroke: the server
@@ -113,21 +112,21 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
                 var isFullReplacement = body["params"]?["isFullReplacement"]?.Value<bool>() ?? false;
 
                 // Both kinds now invalidate the VS.Extensibility (.cs) lenses — see the class
-                // remarks for the #156 reconnect trade-off and the guards around it.
+                // remarks for the reconnect trade-off and the guards around it.
                 ScheduleInvalidation(isFullReplacement);
 
-                // The hook-match-count lens on .feature files (issue #372) is a separate, classic
+                // The hook-match-count lens on .feature files is a separate, classic
                 // (Microsoft.VisualStudio.Language.CodeLens) mechanism — its refresh is a plain
                 // ITagger<T>.TagsChanged event, not VS.Extensibility's CodeLens.Invalidate(), so it
                 // never provokes a reconnect and needs neither the debounce nor the rate guard.
                 HookCodeLensRedirect.InvalidateAll();
 
                 // Same reasoning as above, for the Run CodeLens on .feature scenario lines (design
-                // Test-Runner-Integration-Design, issue #262) — a rebuilt .feature.cs (new/changed generated methods)
+                // Test-Runner-Integration-Design) — a rebuilt .feature.cs (new/changed generated methods)
                 // means previously-resolved reqnroll/resolveTestTargets results may be stale.
                 RunTestCodeLensRedirect.InvalidateAll();
 
-                // The clickable-tag link styling (issue #921): the tag patterns live in the project's
+                // The clickable-tag link styling: the tag patterns live in the project's
                 // configuration, which can arrive after a restored tab first asked for its links.
                 TagLinkRedirect.InvalidateAll();
             }

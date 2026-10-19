@@ -19,18 +19,18 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 /// feature tab triggered activation. All public methods must be called from the UI thread.
 /// <para>
 /// This is deliberately <b>passive</b>: it never forces the <c>LanguageServerProvider</c> to
-/// activate. An earlier "invisible open" that force-activated the provider was removed — it raced
-/// with VS's own restore of feature tabs and bounced the provider (two server processes, flickering
-/// C# code lenses, broken feature state). The provider activates the normal way: when VS realizes a
+/// activate. An "invisible open" that force-activates the provider races with VS's own restore of
+/// feature tabs and bounces the provider (two server processes, flickering C# code lenses, broken
+/// feature state). The provider activates the normal way: when VS realizes a
 /// restored feature tab, or the user opens a feature file. Moving this call any earlier (e.g. to
 /// mirror the eager server-startup work in <c>ExtensionEntrypoint.OnInitializedAsync</c>) would
 /// reintroduce that race.
 /// </para>
 /// <para>
-/// The two-server bounce itself came from <c>LspServerConnectionService.GetConnectionAsync</c>
-/// returning the same pipe to a second <c>CreateServerConnectionAsync</c> call. Since issue #156 it
-/// returns a fresh pipe per call over one server process, so that failure no longer applies.
-/// <see cref="ScratchFileActivationTrigger"/> (issue #533) now recovers a missed activation, but
+/// The two-server bounce itself would come from <c>LspServerConnectionService.GetConnectionAsync</c>
+/// returning the same pipe to a second <c>CreateServerConnectionAsync</c> call. It returns a fresh
+/// pipe per call over one server process, so that failure does not apply.
+/// <see cref="ScratchFileActivationTrigger"/> recovers a missed activation, but
 /// it does so by opening a separate scratch file, never by touching the user's documents.
 /// </para>
 /// </remarks>

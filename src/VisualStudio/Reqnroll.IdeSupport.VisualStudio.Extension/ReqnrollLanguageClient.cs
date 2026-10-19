@@ -102,7 +102,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         // corrected mechanism and the log evidence.
         _connectionService   = connectionService;
 
-        // Tells ReqnrollPluginPackage's scratch-file trigger that VS did activate this provider (issue #533).
+        // Tells ReqnrollPluginPackage's scratch-file trigger that VS did activate this provider.
         LanguageServerActivationSignal.Shared.MarkActivated();
 
         _logger.LogInformation(
@@ -114,7 +114,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     /// <remarks>
     /// <c>AppliesTo</c> is what VS uses to decide when to <em>activate</em> this provider: it does
     /// so when a document of a listed type is opened. <c>CSharp</c> is listed alongside Gherkin
-    /// (issue #533) so a session whose restored tabs are all <c>.cs</c> — no feature file in sight —
+    /// so a session whose restored tabs are all <c>.cs</c> — no feature file in sight —
     /// still activates the server, which is the failure <see cref="ReqnrollPluginPackage"/>'s
     /// autoload comment calls "scenario A".
     /// <para>
@@ -171,7 +171,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
 
     /// <summary>
     /// A server that never started never reaches <see cref="OnServerInitializationResultAsync"/>, which is
-    /// where the transmitter is normally resolved, so the start-failure event (issue #845) raised by
+    /// where the transmitter is normally resolved, so the start-failure event raised by
     /// <see cref="LspServerConnectionService"/> would stay queued forever. Resolve it here, best-effort,
     /// so that queue is flushed.
     /// </summary>
@@ -202,7 +202,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _logger.LogError(
                 "ReqnrollLanguageClient: server initialization failed. Info: {FailMessage}", failMsg);
             Enabled = false;
-            // The process started but VS's handshake with it failed (issue #845).
+            // The process started but VS's handshake with it failed.
             _connectionService.ReportHandshakeFailed();
             await ResolveTransmitterForStartFailureAsync(cancellationToken).ConfigureAwait(false);
             return;
@@ -230,7 +230,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
 
             // Set the VSSDK command filter redirect so Edit.CommentSelection/UncommentSelection/
             // ToggleLineComment in a .feature file call our service (the only entry point — there
-            // is no Reqnroll-specific Comment/Uncomment command, issue #747).
+            // is no Reqnroll-specific Comment/Uncomment command).
             CommentToggleRedirect.ToggleCommentAsync = _commentToggleService.ToggleCommentAsync;
 
             // Set the VSSDK drop-down bar client redirect so the
@@ -241,8 +241,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             // for Edit.FormatDocument/Edit.FormatSelection calls our service.
             FormatDocumentRedirect.FormatDocumentAsync = _formatDocumentState.Service.FormatDocumentAsync;
 
-            // Set the classic hook-match-count CodeLens bridge (issue #372, unblocking #269 for
-            // Visual Studio) — GetHookDetailsAsync reuses the same FindHooksService the
+            // Set the classic hook-match-count CodeLens bridge for
+            // Visual Studio — GetHookDetailsAsync reuses the same FindHooksService the
             // reqnroll.goToHooks command uses, so a lens's Details popup always matches what a
             // manual "Go to Hooks" invocation with ownLevelOnly would return.
             HookCodeLensRedirect.GetLensesAsync      = _hookFeatureCodeLensService.GetLensesAsync;
@@ -273,21 +273,21 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 var serviceProvider = ServiceProvider.GlobalProvider;
                 _connectionService.TelemetryTransmitter ??= ResolveMefService<ITelemetryTransmitter>(serviceProvider);
 
-                // Run CodeLens bridge (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — needs a DTE-resolvable
+                // Run CodeLens bridge (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step")) — needs a DTE-resolvable
                 // IServiceProvider for the owning project's output assembly path, so it's
                 // constructed here rather than alongside the other services above.
                 _runTestCodeLensService = new RunTestCodeLensService(
                     _navigationBarSymbolService, _scenarioTestTargetService, serviceProvider,
                     _loggerFactory.CreateLogger<RunTestCodeLensService>());
-                // Issue #495: the tagger (RunTestCodeLensRedirect.GetTagLocationsAsync) and every
+                // The tagger (RunTestCodeLensRedirect.GetTagLocationsAsync) and every
                 // visible Scenario line's own out-of-process CodeLens data point
                 // (RunTestCodeLensRedirect.GetTargetsForLineAsync) are wired to two separate,
-                // independently-cheap operations now, instead of both funneling through one
+                // independently-cheap operations, rather than both funneling through one
                 // whole-document walk. The tagger only ever touches the symbol tree; only the
                 // per-line path calls reqnroll/resolveTestTargets, and only for the one line asked
                 // for. This cache still shares one computation across concurrent callers for the
                 // *same* (file, line) — e.g. the tagger's own placement fetch and a data point
-                // racing each other during startup — without reintroducing the old N+1-per-file cost
+                // racing each other during startup — without an N+1-per-file cost
                 // (live report, 2026-08-26: whole-document walks on a 2,000+ scenario file hit VS's
                 // own ~26s CodeLens timeout and never resolved).
                 _runTestCodeLensResultCache = new RunTestCodeLensResultCache(
@@ -316,10 +316,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 _stepCodeLensState.FindUsagesRenderer = _findStepUsagesState.Renderer;
 
                 // Reuse the same FAR-window renderer for Go To Hooks: several applicable hooks are
-                // shown there instead of the NavigationPickerDialog modal popup (issue #315).
+                // shown there instead of the NavigationPickerDialog modal popup.
                 _goToHooksState.Renderer = _findStepUsagesState.Renderer;
 
-                // Go To Definition in a .feature file (issue #757): the VSSDK command filter takes the
+                // Go To Definition in a .feature file: the VSSDK command filter takes the
                 // command over so several matching step definitions open the Find All References
                 // window titled after the step, not VS's "'{word}' declarations". Wired here, after
                 // the step-definitions renderer it shares with Find Unused Step Definitions exists.
@@ -332,18 +332,18 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 GoToDefinitionRedirect.GoToDefinitionAsync = _goToStepDefinitionPresenter.GoToDefinitionAsync;
                 GoToDefinitionRedirect.HasNavigableDefinitionAsync = _goToStepDefinitionPresenter.HasNavigableDefinitionAsync;
 
-                // Clickable tags (issue #755): VS's LSP client never sends textDocument/documentLink, so the
+                // Clickable tags: VS's LSP client never sends textDocument/documentLink, so the
                 // Ctrl+Click navigable-symbol provider asks for the links through this bridge.
                 _documentLinkService = new DocumentLinkService(interceptingPipe, _loggerFactory.CreateLogger<DocumentLinkService>());
                 TagLinkRedirect.GetLinksAsync = _documentLinkService.GetLinksAsync;
                 TagLinkRedirect.LinkOpened = () => _connectionService.TelemetryTransmitter?.TransmitEvent(TagLinkTelemetry.CreateEvent());
 
-                // VS.Extensibility can call this method more than once per session (issue #156):
+                // VS.Extensibility can call this method more than once per session:
                 // a second activation must not leave the first ProjectMonitor's DTE event
                 // subscriptions (SolutionEvents/BuildEvents/WindowEvents/
                 // IVsTrackProjectDocumentsEvents2) live alongside the new one — that would double
                 // every subsequent notification to the server and leak the abandoned instance's
-                // COM event-sink references for the rest of the VS session (issue #320). Dispose()
+                // COM event-sink references for the rest of the VS session. Dispose()
                 // is idempotent/UI-thread-safe, so this is a no-op on the first (normal) call.
                 _connectionService.ProjectMonitor?.Dispose();
 

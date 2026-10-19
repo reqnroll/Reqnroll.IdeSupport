@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 
 /// <summary>
 /// Container-registered singleton holder for the runtime-created "Go to Matching Scenarios"
-/// service (issue #373) — the inverse of <see cref="FindHooks.FindHooksState"/>.
+/// service — the inverse of <see cref="FindHooks.FindHooksState"/>.
 /// </summary>
 /// <remarks>
 /// <see cref="FindMatchingScenariosService"/> depends on <c>LspInterceptingPipe</c>, which only

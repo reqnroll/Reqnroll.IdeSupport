@@ -38,7 +38,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 /// projects and full builds. Without <see cref="IVsTrackProjectDocumentsEvents2"/>, a rename
 /// left the server's file-membership index (<c>reqnroll/projectFiles</c>) pointing at the old
 /// path until the next full build or solution reload, so the renamed file appeared unowned
-/// (no diagnostics, no step rename) in the meantime (issue #32).
+/// (no diagnostics, no step rename) in the meantime.
 /// </remarks>
 internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocumentsEvents2
 {
@@ -63,11 +63,11 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
 
     // Resolved lazily (not in the constructor) since MEF composition may not be ready yet at
     // construction time; cached thereafter. Used only for the MonitorOpenFeatureFile telemetry
-    // signal and for evicting its cached project scopes on project removal/solution close (#1030) —
+    // signal and for evicting its cached project scopes on project removal/solution close —
     // every other responsibility in this class talks to DTE/the LSP pipe directly.
     private IVsIdeScope? _ideScope;
 
-    // Issue #690: subscribed lazily, on first need (a projectLoaded baseline that went out with
+    // Subscribed lazily, on first need (a projectLoaded baseline that went out with
     // NuGet reporting ProjectNotReady), not in the constructor — most sessions never hit that path
     // (NuGet is already ready by the time the solution finishes loading), so there is no reason to
     // pay for MEF resolution and an event subscription that will never fire. Once subscribed, it
@@ -138,7 +138,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             return;
 
         // Materialised before the first await: the enumeration walks DTE on the UI thread, and the
-        // awaits below can resume elsewhere (issue #729).
+        // awaits below can resume elsewhere.
         var projects = VsUtils.GetAllProjects(solution).ToList();
 
         foreach (var project in projects)
@@ -192,12 +192,12 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         }
     }
 
-    // ── Document activation notification (issue #85) ──────────────────────────
+    // ── Document activation notification ──────────────────────────
 
     /// <summary>
     /// Sends <c>reqnroll/documentActivated</c> for a <c>.feature</c> file the user just switched
     /// to, so the server recomputes and republishes diagnostics/semantic tokens for it
-    /// independent of whatever originally left it stale (see the #85 design discussion / #78).
+    /// independent of whatever originally left it stale.
     /// </summary>
     public Task SendDocumentActivatedAsync(string filePath, CancellationToken ct)
     {
@@ -266,7 +266,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
     /// <summary>
     /// Best-effort eviction of <see cref="VsIdeScope"/>'s cached project scopes, so a project that is
     /// unloaded/removed and later reloaded under the same path gets a fresh scope instead of one still
-    /// holding the old DTE <see cref="Project"/> (issue #1030). Never allowed to break the event.
+    /// holding the old DTE <see cref="Project"/>. Never allowed to break the event.
     /// </summary>
     private void RemoveCachedProjectScopes(Action<VsIdeScope> remove)
     {
@@ -292,10 +292,9 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
 
         // Logged unconditionally, synchronously, before the UI-thread hop below — so the log
         // proves whether DTE ever raises this event at all for a given window, independent of
-        // whatever the activation-state machine later decides to do with it (issue #85
-        // debugging: a prior run showed zero reqnroll/documentActivated sends despite the tabs'
-        // views clearly having been created, and there was no log evidence to say whether
-        // WindowActivated simply never fired or fired and no-op'd).
+        // whatever the activation-state machine later decides to do with it
+        // (without this line, zero reqnroll/documentActivated sends despite the tabs' views being
+        // created could not be attributed to WindowActivated never firing versus firing and no-op'ing).
         _logger.LogDebug(
             "VsProjectEventMonitor: WindowActivated fired, gotFocus.Caption={Caption}, document={DocumentPath}",
             TryGetCaption(gotFocus), TryGetDocumentPath(gotFocus));
@@ -322,8 +321,8 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
 
         // Telemetry: fires exactly once per open-lifetime (SendNow only, guarded by the phase
         // machine above), matching "feature file opened" semantics rather than "activated" —
-        // issue #255's gap analysis found MonitorOpenFeatureFile's implementation real but
-        // uncalled anywhere; this is that signal's natural (and previously missing) trigger point.
+        // MonitorOpenFeatureFile is implemented but called nowhere else; this is that signal's
+        // natural trigger point.
         MonitorFeatureFileOpened(filePath);
 
         await SendDocumentActivatedAsync(filePath, ct).ConfigureAwait(false);
@@ -381,7 +380,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         }
     }
 
-    // ── NuGet restore-finished resend (issue #690) ──────────────────────────────
+    // ── NuGet restore-finished resend ──────────────────────────────
 
     /// <summary>
     /// Resolves <see cref="IVsNuGetProjectUpdateEvents"/> via MEF (once) and subscribes to its
@@ -393,7 +392,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
     private void EnsureNuGetRestoreResendSubscription()
     {
         // Latched before the thread assert: if this is ever reached off the UI thread the throw
-        // must not leave the flag clear, or every subsequent project repeats the failure (#730).
+        // must not leave the flag clear, or every subsequent project repeats the failure.
         if (_nugetRestoreResendSubscriptionAttempted)
             return;
         _nugetRestoreResendSubscriptionAttempted = true;
@@ -442,14 +441,14 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectLoaded for {ProjectName}", project.Name);
 
-            // NuGet wasn't ready yet (issue #690) — this baseline's packageReferences is an empty
+            // NuGet wasn't ready yet — this baseline's packageReferences is an empty
             // placeholder, not a real "no Reqnroll package" answer. Subscribe (once) to NuGet's own
             // restore-finished signal so the real package list gets sent once it's known, instead of
             // leaving the project misclassified until the next build or solution reload.
             if (!payload.PackageReferencesReady)
             {
                 // The send above used ConfigureAwait(false), so this continuation is no longer on
-                // the UI thread; EnsureNuGetRestoreResendSubscription is UI-affine (issue #730).
+                // the UI thread; EnsureNuGetRestoreResendSubscription is UI-affine.
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(ct);
                 EnsureNuGetRestoreResendSubscription();
             }

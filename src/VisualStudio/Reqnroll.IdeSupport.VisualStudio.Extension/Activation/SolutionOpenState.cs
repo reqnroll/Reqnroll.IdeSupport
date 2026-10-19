@@ -10,10 +10,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 /// Reads whether the solution is open.
 /// </summary>
 /// <remarks>
-/// Issue #774: this used to read property <c>0x0000000B</c>, which is not a valid <see cref="__VSPROPID"/>.
-/// Every call failed, so the package's solution-load wait always ran to its limit (~10 s), delaying
-/// "Solution loaded" and everything gated on it (MTP stubs, the Welcome dialog, and the #533
-/// scratch-file activation trigger's grace period).
+/// Reads a valid <see cref="__VSPROPID"/> value. Reading an invalid property (such as
+/// <c>0x0000000B</c>) makes every call fail, so the package's solution-load wait would always run
+/// to its limit (~10 s), delaying "Solution loaded" and everything gated on it (MTP stubs, the
+/// Welcome dialog, and the scratch-file activation trigger's grace period).
 /// </remarks>
 internal static class SolutionOpenState
 {

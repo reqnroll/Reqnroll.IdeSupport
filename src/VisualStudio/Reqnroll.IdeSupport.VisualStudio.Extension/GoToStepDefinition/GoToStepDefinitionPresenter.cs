@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 
 /// <summary>
 /// Runs Go To Definition for a <c>.feature</c> caret position on behalf of
-/// <c>GoToDefinitionCommandFilter</c> (issue #757): no definition → status-bar message, one →
+/// <c>GoToDefinitionCommandFilter</c>: no definition → status-bar message, one →
 /// navigate straight to it, several → the Find All References window titled after the step
 /// (<see cref="StepDefinitionsWindowTitle"/>) instead of VS's <c>'{word}' declarations</c>, listing
 /// each binding as <c>Class.Method · expression</c>.
@@ -29,7 +29,7 @@ internal sealed class GoToStepDefinitionPresenter
     /// <summary>
     /// Creates the presenter over the definition service and the shared step-definitions renderer.
     /// <paramref name="goToDefinitionRun"/> is called with the navigable row count each time the user runs
-    /// Go To Definition (issue #898); the extension turns it into the "GoToStepDefinition command executed" event.
+    /// Go To Definition; the extension turns it into the "GoToStepDefinition command executed" event.
     /// </summary>
     public GoToStepDefinitionPresenter(
         FindStepDefinitionsService service,
@@ -45,7 +45,7 @@ internal sealed class GoToStepDefinitionPresenter
         _logger           = logger;
     }
 
-    /// <summary>Matches <c>GoToDefinitionRedirect.HasNavigableDefinitionAsync</c> (issue #898).</summary>
+    /// <summary>Matches <c>GoToDefinitionRedirect.HasNavigableDefinitionAsync</c>.</summary>
     public Task<bool> HasNavigableDefinitionAsync(
         string fileUri, int line0, int char0, CancellationToken cancellationToken) =>
         _service.HasNavigableDefinitionAsync(fileUri, line0, char0, cancellationToken);
@@ -70,7 +70,7 @@ internal sealed class GoToStepDefinitionPresenter
         }
         catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
         {
-            // Issue #1020: a failed lookup is not "no step definition found".
+            // A failed lookup is not "no step definition found".
             _logger.LogWarning(
                 "GoToStepDefinitionPresenter: lookup failed at {FileUri}:{Line0}:{Char0}: {Reason}", fileUri, line0, char0, reason);
             await ShowStatusAsync($"Reqnroll: Go to Step Definition failed - {reason}.", cancellationToken);
@@ -92,7 +92,7 @@ internal sealed class GoToStepDefinitionPresenter
             var item = items[0];
             if (!item.IsResolved || item.SourceFile is not { Length: > 0 })
             {
-                // Same wording as the unresolved row in the Find Unused Step Definitions list (issue #540).
+                // Same wording as the unresolved row in the Find Unused Step Definitions list.
                 _logger.LogInformation(
                     "GoToStepDefinitionPresenter: {ClassName}.{MethodName} has no local source (recorded at {RecordedSourceFile}).",
                     item.ClassName, item.MethodName, item.RecordedSourceFile);

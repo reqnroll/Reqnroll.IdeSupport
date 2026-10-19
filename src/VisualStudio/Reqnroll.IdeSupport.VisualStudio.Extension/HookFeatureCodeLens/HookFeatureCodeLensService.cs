@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 /// <summary>
 /// Sends a <c>textDocument/codeLens</c> request for a <c>.feature</c> file and maps the result to
 /// <see cref="HookFeatureLensEntry"/> records (the classic-CodeLens hook-match-count bridge for
-/// Visual Studio — issue #372, unblocking #269). Mirrors <c>StepCodeLensService</c>'s fetch shape,
+/// Visual Studio). Mirrors <c>StepCodeLensService</c>'s fetch shape,
 /// but parses the richer <c>[uri, line, char, ownLevelOnly, alwaysShowPicker?]</c> argument list
 /// <c>HookCodeLensHandler</c> emits, rather than <c>StepCodeLensService</c>'s <c>.cs</c>-attribute
 /// shape.

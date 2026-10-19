@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 
 /// <summary>
 /// Builds the Find All References window title shown when Go To Definition on a step finds several
-/// step definitions (issue #757), e.g. <c>Reqnroll: 2 step definitions for 'Given the first number is 50'</c>.
+/// step definitions, e.g. <c>Reqnroll: 2 step definitions for 'Given the first number is 50'</c>.
 /// </summary>
 /// <remarks>
 /// Replaces VS's own <c>'{word}' declarations</c> title, which names only the word under the caret.

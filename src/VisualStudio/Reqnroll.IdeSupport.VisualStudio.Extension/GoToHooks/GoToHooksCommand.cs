@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 /// <remarks>
 /// When invoked, queries the LSP server for hook bindings applicable at the caret position.
 /// A single result navigates directly. Several results are shown in the Find All References
-/// window (issue #315) instead of the <see cref="NavigationPickerHelper"/>'s modal picker —
+/// window instead of the <see cref="NavigationPickerHelper"/>'s modal picker —
 /// consistent with the other Go To Hooks entry points (code lens click, scenario-title context
 /// menu) and with Go To Definition's ambiguous-step handling
 /// (<c>GoToStepDefinitionPresenter</c>), both of which already use the FAR window for this case.
@@ -76,7 +76,7 @@ internal sealed class GoToHooksCommand : Command
 
             // A genuine navigation, as opposed to the classic CodeLens's Details-popup prefetch
             // (which never runs through this command) — emit here, not from the server's
-            // reqnroll/findHooks handler, which cannot tell the two apart (issue #698).
+            // reqnroll/findHooks handler, which cannot tell the two apart.
             _connectionService.TelemetryTransmitter?.TransmitEvent(
                 GoToHookTelemetry.CreateEvent(GoToHookSources.ContextMenu));
 
@@ -121,7 +121,7 @@ internal sealed class GoToHooksCommand : Command
             }
 
             // Several applicable hooks: show them in the Find All References window rather than
-            // NavigationPickerHelper's NavigationPickerDialog modal popup (issue #315).
+            // NavigationPickerHelper's NavigationPickerDialog modal popup.
             var renderer = _state.Renderer;
             if (renderer is null)
             {
@@ -140,7 +140,7 @@ internal sealed class GoToHooksCommand : Command
         }
         catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
         {
-            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            // Say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("GoToHooksCommand: request failed: {Reason}", reason);
             await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Go to Hooks failed - {reason}.");
         }
@@ -171,13 +171,13 @@ internal sealed class GoToHooksCommand : Command
 }
 
 /// <summary>
-/// Builds the client-originated "GoToHook command executed" event (issue #861). Kept on a plain
+/// Builds the client-originated "GoToHook command executed" event. Kept on a plain
 /// static class for the same unit-testability reason as <see cref="HookLocationsMapper"/>.
 /// </summary>
 /// <remarks>
 /// The command's only placement is the editor context menu, so every invocation reports
 /// <see cref="GoToHookSources.ContextMenu"/>. The classic CodeLens click path does not run through
-/// the command and (issue #698) cannot be told apart from the Details-popup prefetch, so it emits
+/// the command and cannot be told apart from the Details-popup prefetch, so it emits
 /// nothing; a keyboard binding the user assigns to the command is indistinguishable from the menu.
 /// </remarks>
 internal static class GoToHookTelemetry
@@ -190,7 +190,7 @@ internal static class GoToHookTelemetry
 /// <summary>
 /// Maps applicable hooks onto <see cref="StepUsageLocation"/>, the Find All References window's
 /// row type from Find Step Definition Usages — the same pipeline <c>HookMatchCountCodeLens</c>
-/// already reuses for matching scenarios (issue #315). <c>StepText</c> is supplied explicitly so
+/// already reuses for matching scenarios. <c>StepText</c> is supplied explicitly so
 /// the Code column shows the hook's type and method name instead of falling back to reading the
 /// source line from disk.
 /// </summary>

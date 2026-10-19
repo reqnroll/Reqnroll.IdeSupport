@@ -20,8 +20,8 @@ internal sealed class FindHooksState
 
     /// <summary>
     /// Find Step Definition Usages renderer, reused so several applicable hooks are shown in the
-    /// Find All References window instead of the <c>NavigationPickerDialog</c> modal popup (issue
-    /// #315). Set once the server has initialised; null before that and after dispose.
+    /// Find All References window instead of the <c>NavigationPickerDialog</c> modal popup.
+    /// Set once the server has initialised; null before that and after dispose.
     /// </summary>
     public FindStepUsagesRenderer? Renderer { get; set; }
 }

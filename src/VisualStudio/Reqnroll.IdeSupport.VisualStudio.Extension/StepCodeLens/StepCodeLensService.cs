@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// method-level <c>CodeElement</c> in the active document (<see cref="StepCodeLens"/> and the
 /// separate <c>HookMatchCountCodeLens</c> provider both go through it), all requesting the same
 /// whole-document response — the internal cache amortises that down to one actual LSP round trip
-/// per file per paint cycle (issue #552 follow-up), shared by every concurrent caller for that
+/// per file per paint cycle, shared by every concurrent caller for that
 /// file rather than each starting its own. Cleared via
 /// <see cref="InvalidateFile"/>/<see cref="InvalidateAll"/> whenever
 /// <see cref="StepCodeLensState"/> invalidates the lenses that would otherwise keep showing the
@@ -66,7 +66,7 @@ internal sealed class StepCodeLensService
             .SendRequestAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        // Issue #1017: this result is cached per file until invalidated, so a failed request (server
+        // This result is cached per file until invalidated, so a failed request (server
         // error incl. ContentModified, timeout, terminated server, cancellation) must fault rather
         // than read as "no lenses": a faulted entry is retried by the next caller, an empty one is served.
         if (!outcome.Succeeded)
