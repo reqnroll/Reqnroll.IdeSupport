@@ -52,8 +52,8 @@ public static class ReqnrollClassificationTypeNames
 
     /// <summary>
     /// Step text of a step with no matching binding.  Only carries meaning once Roslyn/C#
-    /// source-level binding discovery is available; reserved in the legend from Phase 1 so the legend never
-    /// changes across phases.
+    /// source-level binding discovery is available; reserved in the legend up front so the legend never
+    /// changes when that discovery becomes available.
     /// </summary>
     public const string UndefinedStep = "reqnroll.undefined_step";
 

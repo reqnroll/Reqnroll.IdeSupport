@@ -6,13 +6,8 @@ using System.Text;
 namespace Reqnroll.IdeSupport.Common.Logging;
 
 /// <summary>
-/// Appends log messages to a per-process file, synchronously on the calling thread. Historically
-/// this was one of two logger implementations (the other, <c>AsynchronousFileLogger</c>, queued
-/// messages through a <c>Channel</c> drained by a background worker) ported over from the legacy
-/// Reqnroll.VisualStudio extension. In practice every real call site — the VS extension, the LSP
-/// server, and the protocol logger — always used this synchronous one; the async variant was never
-/// actually instantiated outside its own tests. Rather than keep an unused second implementation
-/// "just in case," it's been folded away: async logging risks losing exactly the last messages
+/// Appends log messages to a per-process file, synchronously on the calling thread. There is
+/// deliberately no queued variant (messages drained by a background worker): async logging risks losing exactly the last messages
 /// before an unclean shutdown (the process getting killed rather than cleanly disposed never drains
 /// whatever's still queued), which matters more for a debug/crash log than the throughput this class
 /// gives up by writing on the calling thread. <see cref="WriteLogMessage"/>'s file append is guarded
@@ -71,8 +66,7 @@ public class SynchronousFileLogger : IIdeSupportLogger
     {
         // PID is included so that concurrent instances (e.g. two VS windows, each with its own
         // extension host and LSP server process) never append to the same log file. The date is
-        // always the UTC date (previously DEBUG builds used UtcNow but RELEASE builds used the
-        // local date, so the daily rollover boundary silently differed between configurations).
+        // always the UTC date in every configuration, so the daily rollover boundary is the same in DEBUG and RELEASE.
         var pid = Process.GetCurrentProcess().Id;
         return Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(),
 #if DEBUG
