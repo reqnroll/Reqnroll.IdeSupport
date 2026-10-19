@@ -24,7 +24,7 @@ public class TextDocumentSyncHandlerTests
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
     // Real implementation, not a mock: Handle now schedules its parse/discovery work through this
-    // instead of awaiting it inline (issue #471), so tests need the scheduled work to actually run.
+    // instead of awaiting it inline, so tests need the scheduled work to actually run.
     private readonly IParseCoordinator _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
@@ -68,7 +68,7 @@ public class TextDocumentSyncHandlerTests
         // FeatureDocumentReparserTests); the handler only needs to schedule the call correctly.
 
         // Handle schedules the parse/publish through IParseCoordinator instead of awaiting
-        // it inline (issue #471) — wait for that scheduled work before asserting its effects.
+        // it inline — wait for that scheduled work before asserting its effects.
         await WaitForScheduledWorkAsync(FeatureUri);
         await _reparser.Received(1).ReparseOpenDocumentAsync(FeatureUri, 3, Arg.Any<CancellationToken>());
     }
@@ -264,7 +264,7 @@ public class TextDocumentSyncHandlerTests
         // Closing a .cs file must not invalidate feature match state; bindings are retained until rebuild.
         _bindingMatchService.DidNotReceiveWithAnyArgs().InvalidateAllForDocument(default!);
         await _taggerService.DidNotReceiveWithAnyArgs().RescanClosedFileAsync(default!);
-        // Issue #514: the server clears any binding-validation diagnostics it pushed for the
+        // The server clears any binding-validation diagnostics it pushed for the
         // file, the same clear-on-close convention used for .feature files.
         _languageServer.Received(1).SendNotification(
             "textDocument/publishDiagnostics",

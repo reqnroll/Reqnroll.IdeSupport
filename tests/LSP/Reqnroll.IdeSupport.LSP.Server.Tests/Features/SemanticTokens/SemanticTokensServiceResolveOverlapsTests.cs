@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.SemanticTokens;
 
 /// <summary>
 /// Unit tests for <see cref="SemanticTokensService.ResolveOverlaps"/>, the token-overlap-splitting
-/// algorithm underlying <c>Encode</c> (issue #279) -- exercised directly against synthetic
+/// algorithm underlying <c>Encode</c> -- exercised directly against synthetic
 /// (Line, Char, Length, TypeIdx, ModBits) tuples rather than through Gherkin tag collection, so
 /// boundary cases in the interval math can be verified in isolation.
 /// </summary>

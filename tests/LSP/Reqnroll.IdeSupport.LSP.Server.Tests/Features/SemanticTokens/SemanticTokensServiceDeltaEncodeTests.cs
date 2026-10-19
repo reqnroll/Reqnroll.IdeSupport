@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.SemanticTokens;
 
 /// <summary>
 /// Unit tests for <see cref="SemanticTokensService.DeltaEncode"/>, the delta-encoding arithmetic
-/// underlying <c>Encode</c> (issue #593) -- exercised directly against an already-ordered list of
+/// underlying <c>Encode</c> -- exercised directly against an already-ordered list of
 /// synthetic (Line, Char, Length, TypeIdx, ModBits) tuples, mirroring
 /// <see cref="SemanticTokenServiceResolveOverlapsTests"/>'s approach for the neighboring
 /// overlap-resolution phase, so the delta math can be verified without a full parse.

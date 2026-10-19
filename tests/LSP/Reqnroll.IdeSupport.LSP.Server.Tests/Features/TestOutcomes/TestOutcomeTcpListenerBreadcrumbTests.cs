@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
 /// <summary>
-/// Phase 1 exit criterion for the MTP test-outcome plan (issue #715): a real
+/// Phase 1 exit criterion for the MTP test-outcome plan: a real
 /// <see cref="TestOutcomeTcpListener"/> bind/dispose cycle, wired to a real
 /// <see cref="TestOutcomeSessionBreadcrumb"/>, produces a correctly-shaped breadcrumb file on bind and
 /// removes it on clean shutdown. <see cref="TestOutcomeSessionBreadcrumbTests"/> (LSP.Core.Tests)

@@ -371,7 +371,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         }).Should().Throw<SocketException>();
     }
 
-    // ── Issue #722: telemetry + perf instrumentation ────────────────────────────────────────
+    // ── Telemetry + perf instrumentation ────────────────────────────────────────
 
     [Fact]
     public async Task RunComplete_sends_the_TestOutcomesRunCompleted_telemetry_event_with_counts_and_VSTestLogger_reporterKind()

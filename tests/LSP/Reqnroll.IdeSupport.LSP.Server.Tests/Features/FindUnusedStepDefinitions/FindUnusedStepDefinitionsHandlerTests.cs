@@ -45,7 +45,7 @@ public class FindUnusedStepDefinitionsHandlerTests
 
         await CreateSut().HandleAsync(CancellationToken.None);
 
-        // ProjectFolder is derived from Owner.ProjectFile's directory (issue #547's ownership
+        // ProjectFolder is derived from Owner.ProjectFile's directory (ownership
         // attribution needs the project's own folder, not just its name/registry).
         _service.Received(1).FindUnusedStepDefinitions(
             Arg.Is<IReadOnlyList<(string ProjectName, string ProjectFolder, ProjectBindingRegistry Registry)>>(
@@ -89,7 +89,7 @@ public class FindUnusedStepDefinitionsHandlerTests
     [Fact]
     public async Task HandleAsync_maps_an_unresolved_source_path_onto_the_wire_item()
     {
-        // The wire contract for issue #540: a binding whose source is not on this machine travels
+        // The wire contract: a binding whose source is not on this machine travels
         // with no sourceFile (so a client that only null-guards already stops navigating), plus
         // isResolved/recordedSourceFile so a client can explain it.
         SetupRegistries(("A", new ProjectOwner("/ws/A.csproj", "net8.0"),
@@ -217,9 +217,9 @@ public class FindUnusedStepDefinitionsHandlerTests
     [Fact]
     public async Task HandleAsync_reports_the_scanned_project_count_under_the_scanned_count_property()
     {
-        // Issue #942: the scanned-count property reports how many project registries the handler
+        // The scanned-count property reports how many project registries the handler
         // enumerated -- one registry per discovered project. The handler never sees feature files,
-        // so it must not claim to count them (the old ScannedFeatureFiles name did).
+        // so the property must not be named or described as counting them.
         SetupRegistries(
             ("A", new ProjectOwner("/ws/A/A.csproj", "net8.0"),
                 ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())),
@@ -239,8 +239,8 @@ public class FindUnusedStepDefinitionsHandlerTests
     [Fact]
     public async Task HandleAsync_reports_the_real_cancellation_state()
     {
-        // Issue #942: IsCancellationRequested used to be hard-coded false, so a cancelled request was
-        // indistinguishable from a completed one; it must reflect the token the handler was given.
+        // IsCancellationRequested must reflect the token the handler was given; a constant false
+        // would make a cancelled request indistinguishable from a completed one.
         SetupRegistries(("A", new ProjectOwner("/ws/A/A.csproj", "net8.0"),
             ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
         _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())

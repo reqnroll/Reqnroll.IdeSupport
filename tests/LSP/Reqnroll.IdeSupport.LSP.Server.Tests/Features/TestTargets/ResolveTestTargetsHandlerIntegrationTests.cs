@@ -21,15 +21,15 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestTargets;
 /// rather than the mocked <c>IScenarioTestTargetResolver</c> the other tests in this folder use.
 /// </summary>
 /// <remarks>
-/// Regression coverage for a bug found live-testing issue #262: the handler built its query
-/// <c>GherkinRange</c> from a freshly-allocated <c>buffer.ToGherkinTextSnapshot()</c> instead of
-/// reusing the snapshot instance <c>buffer.Tags</c> was already anchored to.
+/// Regression guard: the handler must build its query <c>GherkinRange</c> from the snapshot
+/// instance <c>buffer.Tags</c> is anchored to, not from a freshly-allocated
+/// <c>buffer.ToGherkinTextSnapshot()</c>.
 /// <see cref="Reqnroll.IdeSupport.LSP.Core.Documents.GherkinRange.IntersectsWith"/> requires
 /// reference-equal snapshots and throws otherwise — <c>ScenarioTestTargetResolver.FindScenarioTag</c>
-/// hit that on every call, and the exception was silently swallowed by OmniSharp's request pipeline,
-/// surfacing to every client as an empty (0-target) result with no visible error. Every existing
-/// <c>ResolveTestTargetsHandlerTests</c> mocks <c>IScenarioTestTargetResolver</c> entirely, so none
-/// of them exercised the real cross-layer snapshot plumbing that this bug lived in.
+/// hit that on every call if the snapshots differ, and the exception would be silently swallowed by
+/// OmniSharp's request pipeline, surfacing to every client as an empty (0-target) result with no
+/// visible error. <c>ResolveTestTargetsHandlerTests</c> mocks <c>IScenarioTestTargetResolver</c>
+/// entirely, so only this class exercises the real cross-layer snapshot plumbing.
 /// </remarks>
 public class ResolveTestTargetsHandlerIntegrationTests : IDisposable
 {

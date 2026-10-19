@@ -6,10 +6,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
 /// <summary>
 /// <see cref="TestOutcomePersistence.IsFresh"/> (Reqnroll.IdeSupport.LSP.Core) and
-/// <see cref="GetTestOutcomeHandler.IsStale"/> (this project) used to be two independent
-/// implementations of the same rule (one in the VS-only VSSDKIntegration project, one in the OOP
-/// callback listener) that disagreed on the "can't determine the container's write time" path. Both
-/// now go through <see cref="TestOutcomeFreshness"/> (Core), so this asserts they still agree —
+/// <see cref="GetTestOutcomeHandler.IsStale"/> (this project) must not diverge:
+/// an independent implementation of the rule in each place could disagree on the "can't determine
+/// the container's write time" path. Both go through <see cref="TestOutcomeFreshness"/> (Core), so
+/// this asserts they agree —
 /// including on that path — plus the trust-window check that keeps a store outcome from shadowing the
 /// client's own reflection bridge forever. Lives here rather than in Reqnroll.IdeSupport.LSP.Core.Tests
 /// because <see cref="GetTestOutcomeHandler"/> is this project's own type, not Core's; the pure

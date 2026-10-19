@@ -17,7 +17,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 
 /// <summary>
-/// <c>reqnroll/findStepDefinitions</c> (issue #757): the bindings of the step at the caret, with the
+/// <c>reqnroll/findStepDefinitions</c>: the bindings of the step at the caret, with the
 /// class/method/expression detail Visual Studio's results list shows. Step resolution itself is
 /// shared with <see cref="DefinitionHandler"/> and covered by <see cref="DefinitionHandlerTests"/>.
 /// </summary>
@@ -116,7 +116,7 @@ public class FindStepDefinitionsHandlerTests
     public async Task A_binding_whose_source_is_not_on_this_machine_is_reported_as_unresolved_Async()
     {
         // Unlike textDocument/definition, which drops it: the client needs the row to say why it
-        // cannot be navigated (issue #540).
+        // cannot be navigated.
         StoreStep(Binding("Steps.AStep", SourceLocation.Unresolved("/workspaces/host/Steps.cs", 10, 5), "a step"));
 
         var item = (await CreateSut().HandleAsync(RequestAt(2, 10), CancellationToken.None)).Items.Should().ContainSingle().Subject;

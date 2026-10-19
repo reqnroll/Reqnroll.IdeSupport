@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 /// pipeline refactor) so every IDE gets the same staleness/trust rules. Covers the end-to-end
 /// aged-out-vs-recent behaviour (self-caught fix during the original implementation: an aged-out entry
 /// must come back as "not found", not "stale but populated", so the client falls through to its own
-/// reflection bridge instead of a dead end) and the step-trace-to-DTO mapping (implementation plan §2).
+/// reflection bridge instead of a dead end) and the step-trace-to-DTO mapping.
 /// </summary>
 public class GetTestOutcomeHandlerTests : IDisposable
 {
@@ -106,7 +106,7 @@ public class GetTestOutcomeHandlerTests : IDisposable
     {
         var container = NewContainer();
         var store = new TestOutcomeStore();
-        var handler = new GetTestOutcomeHandler(store, _logger); // no telemetryService — issue #722's pre-existing log-only path.
+        var handler = new GetTestOutcomeHandler(store, _logger); // no telemetryService — the log-only path.
 
         var response = await handler.HandleAsync(new GetTestOutcomeParams { AssemblyPath = container, TypeFullName = Type, MethodName = null! }, CancellationToken.None);
 
