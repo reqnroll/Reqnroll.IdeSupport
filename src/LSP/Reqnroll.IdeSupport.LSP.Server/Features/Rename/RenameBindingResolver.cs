@@ -234,7 +234,7 @@ internal sealed class RenameBindingResolver
             else if (session.AttributeIndex >= 0 && session.AttributeIndex < bindingsAtLocation.Count)
             {
                 // No identity — an older client that sent no position with its selection, so the
-                // index is all there is. Same exposure as before R5.
+                // index is all there is. That index can denote a different binding if the list changed since it was chosen.
                 binding = bindingsAtLocation[session.AttributeIndex];
                 _logger.LogVerbose($"RenameBindingResolver: resolved binding via session index: '{binding?.Expression}'");
             }

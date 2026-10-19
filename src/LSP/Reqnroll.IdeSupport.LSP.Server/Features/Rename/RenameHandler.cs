@@ -543,7 +543,7 @@ public sealed class RenameHandler
     /// </para>
     /// <para>
     /// The buffer's version is trustworthy here because <c>textDocument/rename</c> is dispatched on
-    /// the Serial lane (R8): any <c>didChange</c> the client has already sent is processed before
+    /// the Serial lane: any <c>didChange</c> the client has already sent is processed before
     /// this runs, so the version recorded here is the one the edit's offsets were computed against.
     /// </para>
     /// </remarks>

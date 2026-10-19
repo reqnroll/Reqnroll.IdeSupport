@@ -37,8 +37,8 @@ public sealed class SelectRenameTargetParams
     /// <c>RenameBindingIdentity</c>).
     /// </summary>
     /// <remarks>
-    /// Optional: a client that omits it leaves the server with only the index, which is the
-    /// pre-R5 behaviour rather than a failure.
+    /// Optional: a client that omits it leaves the server with only the index and falls back to
+    /// resolving by index alone rather than failing.
     /// </remarks>
     [JsonProperty("position")]
     public Position? Position { get; set; }
