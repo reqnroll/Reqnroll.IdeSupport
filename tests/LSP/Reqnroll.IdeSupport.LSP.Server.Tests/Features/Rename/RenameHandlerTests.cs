@@ -48,7 +48,7 @@ public class StepRenameHandlerTests
                      .Returns(System.Array.Empty<StepBindingMatch>());
 
         // The client defaults to non-VS (ClientIdeContext with ide: null), so the
-        // workspace/applyEdit push (VS-only, see #82) is not exercised unless a test
+        // workspace/applyEdit push (VS-only) is not exercised unless a test
         // opts in via CreateSutForVisualStudio.
         var fakeReturns = Substitute.For<IResponseRouterReturns>();
         fakeReturns.Returning<ApplyWorkspaceEditResponse>(Arg.Any<CancellationToken>())
@@ -69,7 +69,7 @@ public class StepRenameHandlerTests
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
             _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, telemetry);
 
-    // reqnroll/renameTargets (issue #139) is handled by the separate RenameTargetsHandler class;
+    // reqnroll/renameTargets is handled by the separate RenameTargetsHandler class;
     // it shares no session state with RenameHandler, so a freshly-composed instance over the
     // same substitute fields is equivalent to whatever DI would wire up.
     private RenameTargetsHandler CreateTargetsSut() =>
@@ -106,7 +106,7 @@ public class StepRenameHandlerTests
             });
     }
 
-    // ── Change-annotation negotiation (issue #70) ───────────────────────────────
+    // ── Change-annotation negotiation ───────────────────────────────
     // By default _languageServer.ClientSettings is unstubbed (null), which HandleRenameAsync
     // treats as "no annotation support" — the existing tests above exercise that fallback
     // path implicitly. Call this to opt a test into the annotated DocumentChanges shape.
@@ -156,7 +156,7 @@ public class StepRenameHandlerTests
 
     /// <summary>
     /// Reports back that the client applied (or discarded) the edit — which is what commits or
-    /// drops the cache updates the rename staged (issue #671, R3). Nothing reaches the binding
+    /// drops the cache updates the rename staged. Nothing reaches the binding
     /// registry or match cache until this arrives.
     /// </summary>
     private static Task ConfirmAppliedAsync(RenameHandler sut, DocumentUri uri, bool applied = true) =>
@@ -166,7 +166,7 @@ public class StepRenameHandlerTests
     /// <summary>
     /// Retries <paramref name="assertion"/> until it passes or <paramref name="timeoutMs"/> elapses.
     /// Needed only for Visual Studio's <c>workspace/applyEdit</c> push, which is deliberately
-    /// fire-and-forget so the rename response is sent first (issue #671, R1).
+    /// fire-and-forget so the rename response is sent first.
     /// </summary>
     private static async Task EventuallyAsync(Action assertion, int timeoutMs = 5000)
     {
@@ -226,12 +226,12 @@ public class StepRenameHandlerTests
         edits[0].NewText.Should().Be("\"the renamed number is {int}\"");
         edits[0].Range.Start.Line.Should().Be(6, "the attribute literal lives on 0-based line 6");
     }
-    // ── Issue #935: the attribute literal must be re-emitted in its ORIGINAL form — a
+    // ── The attribute literal must be re-emitted in its ORIGINAL form — a
     //    verbatim @"…" literal keeps its @ prefix (embedded quotes doubled), a regular
     //    literal re-escapes backslashes and quotes — and the edited source must still be
-    //    valid C#. The old code emitted a bare "…" over the token's full span, which
-    //    dropped the @ prefix (invalid escape: compile error) and emitted escaped quotes
-    //    unescaped (corrupting literals like "click \"OK\""). ──────────────────────────
+    //    valid C#. Emitting a bare "…" over the token's full span would drop the @ prefix
+    //    (invalid escape: compile error) and emit escaped quotes unescaped (corrupting
+    //    literals like "click \"OK\""). ──────────────────────────
 
     private static string ApplyRenameEditToLiteral(string csText, string editNewText)
     {
@@ -257,7 +257,7 @@ public class StepRenameHandlerTests
     {
         // A verbatim literal is the idiomatic way to write a regex binding; dropping its
         // @ prefix turned @"I have (\d+) cukes" into "I have (\d+) cukes" — an
-        // unrecognized escape sequence and a compile error (issue #935).
+        // unrecognized escape sequence and a compile error.
         const string csText =
             "using Reqnroll;\n" +
             "namespace N\n" +
@@ -297,7 +297,7 @@ public class StepRenameHandlerTests
     public async Task Rename_reescapes_embedded_quotes_in_a_verbatim_attribute_literal()
     {
         // Embedded quotes are doubled inside verbatim literals; the renamed expression must
-        // be re-doubled on the way out, not emitted raw (issue #935).
+        // be re-doubled on the way out, not emitted raw.
         const string csText =
             "using Reqnroll;\n" +
             "namespace N\n" +
@@ -337,7 +337,7 @@ public class StepRenameHandlerTests
     public async Task Rename_reescapes_backslashes_in_a_regular_attribute_literal()
     {
         // A regular (non-verbatim) literal's backslashes must be re-escaped on the way out;
-        // emitting the raw ValueText left "(\d+)" as "(\d+)" — invalid escape (issue #935).
+        // emitting the raw ValueText left "(\d+)" as "(\d+)" — invalid escape.
         const string csText =
             "using Reqnroll;\n" +
             "namespace N\n" +
@@ -376,8 +376,8 @@ public class StepRenameHandlerTests
     [Fact]
     public async Task Rename_reescapes_escaped_quotes_in_a_regular_attribute_literal()
     {
-        // \" inside a regular literal must come back as \" — the old code emitted the
-        // unescaped ValueText, producing "click "OK"" and a broken token (issue #935).
+        // \" inside a regular literal must come back as \" — emitting the
+        // unescaped ValueText would produce "click "OK"" and a broken token.
         const string csText =
             "using Reqnroll;\n" +
             "namespace N\n" +
@@ -413,12 +413,11 @@ public class StepRenameHandlerTests
         valueText.Should().Be("click \"CANCEL\" to confirm");
     }
 
-    // ── Regression (issue #170's sibling bug, found while fixing the rename-targets picker):
-    //    CSharpAttributeLiteralResolver used to pick the "nearest candidate method" purely by
-    //    Math.Abs(line distance) to the registry's (possibly stale) recorded method line, with no
-    //    way to distinguish two different same-type step methods declared close together. A
-    //    binding's AttributeSourceLine — the AST-derived exact attribute line already used
-    //    elsewhere (ProjectBindingRegistry.CoversQuery, RenameBindingResolver) — must now be
+    // ── Regression guard: picking the "nearest candidate method" purely by
+    //    Math.Abs(line distance) to the registry's (possibly stale) recorded method line cannot
+    //    distinguish two different same-type step methods declared close together. A
+    //    binding's AttributeSourceLine — the AST-derived exact attribute line also used
+    //    elsewhere (ProjectBindingRegistry.CoversQuery, RenameBindingResolver) — must be
     //    matched exactly first, so the correct attribute is edited even when the recorded method
     //    line has drifted and would otherwise point the "nearest" search at the wrong method. ──
 
@@ -465,7 +464,7 @@ public class StepRenameHandlerTests
             "the SECOND method's attribute literal, not the nearer-by-line first method's");
     }
 
-    // ── Issue #82: the server self-refreshes the C# binding registry for the edited .cs file
+    // ── The server self-refreshes the C# binding registry for the edited .cs file
     //    directly (no round-trip through a client didChange notification), and pushes a
     //    workspace/applyEdit request only when talking to VS — the client whose custom
     //    interception pipe swallows the textDocument/rename response before VS's built-in LSP
@@ -504,7 +503,7 @@ public class StepRenameHandlerTests
         result.Should().NotBeNull();
 
         // Staged, not committed: until the client says it applied the edit, the registry must
-        // still describe the pre-rename source (issue #671, R3 — the #670 corruption).
+        // still describe the pre-rename source (a premature commit would corrupt the registry if the edit is then discarded).
         await _csharpDiscoveryService.DidNotReceive().UpdateFromSourceAsync(
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
@@ -547,9 +546,9 @@ public class StepRenameHandlerTests
 
         result.Should().NotBeNull();
 
-        // Pushed *after* the response, not during it (issue #671, R1) — so this is eventual, not
+        // Pushed *after* the response, not during it — so this is eventual, not
         // synchronous. Pushing from inside the request is what let the edit's own didOpen cancel
-        // that request with ContentModified (issue #654).
+        // that request with ContentModified.
         await EventuallyAsync(() => _languageServer.Received(1).SendRequest(
             "workspace/applyEdit", Arg.Any<ApplyWorkspaceEditParams>()));
     }
@@ -636,8 +635,8 @@ public class StepRenameHandlerTests
             RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
             CancellationToken.None);
 
-        // The rename response is returned before the push is even sent (issue #671, R1), so a VS
-        // rejection can no longer be turned into an RpcErrorException the way issue #650 had it —
+        // The rename response is returned before the push is even sent, so a VS
+        // rejection cannot be turned into an RpcErrorException —
         // there is no in-flight request left to fail. It is logged instead, and the staged cache
         // updates are dropped, which is the part that keeps server state matching reality.
         result.Should().NotBeNull();
@@ -650,7 +649,7 @@ public class StepRenameHandlerTests
         _matchService.DidNotReceive().InvalidateAllForDocument(Arg.Any<string>());
     }
 
-    // ── Issue #650: every textDocument/rename failure path throws an RpcErrorException carrying
+    // ── Every textDocument/rename failure path throws an RpcErrorException carrying
     //    a human-readable message instead of returning null — unlike prepareRename, where null is
     //    the LSP-spec-sanctioned "not renameable here" and stays a silent no-op. ────────────────
 
@@ -797,7 +796,7 @@ public class StepRenameHandlerTests
         edits[0].Range.Start.Line.Should().Be(7, "the selected (beta) attribute literal is on 0-based line 7");
     }
 
-    // ── Issue #940: when a method carries several same-type attributes and none of them can be
+    // ── When a method carries several same-type attributes and none of them can be
     //    identified as the binding's own (a connector-discovered binding without an attribute
     //    line whose expression no longer matches the source), the rename must fail with a
     //    message instead of rewriting the method's first attribute. ─────────────────────────
@@ -836,7 +835,7 @@ public class StepRenameHandlerTests
         exception.Which.Message.Should().Contain("several");
     }
 
-    // ── Issue #671 (R5): a disambiguation session names WHICH binding was picked, so the rename
+    // ── A disambiguation session names WHICH binding was picked, so the rename
     //    finds that same binding again even if the candidate list has since been rebuilt — and
     //    refuses to guess when it is gone, rather than silently renaming a different step. ─────
 
@@ -927,7 +926,7 @@ public class StepRenameHandlerTests
     public async Task Rename_without_a_position_on_the_selection_still_resolves_by_index()
     {
         // An older client that sends no position leaves the server with only the index — the
-        // pre-R5 behaviour, which must keep working rather than failing closed.
+        // index-only behaviour, which must keep working rather than failing closed.
         SetupBuffer(TwoAttributesCsText);
         var (alpha, beta) = TwoAttributeBindings();
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
@@ -984,9 +983,9 @@ public class StepRenameHandlerTests
             "the original Cucumber {int} parameter type is preserved, not the regex (.*) the user typed");
     }
 
-    // ── Regression (issue #55): prepareRename for a .cs binding must return the string
+    // ── Regression: prepareRename for a .cs binding must return the string
     //    literal's INNER text range, excluding the surrounding quote characters. A whole-line
-    //    (or whole-token, quotes-included) range used to seed the rename dialog with the quotes
+    //    (or whole-token, quotes-included) range would seed the rename dialog with the quotes
     //    still visible; if the user left them untouched, `newName` arrived already quoted, and
     //    BuildCSharpEdit's unconditional `"` + text + `"` wrapping doubled them, producing a
     //    stray trailing quote in the attribute, e.g. [Given("foo bar"")]. ─────────────────────
@@ -1139,7 +1138,7 @@ public class StepRenameHandlerTests
             "the outline placeholder is preserved; the binding's {int} token must not leak into the feature");
     }
 
-    // Issue #936: renaming from a .cs binding must search the same widened usage scope as
+    // Renaming from a .cs binding must search the same widened usage scope as
     // CodeLens / Find Step Usages / References (IProjectBindingRegistryLookup.ResolveUsageSearchScope),
     // so a feature file in a project that references the binding project is also renamed.
     [Fact]
@@ -1374,7 +1373,7 @@ public class StepRenameHandlerTests
 
     // ── Regression: prepareRename for a .feature step must return the step-text-only range
     //    (excluding the keyword and leading indentation), matching the range HandleRenameAsync
-    //    later applies the edit at (usage.Range). A whole-line range used to seed the rename
+    //    later applies the edit at (usage.Range). A whole-line range would seed the rename
     //    dialog with "\tThen the result should be 120"; submitting an edited version of that back
     //    duplicated the keyword when the edit was applied only at the step-text span, producing
     //    "\tThen \tThen the result should be 120" in the feature file. ──────────────────────────
@@ -1431,7 +1430,7 @@ public class StepRenameHandlerTests
             "a synthetic whole-line range was the bug this regression guards against");
     }
 
-    // ── Regression/repro (issue #456): F2 rename on a parameterized step pre-highlights the
+    // ── Regression/repro: F2 rename on a parameterized step pre-highlights the
     //    wrong span in the rename box. Root cause is exactly what HandlePrepareRenameAsync's own
     //    remarks (above) describe: VS Code's built-in rename UI computes the user's pre-selection
     //    offset against the CONCRETE step text, then reapplies that same raw character offset into
@@ -1502,7 +1501,7 @@ public class StepRenameHandlerTests
             $"\"{reapplied}\" instead");
     }
 
-    // ── Regression (issue #344 follow-up): confirmed live in VS — a .feature step bound to a
+    // ── Regression: confirmed live in VS — a .feature step bound to a
     //    method-name-style binding (a bare [Given], no explicit expression) has no attribute
     //    literal to rename at all. Before this fix, CSharpAttributeLiteralResolver's "nearest
     //    candidate method" fallback (finding no literal for THIS binding) silently snapped to a
@@ -1552,7 +1551,7 @@ public class StepRenameHandlerTests
             "a method-name-style binding has no attribute literal to rename, so the dialog must not open at all");
     }
 
-    // ── Regression (#82 follow-up): confirmed live in VS — after a successful rename, invoking
+    // ── Regression: confirmed live in VS — after a successful rename, invoking
     //    F2 again on the same step showed the OLD (pre-rename) text in the "Rename to:" box,
     //    even though the editor and the .cs file both visibly showed the new text. Root cause:
     //    IDocumentBufferService deliberately never tracks .cs files (only .feature — see
@@ -1641,8 +1640,8 @@ public class StepRenameHandlerTests
             CancellationToken.None);
         renameResult.Should().NotBeNull();
 
-        // The client applied it — which is what commits the handler's memory of its own .cs edit
-        // (issue #671, R3); without this the staged edit is dropped and prepareRename would
+        // The client applied it — which is what commits the handler's memory of its own .cs edit;
+        // without this the staged edit is dropped and prepareRename would
         // correctly fall back to the stale buffer text.
         await ConfirmAppliedAsync(sut, featureUri);
 
@@ -1661,13 +1660,12 @@ public class StepRenameHandlerTests
             "pre-rename text still sitting in the (untouched) buffer/disk copy");
     }
 
-    // ── Regression (#82 follow-up): FindBindingsAtFeatureStep used to re-derive its own
+    // ── Regression guard: FindBindingsAtFeatureStep must not re-derive its own
     //    start/end-character bounds check from step.Range.StartLinePosition/EndLinePosition —
-    //    the exact narrow, exact-text-span-only check #101 fixed on StepBindingMatch.Contains,
-    //    just reimplemented here without picking up that fix. A cursor on the step's keyword or
-    //    leading indentation (as opposed to the concrete step text itself) would silently return
-    //    zero bindings, so F2 rename showed no prompt at all — confirmed from a manual VS
-    //    session's server logs where 4 of 5 F2 attempts on the same step line failed this way. ──
+    //    that is the narrow, exact-text-span-only check StepBindingMatch.Contains deliberately
+    //    avoids. A cursor on the step's keyword or leading indentation (as opposed to the
+    //    concrete step text itself) would silently return zero bindings, so F2 rename would show
+    //    no prompt at all. ──
 
     [Fact]
     public async Task PrepareRename_from_feature_resolves_when_cursor_is_on_the_keyword_not_the_step_text()
@@ -1710,7 +1708,7 @@ public class StepRenameHandlerTests
         result!.PlaceholderRange!.Placeholder.Should().Be("to be or not to be");
     }
 
-    // ── Regression (issue #47): prepareRename at a position with no renameable binding must
+    // ── Regression: prepareRename at a position with no renameable binding must
     //    return null quietly rather than throwing. The textDocument/prepareRename JSON-RPC
     //    handler in LanguageServerOptionsExtensions passes this return value straight through
     //    (LspRange?), so vscode-languageclient can treat it as "rename not supported here" and
@@ -1804,8 +1802,8 @@ public class StepRenameHandlerTests
     // ── Regression: an ambiguous feature step (2+ matching bindings) must still surface
     //    every candidate through the rename-targets picker, and prepareRename must not report
     //    "no defined binding" for it. MatchResult.HasDefined is false for ambiguous steps (their
-    //    items are typed Ambiguous, not Defined) — FindBindingsAtFeatureStep used to gate on
-    //    HasDefined alone, silently excluding exactly the steps this feature exists to handle. ──
+    //    items are typed Ambiguous, not Defined) — FindBindingsAtFeatureStep must not gate on
+    //    HasDefined alone, which would silently exclude exactly the steps this feature exists to handle. ──
 
     [Fact]
     public async Task RenameTargets_from_feature_returns_all_targets_for_ambiguous_step()
@@ -2131,7 +2129,7 @@ public class StepRenameHandlerTests
         csEdit[0].NewText.Should().Be("\"to be and not to be\"");
     }
 
-    // ── Change-annotation negotiation (issue #70), test conditions 1 & 5 (plan §5.2):
+    // ── Change-annotation negotiation:
     //    a client that advertises documentChanges + changeAnnotationSupport gets a
     //    DocumentChanges-shaped, annotated WorkspaceEdit instead of the legacy Changes map. ──
 
@@ -2303,7 +2301,7 @@ public class StepRenameHandlerTests
             },
             CancellationToken.None);
 
-        // Regression guard: structurally identical to the pre-#70 (mode-2) output.
+        // Regression guard: structurally identical to the legacy (un-annotated) output.
         result.Should().NotBeNull();
         result!.DocumentChanges.Should().BeNull();
         result.ChangeAnnotations.Should().BeNull();
@@ -2313,7 +2311,7 @@ public class StepRenameHandlerTests
         result.Changes[csUri].Should().ContainSingle(e => e.NewText == "\"to be and not to be\"");
     }
 
-    // ── Regression (#82 follow-up): confirmed live in VS — after a successful rename, inlay
+    // ── Regression: confirmed live in VS — after a successful rename, inlay
     //    hints silently disappeared for every step in the open feature file. HandleRenameAsync
     //    unconditionally invalidated the .feature match cache for every modified feature file,
     //    including ones still open in the editor. But applying the edit already triggers a real
@@ -2475,7 +2473,7 @@ public class StepRenameHandlerTests
 
         result.Should().NotBeNull();
 
-        // Staged only until the client confirms (issue #671, R3).
+        // Staged only until the client confirms.
         _matchService.DidNotReceive().InvalidateAllForDocument(Arg.Any<string>());
 
         await ConfirmAppliedAsync(sut, featureUri);

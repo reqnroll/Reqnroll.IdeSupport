@@ -141,7 +141,7 @@ public class RenamePostApplyCoordinatorTests
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
-    // ── A discarded edit must leave every cache untouched (issue #670) ────
+    // ── A discarded edit must leave every cache untouched ────
 
     [Fact]
     public async Task Discarded_edit_does_not_touch_the_cs_registry_or_text_cache_Async()
@@ -247,7 +247,7 @@ public class RenamePostApplyCoordinatorTests
         _csharpFileTextCache.DidNotReceive().Update(Arg.Any<DocumentUri>(), Arg.Any<string>());
     }
 
-    // ── Issue #671 (R2): the VS push is the emission that actually applies the edit in Visual
+    // ── The VS push is the emission that actually applies the edit in Visual
     //    Studio, so it is the one that has to carry a checkable document version. ──────────────
 
     [Fact]

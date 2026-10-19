@@ -8,7 +8,7 @@ using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Rename;
 
 /// <summary>
-/// Issue #568: <see cref="NewNameReconciler.Reconcile"/> is only exercised indirectly through
+/// <see cref="NewNameReconciler.Reconcile"/> is otherwise only exercised indirectly through
 /// <c>StepRenameHandlerTests</c>' happy-path scenarios — the <c>oldStepText == null</c> fallback
 /// and the "reject rename because parameter values changed" branch have no test at any level.
 /// These tests exercise <see cref="NewNameReconciler"/> directly.

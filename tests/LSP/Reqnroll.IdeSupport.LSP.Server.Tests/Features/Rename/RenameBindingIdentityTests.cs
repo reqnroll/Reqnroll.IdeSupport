@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Rename;
 
 /// <summary>
-/// Issue #671 (R5): a disambiguation session must name <i>which</i> binding the user picked, not
+/// A disambiguation session must name <i>which</i> binding the user picked, not
 /// its position in a list that gets rebuilt before the rename runs.
 /// </summary>
 public class RenameBindingIdentityTests

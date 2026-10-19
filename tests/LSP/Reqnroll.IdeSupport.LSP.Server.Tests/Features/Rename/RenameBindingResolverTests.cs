@@ -21,11 +21,10 @@ public class RenameBindingResolverTests
             expression,
             attributeSourceLine: attributeSourceLine);
 
-    // Regression test for issue #170/#176-adjacent: a class with two distinct step methods
-    // declared close together used to be treated as one ambiguous "multi-attribute" method by a
-    // crude "within 5 lines of any binding in the file" heuristic — invoking Rename Step from the
-    // second method's attribute falsely offered a 2-candidate picker including the unrelated
-    // first method, even though the two step expressions share nothing but parameter shape.
+    // Regression guard: a class with two distinct step methods declared close together must not
+    // be treated as one ambiguous "multi-attribute" method (as a crude "within 5 lines of any
+    // binding in the file" heuristic would) — invoking Rename Step from the second method's
+    // attribute must not offer a 2-candidate picker including the unrelated first method, even though the two step expressions share nothing but parameter shape.
     [Fact]
     public void FindBindingsAtCSharpMethod_does_not_merge_two_distinct_nearby_methods()
     {
@@ -38,7 +37,7 @@ public class RenameBindingResolverTests
         var second = MakeBinding("the second num is {int}", methodLine: 16, attributeSourceLine: 15);
         var registry = ProjectBindingRegistry.FromBindings(new[] { first, second });
 
-        // Cursor on the second method's attribute line — within the old ±5-line window of BOTH
+        // Cursor on the second method's attribute line — within a ±5-line proximity window of BOTH
         // bindings' method lines (|10-15|=5, |16-15|=1), but only the second binding's own
         // attribute/method line actually covers it.
         var result = RenameBindingResolver.FindBindingsAtCSharpMethod(registry, CsPath, line: 15);
@@ -74,7 +73,7 @@ public class RenameBindingResolverTests
         result.Should().BeEmpty();
     }
 
-    // Issue #506: F2 (VS Code's dispatcher for both native C# rename-symbol and Reqnroll's step
+    // F2 (VS Code's dispatcher for both native C# rename-symbol and Reqnroll's step
     // rename) must not hijack a rename of the method identifier itself — only the attribute line
     // should count as "on the binding" for that caller, unlike the deliberately loose default used
     // by the explicit "Reqnroll: Rename Step" context-menu/palette command.

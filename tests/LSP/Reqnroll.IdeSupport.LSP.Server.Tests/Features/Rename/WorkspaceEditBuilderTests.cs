@@ -26,7 +26,7 @@ public class WorkspaceEditBuilderTests
         builder.IsEmpty.Should().BeFalse();
     }
 
-    // ── Test condition 2 (plan §5.2): unsupported client — byte-identical to pre-#70 shape ──
+    // ── Unsupported client: byte-identical to the legacy (un-annotated) shape ──
 
     [Fact]
     public void Build_emits_the_legacy_Changes_shape_when_the_client_does_not_support_annotations()
@@ -145,7 +145,7 @@ public class WorkspaceEditBuilderTests
         builder.GetEditsByUri()[FeatureUri].Single().Should().NotBeOfType<AnnotatedTextEdit>();
     }
 
-    // ── Issue #671 (R2): DocumentChanges carry the document version the edit was computed
+    // ── DocumentChanges carry the document version the edit was computed
     //    against, which is what OptionalVersionedTextDocumentIdentifier exists for — "to allow
     //    clients to check the text document version before an edit is applied." ────────────────
 
