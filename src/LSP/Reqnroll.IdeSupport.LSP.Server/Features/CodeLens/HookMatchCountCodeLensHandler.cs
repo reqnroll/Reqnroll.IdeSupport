@@ -17,14 +17,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
 /// <summary>
 /// Handles the standard <c>textDocument/codeLens</c> request for hook-binding methods in `.cs`
-/// files (hook-match-count CodeLens — issue #373). Returns one lens per hook-binding attribute
+/// files (hook-match-count CodeLens). Returns one lens per hook-binding attribute
 /// showing how many project scenarios its scope matches (e.g. "3 scenarios matched"), the inverse
-/// of #269's hook-match CodeLens on `.feature` lines. Clicking a lens invokes the client's
+/// of the hook-match CodeLens on `.feature` lines (<see cref="HookCodeLensHandler"/>). Clicking a lens invokes the client's
 /// <c>reqnroll.goToMatchingScenarios</c> command at that attribute's exact position.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Unlike #269's `.cs`-vs-`.feature` split (where each handler owns a whole file type
+/// Unlike the `.cs`-vs-`.feature` split with <see cref="HookCodeLensHandler"/> (where each handler owns a whole file type
 /// exclusively), this handler must **coexist** with <see cref="StepCodeLensHandler"/> on the same
 /// `.cs` file: a single `[Binding]` class routinely mixes step-binding and hook-binding methods.
 /// Both handlers are combined in the same <c>textDocument/codeLens</c> response — see the
@@ -36,19 +36,19 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// <see cref="HookType.BeforeTestRun"/>/<see cref="HookType.AfterTestRun"/> hooks are skipped
 /// entirely (no lens) — see <see cref="HookScenarioMatching.IsScenarioCountable"/>. A hook with
 /// zero matching scenarios still renders ("0 scenarios matched") rather than being suppressed,
-/// deliberately diverging from #269's "skip empty" convention: a hook matching nothing is likely
+/// deliberately diverging from the "skip empty" convention of the `.feature` hook lens: a hook matching nothing is likely
 /// a bug (dead code, a typo'd tag expression), so it's the most actionable case, not the least.
 /// </para>
 /// <para>
 /// An unscoped hook (no <c>[Scope]</c> at all) matches every scenario in the project — a count
 /// here would be technically correct but unbounded and uninformative, so the lens shows the
-/// static label "all scenarios" instead and skips the corpus walk entirely (issue #403). The
+/// static label "all scenarios" instead and skips the corpus walk entirely. The
 /// click action is unaffected: <c>reqnroll/findMatchingScenarios</c> still resolves and returns
 /// the full scenario list on demand.
 /// </para>
 /// <para>
 /// For a scoped hook the corpus walk can instead be deferred to <c>codeLens/resolve</c>
-/// (<see cref="ResolveAsync"/>, issue #471), but only for clients on the opt-in allowlist behind
+/// (<see cref="ResolveAsync"/>), but only for clients on the opt-in allowlist behind
 /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/>. That allowlist is empty today, so every
 /// shipped client (VS Code, Rider, Visual Studio) gets fully-computed lenses eagerly — none of
 /// them issue <c>codeLens/resolve</c>, and a lens returned without a <c>Command</c> simply never
@@ -98,7 +98,7 @@ public sealed class HookMatchCountCodeLensHandler
             return Task.FromResult(Empty);
         }
 
-        // Measured only past the file-type guard (issue #941); see HookCodeLensHandler.
+        // Measured only past the file-type guard; see HookCodeLensHandler.
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
 
         var filePath = uri.GetFileSystemPath();
@@ -131,7 +131,7 @@ public sealed class HookMatchCountCodeLensHandler
         // allowlist in IdeBehavioursResolver (IdeBehaviours.SupportsCodeLensResolve) -- that set is empty today, so
         // every shipped client (VS Code, Rider, Visual Studio) takes the eager path below. None of
         // them issue codeLens/resolve, and a deferred lens simply never renders for them
-        // (issue #471; see the allowlist note for the evidence).
+        // (see the allowlist note for the evidence).
         var deferToResolve = _clientIde.Behaviours.SupportsCodeLensResolve;
 
         foreach (var hook in registry.Hooks)
@@ -152,8 +152,8 @@ public sealed class HookMatchCountCodeLensHandler
             var range = new LspRange(new Position(line, col), new Position(line, col));
 
             // Unscoped hooks (no [Scope] at all) match every scenario in the project: skip the
-            // corpus walk and show a static label rather than an unbounded, uninformative count
-            // (issue #403). No reason to ever defer this case -- there's nothing expensive to defer.
+            // corpus walk and show a static label rather than an unbounded, uninformative count.
+            // No reason to ever defer this case -- there's nothing expensive to defer.
             if (hook.Scope is null)
             {
                 lenses.Add(BuildResolvedLens(range, uri, line, col, title: "all scenarios"));
@@ -190,7 +190,7 @@ public sealed class HookMatchCountCodeLensHandler
     /// <summary>
     /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
     /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/>, scoped-hook deferred path) into its
-    /// final <c>Command</c> — backs <c>codeLens/resolve</c> (issue #471). Falls back to the
+    /// final <c>Command</c> — backs <c>codeLens/resolve</c>. Falls back to the
     /// non-actionable "0 scenarios matched" lens if the hook can no longer be located.
     /// </summary>
     public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> ResolveAsync(

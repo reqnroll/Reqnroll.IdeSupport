@@ -14,9 +14,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 
 /// <summary>
 /// Builds the "Define step(s)" <see cref="CodeAction"/>s for one title/step-subset group, given
-/// an already-resolved <see cref="StepDefinitionTarget"/> (issue #588). Extracted from
-/// <see cref="CodeActionHandler.Handle"/>'s nested <c>BuildTargetedActions</c> local function —
-/// this class owns "given this target and these steps, build the actions", independent of where
+/// an already-resolved <see cref="StepDefinitionTarget"/>. This class owns "given this target and these steps, build the actions", independent of where
 /// the target came from or how many title groups the caller builds.
 /// </summary>
 internal sealed class DefineStepsActionBuilder
@@ -54,7 +52,7 @@ internal sealed class DefineStepsActionBuilder
         var snippets = RenderSnippets(steps, target.Style, target.Indent, target.NewLine);
         if (snippets is null) return new List<CommandOrCodeAction>();
 
-        // Associates each action with the diagnostic(s) it fixes (issue #563), so a client can
+        // Associates each action with the diagnostic(s) it fixes, so a client can
         // present "Define missing step" as the fix *for* the squiggle it was invoked on rather
         // than an unattributed suggestion.
         var diagnostics = new Container<Diagnostic>(steps.Select(s => DiagnosticsPublishHandler.ToLspDiagnostic(
@@ -72,7 +70,7 @@ internal sealed class DefineStepsActionBuilder
         {
             // A candidate that cannot be read (deleted or locked since it was ranked) is skipped, not
             // allowed to fail the whole code-action request: the other targets, including the new-file
-            // fallback, are still offered (issue #1132 audit).
+            // fallback, are still offered.
             string existingContent;
             try
             {
@@ -117,7 +115,7 @@ internal sealed class DefineStepsActionBuilder
 
     /// <summary>
     /// Reads an append candidate's current content, preferring its live (possibly unsaved) text
-    /// over disk (issue #815). Applying one "Define step" action opens the target <c>.cs</c> file
+    /// over disk. Applying one "Define step" action opens the target <c>.cs</c> file
     /// in an unsaved editor buffer via <c>workspace/applyEdit</c> — it is not written to disk — so
     /// a second "Define step" invocation against the same file, before the first is saved, would
     /// otherwise compute its append (and full-document replace range) against pre-edit content,
@@ -227,7 +225,7 @@ internal sealed class DefineStepsActionBuilder
             Edit        = edit,
             Diagnostics = diagnostics,
             // Clients run this command after applying the edit; the server handler reports the
-            // trigger (issue #847) and, for VS Code, reveals the file.
+            // trigger and, for VS Code, reveals the file.
             Command     = new Command
             {
                 Title     = "Open step definition file",

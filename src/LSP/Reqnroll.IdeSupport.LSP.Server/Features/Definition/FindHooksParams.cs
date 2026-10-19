@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
 /// Request params for the custom <c>reqnroll/findHooks</c> request. Extends the standard
-/// position params with an optional flag set by the hook-count CodeLens (issue #269 follow-up)
+/// position params with an optional flag set by the hook-count CodeLens
 /// so that clicking a lens shows exactly the hooks it counted, instead of the cumulative list
 /// a manual "Go to Hooks" invocation from the cursor still returns.
 /// </summary>

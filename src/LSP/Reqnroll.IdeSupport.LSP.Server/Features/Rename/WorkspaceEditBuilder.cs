@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// render this as a grouped, labelled rename preview.</description></item>
 /// <item><description><b>Plain</b> — the legacy <see cref="WorkspaceEdit.Changes"/> map — for
 /// every other client (Visual Studio does not advertise <c>changeAnnotationSupport</c> as of
-/// Phase 0's capability survey). Byte-identical to the handler's pre-#70 output.</description></item>
+/// Phase 0's capability survey).</description></item>
 /// </list>
 /// Centralising the branch here keeps <see cref="RenameHandler.HandleRenameAsync"/> free of
 /// shape-negotiation logic — it only calls <see cref="Add"/> and <see cref="Build"/>.

@@ -202,7 +202,7 @@ public sealed class FormattingHandler
 
     // EditCount counts edits that change the text (0 = the range was already formatted); LineCount is the
     // document's line count, 0 for an empty document. Both feed telemetry only. An unknown document or one
-    // with no parsable Feature is rejected via EditRejected (issue #1132); empty/already-formatted
+    // with no parsable Feature is rejected via EditRejected; empty/already-formatted
     // documents return an empty or no-op edit instead.
     private Task<(TextEditContainer? Edits, int EditCount, int LineCount)> FormatDocumentAsync(
         OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri uri,
@@ -245,8 +245,7 @@ public sealed class FormattingHandler
                 return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, allLines.Length));
 
             // Unlike an already-formatted document, this is something the user can fix (a missing or
-            // unparsable Feature header), so it is a rejection rather than a silent empty edit
-            // (issue #1132).
+            // unparsable Feature header), so it is a rejection rather than a silent empty edit.
             _logger.LogInfo($"Formatting rejected for {uri}: no Feature could be parsed.");
             SendRejectedTelemetry(isSelection, "NoFeatureParsed", allLines.Length);
             throw EditRejected.Error("The document cannot be formatted because no Feature could be parsed. Check the file for syntax errors.", "document");
@@ -291,7 +290,7 @@ public sealed class FormattingHandler
         return gherkinDocument;
     }
 
-    // A rejected format still counts as a use of the command (issue #1132), flagged like a rejected
+    // A rejected format still counts as a use of the command, flagged like a rejected
     // rename: Erroneous + Reason. EditCount is omitted (nothing was computed); the line bucket is only
     // sent when the document is known.
     private void SendRejectedTelemetry(bool isSelection, string reason, int? lineCount)

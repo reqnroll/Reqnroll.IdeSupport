@@ -90,7 +90,7 @@ public sealed class FindStepUsagesHandler
         var bindingLocation = new SourceLocation(filePath, line, column);
 
         // Restrict search to the projects that own this .cs file, widened to any other project
-        // whose own registry independently reports one of this file's bindings (issue #548) --
+        // whose own registry independently reports one of this file's bindings --
         // the same scope the step-usage CodeLens count already used, so a lens that says "1 step
         // usage" and a click on it that opens Find Step Usages agree on the answer.
         var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);

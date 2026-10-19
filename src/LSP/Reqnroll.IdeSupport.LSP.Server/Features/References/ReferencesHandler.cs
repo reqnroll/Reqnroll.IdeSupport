@@ -26,7 +26,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 /// Primary-owner resolution / shared-feature scoping 2B: the scope is restricted to the
 /// projects that own the queried <c>.cs</c> file, widened per
 /// <see cref="IProjectBindingRegistryLookup.ResolveUsageSearchScope"/> to any other project that
-/// independently reports one of this file's bindings via a real project reference (issue #548).
+/// independently reports one of this file's bindings via a real project reference.
 /// This still prevents cross-project bleed when two unrelated projects have step definitions at
 /// the same source location (same file name + line in a shared binding class).
 /// </remarks>
@@ -80,7 +80,7 @@ public sealed class ReferencesHandler
         var bindingLocation = new SourceLocation(filePath, line, column);
 
         // Primary-owner resolution / shared-feature scoping 2B, widened to any other project
-        // whose own registry independently reports one of this file's bindings (issue #548) --
+        // whose own registry independently reports one of this file's bindings --
         // see IProjectBindingRegistryLookup.ResolveUsageSearchScope's remarks.
         var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
@@ -130,7 +130,7 @@ public sealed class ReferencesHandler
     /// <summary>
     /// Sends the same <c>"FindStepDefinitionUsages command executed"</c> event
     /// <see cref="Features.References.FindStepUsagesHandler"/> sends for its own
-    /// <c>reqnroll/findStepUsages</c> path (issue #581 finding 3), with a <c>Protocol</c> field
+    /// <c>reqnroll/findStepUsages</c> path, with a <c>Protocol</c> field
     /// so the two paths — VS Code/Rider's native Find All References via this handler, versus
     /// Visual Studio's custom request — produce one comparable usage-count metric instead of an
     /// undercount that silently excludes two of the three IDE clients.

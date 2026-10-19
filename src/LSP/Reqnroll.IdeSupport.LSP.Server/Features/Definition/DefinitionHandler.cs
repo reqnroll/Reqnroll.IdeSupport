@@ -80,7 +80,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
 
         // A binding whose source file could not be found on this machine has no navigation target
-        // here, and emitting one anyway is the issue #540 incident: the URI is well-formed, the IDE
+        // here, and emitting one anyway is a trap: the URI is well-formed, the IDE
         // accepts it, and Go To Definition silently does nothing. Drop it (the resolver logs why).
         var locations = _resolver.GetBindingsWithSource(step)
             .Select(sd => sd.Implementation)
@@ -89,7 +89,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
             .Select(loc => new LocationOrLocationLink(loc.ToLspLocation()))
             .ToArray();
 
-        // Telemetry: a *lookup*, not a navigation (issue #899). VS Code and Rider send this request on hover
+        // Telemetry: a *lookup*, not a navigation. VS Code and Rider send this request on hover
         // as well as for F12/Ctrl+click and the client cannot tell the two apart, so it is the same lookup
         // event FindStepDefinitionsHandler sends. A client that navigates through reqnroll/findStepDefinitions
         // (Visual Studio) mostly reaches here as the editor's own fall-through on hover (Peek Definition is the

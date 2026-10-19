@@ -130,7 +130,7 @@ public sealed class SemanticTokensService : ISemanticTokensService
     /// children are processed recursively.
     /// </summary>
     /// <remarks>
-    /// Separated into two phases (issue #593): <see cref="CollectOrderedEntries"/> resolves and
+    /// Separated into two phases: <see cref="CollectOrderedEntries"/> resolves and
     /// orders the leaf tokens, and <see cref="DeltaEncode"/> walks that ordered list to produce
     /// the flat integer tuples. The arithmetic in the latter is otherwise only reachable through a
     /// full parse.
@@ -296,10 +296,10 @@ public sealed class SemanticTokensService : ISemanticTokensService
     /// (line, character) positions and its token type/modifier indices.
     /// <para>
     /// Resolving a tag's positions (<see cref="GherkinRange.StartLinePosition"/>/
-    /// <see cref="GherkinRange.EndLinePosition"/>, both binary-search-backed — issue #471) is the
+    /// <see cref="GherkinRange.EndLinePosition"/>, both binary-search-backed) is the
     /// dominant per-tag cost here. Carrying the result through the pipeline lets the range filter
     /// and <see cref="CollectLeafTokens"/> share ONE resolution per tag instead of each performing
-    /// its own — without this, adding the range filter (issue #471) actually *increased* the
+    /// its own — without this, adding the range filter would *increase* the
     /// total resolution count for <c>textDocument/semanticTokens/range</c> rather than reducing it.
     /// </para>
     /// </summary>
@@ -312,8 +312,8 @@ public sealed class SemanticTokensService : ISemanticTokensService
     /// <summary>
     /// Projects every token-mapped tag to a <see cref="PositionedTag"/> — the whole-document
     /// (non-range) path. Tags with no token mapping are dropped before their positions are
-    /// resolved, so this costs exactly the two position resolutions per *emitted* tag that
-    /// <see cref="CollectLeafTokens"/> used to make on its own.
+    /// resolved, so this costs exactly the two position resolutions per *emitted* tag, shared with
+    /// <see cref="CollectLeafTokens"/> rather than repeated there.
     /// </summary>
     private static IEnumerable<PositionedTag> ResolveTokenTags(IEnumerable<IdeSupportTag> tags)
     {
@@ -331,7 +331,7 @@ public sealed class SemanticTokensService : ISemanticTokensService
     /// <summary>
     /// Projects the token-mapped tags whose line span overlaps
     /// [<paramref name="startLine"/>, <paramref name="endLine"/>] (both inclusive) — the
-    /// <c>textDocument/semanticTokens/range</c> path (issue #471). Everything downstream
+    /// <c>textDocument/semanticTokens/range</c> path. Everything downstream
     /// (sorting, <see cref="ResolveOverlaps"/>, delta encoding, and the per-line walk for
     /// multi-line tokens) then runs over the range's tag count rather than the document's.
     /// <para>

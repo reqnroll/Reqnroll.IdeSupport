@@ -22,7 +22,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 ///   <item><b>Rider</b> registers a <c>TextAttributesKey</c> per name and maps via the LSP descriptor.</item>
 /// </list>
 /// <para>
-/// Because the legend no longer varies per IDE, there is no profile abstraction or
+/// Because the legend does not vary per IDE, there is no profile abstraction or
 /// <c>--ide</c>-based selection here: the definition is a single static contract.  No token
 /// modifiers are used — each Reqnroll concept is its own classification/colour, so the
 /// distinction is carried entirely by the token type name.

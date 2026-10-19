@@ -20,18 +20,16 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Nothing is committed until the client confirms (issue #671, R3).</b> Previously the cache
-/// updates ran inline at the end of <see cref="RenameHandler.HandleRenameAsync"/>, gated on a
-/// confirmed apply only for Visual Studio; for every other client they ran unconditionally, on
-/// the optimistic assumption the client would apply the edit it was handed. Rider disproved that
-/// assumption (issue #670): its own pre-apply staleness check can discard the edit *after* the
-/// rename response has been sent, leaving the registry describing a step expression that exists
-/// in no file — "0 step usages" plus unbound-step diagnostics that survive a rebuild and a
+/// <b>Nothing is committed until the client confirms.</b> Running the cache updates inline at the
+/// end of <see cref="RenameHandler.HandleRenameAsync"/> would rest on the optimistic assumption that
+/// the client applies the edit it was handed. That fails: Rider's own pre-apply staleness check can
+/// discard the edit *after* the rename response has been sent, leaving the registry describing a
+/// step expression that exists in no file — "0 step usages" plus unbound-step diagnostics that survive a rebuild and a
 /// close/reopen. Staging and waiting for <c>reqnroll/renameApplied</c> makes the server's view
 /// derive from what the client actually did rather than from what it was asked to do.
 /// </para>
 /// <para>
-/// <b>The Visual Studio push happens after the rename response, not inside it (R1).</b> See
+/// <b>The Visual Studio push happens after the rename response, not inside it.</b> See
 /// <see cref="SchedulePostResponseApply"/>.
 /// </para>
 /// </remarks>
@@ -133,28 +131,28 @@ internal sealed class RenamePostApplyCoordinator
     /// same mechanism already proven for the Comment/Uncomment toggle (<c>CommentToggleHandler</c>).
     /// </para>
     /// <para>
-    /// <b>Why this must not be awaited inside the rename handler (issue #671, R1).</b> Applying a
+    /// <b>Why this must not be awaited inside the rename handler.</b> Applying a
     /// multi-file edit makes VS <i>open</i> any touched file that was closed, which fires a
     /// <c>textDocument/didOpen</c>. OmniSharp's <c>ProcessScheduler</c> treats didOpen/didChange/
     /// didSave as <c>Serial</c> items and, on any Parallel→Serial transition, cancels <b>every</b>
     /// outstanding Parallel request with <c>ContentModified</c> — globally, with no per-document
-    /// scoping. So pushing the edit from inside the request deterministically cancelled the very
+    /// scoping. So pushing the edit from inside the request would deterministically cancel the very
     /// request that produced it: the rename applied correctly but came back to the client as
-    /// <c>-32801 Content Modified</c> (issue #654). Returning the response first leaves no
+    /// <c>-32801 Content Modified</c>. Returning the response first leaves no
     /// in-flight request for that self-inflicted didOpen to cancel.
     /// </para>
     /// <para>
     /// This also keeps the handler off the shared <c>Serial</c> dispatch lane for the duration of a
-    /// client round-trip. <c>textDocument/rename</c> is registered <c>Serial</c> (R8, for
+    /// client round-trip. <c>textDocument/rename</c> is registered <c>Serial</c> (for
     /// multi-document snapshot consistency) and an in-flight Serial item blocks every other
     /// didOpen/didChange <i>and</i> the start of newly-arriving Parallel requests (see
-    /// <c>IParseCoordinator</c>'s remarks, issue #471). The #654 repro's push took 443ms — including
-    /// VS opening a closed file — which would otherwise be 443ms of whole-server stall.
+    /// <c>IParseCoordinator</c>'s remarks). A push can take hundreds of milliseconds — including
+    /// VS opening a closed file — which would otherwise be a whole-server stall.
     /// </para>
     /// <para>
     /// Deliberately fire-and-forget: there is no caller left to await it, since the response has
-    /// already gone. A rejected push (locked/read-only file, or unsaved conflicting changes) can
-    /// therefore no longer be reported to the user as a failed rename the way it once was — it is
+    /// already gone. A rejected push (locked/read-only file, or unsaved conflicting changes) cannot
+    /// therefore be reported to the user as a failed rename — it is
     /// logged, and the staged cache updates are dropped so server state still matches reality,
     /// which is the part that matters.
     /// </para>
@@ -176,9 +174,9 @@ internal sealed class RenamePostApplyCoordinator
     /// </summary>
     internal async Task PushAndCompleteAsync(DocumentUri renameUri, WorkspaceEditBuilder builder)
     {
-        // Measured under its own label because this work used to be inside the measured
-        // textDocument/rename request (issue #671, R1) — the applyEdit round trip and the cache
-        // commit it confirms. Without this it would simply disappear from the PERF log for VS,
+        // Measured under its own label because this work runs after, and so outside, the measured
+        // textDocument/rename request — the applyEdit round trip and the cache
+        // commit it confirms. Without this it would simply be missing from the PERF log for VS,
         // leaving a future "rename got slow" report with nothing to look at. The other clients'
         // equivalent is measured as reqnroll/renameApplied.
         using var _perf = _recorder.Measure(InternalLspMethodNames.InternalRenamePostResponseApply, renameUri);
@@ -202,7 +200,7 @@ internal sealed class RenamePostApplyCoordinator
         // VS never advertises changeAnnotationSupport (Phase 0), so builder's edits are
         // already plain TextEdit here — this push is unannotated DocumentChanges regardless.
         //
-        // Version-stamped (issue #671, R2): this push is what actually applies the edit in VS, so
+        // Version-stamped: this push is what actually applies the edit in VS, so
         // it is the one emission where a stale-document check protects real content. `null` for a
         // document VS has not opened is the spec's own meaning ("the content on disk is the
         // master"), which is the common case here — a rename routinely touches closed .feature

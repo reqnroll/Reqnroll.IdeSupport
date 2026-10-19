@@ -101,8 +101,8 @@ public sealed class FindHooksHandler
         var locations = new List<FindHookLocation>(hooks.Count);
         foreach (var hook in hooks)
         {
-            // Same rule as DefinitionHandler: no local file, no navigation target. Hooks were the
-            // visible casualty in issue #540 -- every one of them pointed into a devcontainer path.
+            // Same rule as DefinitionHandler: no local file, no navigation target. Hooks are the
+            // visible case: bindings from an assembly built in a devcontainer point into a container path.
             var src = hook.Implementation?.SourceLocation;
             if (src is not null && !src.IsResolved)
             {
@@ -118,7 +118,7 @@ public sealed class FindHooksHandler
                 locations.Add(loc);
         }
 
-        // Telemetry: reports that a findHooks lookup ran, not that the user navigated (issue #698) —
+        // Telemetry: reports that a findHooks lookup ran, not that the user navigated —
         // this handler also backs the classic VS CodeLens's Details-popup prefetch, which calls it on
         // every lens render. Genuine navigation telemetry is originated client-side instead.
         _telemetryService?.SendEvent(TelemetryEvents.FindHooksCommandExecuted, new()

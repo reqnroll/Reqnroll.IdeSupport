@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// <summary>
 /// Handles <c>workspace/executeCommand</c> for <see cref="CommandName"/>, the <see cref="CodeAction.Command"/>
 /// every "Insert '&lt;keyword&gt;'" quick fix carries. Clients run a code action's command after
-/// applying its edit, so receiving it means the user picked the fix (issue #877) — it sends
+/// applying its edit, so receiving it means the user picked the fix — it sends
 /// <see cref="TelemetryEvents.InsertKeywordCommandExecuted"/>. This is the only acceptance signal the
 /// server gets, because the action's <c>WorkspaceEdit</c> is applied entirely client-side.
 /// </summary>

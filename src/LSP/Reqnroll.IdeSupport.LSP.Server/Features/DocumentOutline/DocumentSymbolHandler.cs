@@ -84,7 +84,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
             $"Document Outline textDocument/documentSymbol: {request.TextDocument.Uri} " +
             $"(hierarchicalSupport={_hierarchicalSupport})");
 
-        // documentSymbol has no LSP refresh capability (issue #471) -- see the matching
+        // documentSymbol has no LSP refresh capability -- see the matching
         // FoldingRangeHandler comment.
         await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
 
@@ -121,7 +121,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     {
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, request.TextDocument.Uri);
 
-        // documentSymbol has no LSP refresh capability (issue #471) -- see the matching
+        // documentSymbol has no LSP refresh capability -- see the matching
         // FoldingRangeHandler comment.
         await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
 

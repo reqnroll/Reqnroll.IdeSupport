@@ -18,7 +18,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/findStepDefinitions</c> request (issue #757): the step-definition
+/// Handles the custom <c>reqnroll/findStepDefinitions</c> request: the step-definition
 /// bindings matching the step at a <c>.feature</c> caret position, with the per-binding detail a
 /// results list needs — class, method, binding expression and whether the source is on this machine.
 /// </summary>
@@ -30,7 +30,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// <para>
 /// Unlike <c>textDocument/definition</c>, bindings whose source file is not on this machine are
 /// included (with <see cref="StepDefinitionItem.IsResolved"/> false) so the client can say why a row
-/// cannot be navigated rather than silently leaving it out (issue #540).
+/// cannot be navigated rather than silently leaving it out.
 /// </para>
 /// </remarks>
 public sealed class FindStepDefinitionsHandler
@@ -80,7 +80,7 @@ public sealed class FindStepDefinitionsHandler
             $"{request.Position.Line}:{request.Position.Character} in {uri}");
 
         // A lookup event, not a navigation: Visual Studio also sends this request on Ctrl+hover to decide
-        // whether to underline a word (issue #898). The user's actual navigation is reported by the client
+        // whether to underline a word. The user's actual navigation is reported by the client
         // as GoToStepDefinitionCommandExecuted. LocationCount counts navigable rows. DefinitionHandler sends the same
         // event (Protocol = textDocument/definition) for VS Code and Rider.
         _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionsCommandExecuted, new()

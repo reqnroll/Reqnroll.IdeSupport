@@ -24,9 +24,8 @@ internal sealed record StepDefinitionTarget(
     string NewLine);
 
 /// <summary>
-/// Resolves a <see cref="StepDefinitionTarget"/> for a "Define Steps" code action (issue #588).
-/// Extracted from <see cref="CodeActionHandler.Handle"/>, which combined this resolution with
-/// action-building and request-orchestration in one 179-line method — this class owns only
+/// Resolves a <see cref="StepDefinitionTarget"/> for a "Define Steps" code action.
+/// This class owns only
 /// "where should the generated code go", independent of what steps end up in it.
 /// </summary>
 internal sealed class StepDefinitionTargetResolver

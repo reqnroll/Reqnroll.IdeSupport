@@ -46,7 +46,7 @@ public sealed class CompletionHandler : ICompletionHandler
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
 
-    // Issue #883: step items carry this command so the client reports acceptance via
+    // Step items carry this command so the client reports acceptance via
     // workspace/executeCommand (counted by CompletionAcceptedHandler).
     private static readonly Command AcceptCommand =
         new() { Name = CompletionAcceptedHandler.CommandName, Title = "Completion accepted" };
@@ -60,7 +60,7 @@ public sealed class CompletionHandler : ICompletionHandler
     // Sub-timing recorded *inside* the keyword request whenever the tag branch runs (tag index
     // lookup + matching). The enclosing "#keyword" sample includes it, so this separate label is
     // what lets field P95s tell a slow tag index (e.g. a cold first scan of a big project) apart
-    // from slow keyword work (issue #828).
+    // from slow keyword work.
     private const string TagCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#tag";
 
     /// <summary>Initializes a new instance of the <see cref="CompletionHandler"/> class.</summary>
@@ -258,22 +258,22 @@ public sealed class CompletionHandler : ICompletionHandler
         while (kwStart < lineText.Length && char.IsWhiteSpace(lineText[kwStart]))
             kwStart++;
 
-        // Issue #561: the range used to extend to the end of the trimmed line (including
-        // trailing whitespace), so accepting a keyword deleted everything else on the line --
+        // The range must not extend to the end of the trimmed line (including trailing
+        // whitespace), or accepting a keyword deletes everything else on the line --
         // e.g. a scenario title already typed after the keyword. Clamping the end to the cursor
         // position means the replacement can only ever touch text the user has already typed to
         // the LEFT of the caret, never anything to the right of it. Clamping the start down to
         // the (possibly earlier) cursor position too guards against a reversed range in case
         // cursorChar ever lands before the first non-whitespace column.
         //
-        // Issue #871: the request position can be stale relative to the snapshot (rapid typing),
+        // The request position can be stale relative to the snapshot (rapid typing),
         // so the cursor may lie beyond the end of the line we read; clamp it into the line.
         var kwRangeEnd = Math.Clamp(cursorChar, 0, lineText.Length);
         var kwRangeStart = Math.Min(kwStart, kwRangeEnd);
 
         var typedFromLineStart = lineText.Substring(kwRangeStart, kwRangeEnd - kwRangeStart);
 
-        // ── Tag completion (issue #828) ─────────────────────────────────────────
+        // ── Tag completion ─────────────────────────────────────────
         // Offered whenever the parser's per-line state says TagLine is legal at this position —
         // a tag line in any state, first tag or a second one after a completed tag — and the
         // word being typed at the caret (the text after the last whitespace on the line) is
@@ -343,7 +343,7 @@ public sealed class CompletionHandler : ICompletionHandler
             }
         }
 
-        // ── Keyword groups (issue #818 group narrowing, minus the tag group) ─────
+        // ── Keyword groups (group narrowing, minus the tag group) ─────
         // Keyword completion bundles several *groups* together -- block keywords, step
         // keywords, table/doc-string separators (AddKeywordEntries, one group per TokenType) --
         // and every group is only valid while the text already typed at the start of the line
@@ -404,7 +404,7 @@ public sealed class CompletionHandler : ICompletionHandler
     /// member starting with <paramref name="typedSoFar"/>. A group that matches is kept whole,
     /// not trimmed to just its matching member(s) -- see the call site for why.
     /// <paramref name="tokens"/> must exclude TagLine: the tag group is assembled separately by
-    /// the caller (issue #828), with its own per-word replacement range.
+    /// the caller, with its own per-word replacement range.
     /// </summary>
     private List<CompletionEntry> FilterToMatchingGroups(
         KeywordCompletionContext k,
@@ -457,7 +457,7 @@ public sealed class CompletionHandler : ICompletionHandler
     /// <summary>
     /// True when the line has non-whitespace content and the caret is at or before its first
     /// non-whitespace character. The caret is clamped into the line first, as a stale request
-    /// position can lie outside it (issue #871).
+    /// position can lie outside it.
     /// </summary>
     internal static bool IsCaretBeforeLineContent(string lineText, int cursorChar)
     {

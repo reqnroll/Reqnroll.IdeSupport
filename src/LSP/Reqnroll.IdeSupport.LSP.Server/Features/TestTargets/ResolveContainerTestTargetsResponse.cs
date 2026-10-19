@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 
 /// <summary>
-/// Response DTO for the custom <c>reqnroll/resolveContainerTestTargets</c> request (issue #744).
+/// Response DTO for the custom <c>reqnroll/resolveContainerTestTargets</c> request.
 /// Shares <see cref="ScenarioTestTargetDto"/> with <see cref="ResolveTestTargetsResponse"/> — one
 /// target looks the same whether it came from a single-scenario or a whole-container resolution.
 /// </summary>

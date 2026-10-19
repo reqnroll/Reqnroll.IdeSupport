@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Response DTO for the custom <c>reqnroll/findMatchingScenarios</c> request (issue #373's
+/// Response DTO for the custom <c>reqnroll/findMatchingScenarios</c> request (the
 /// hook-match-count CodeLens click action). Contains every scenario the queried hook binding's
 /// scope matches, across the whole owning project(s) -- the inverse of
 /// <c>reqnroll/findHooks</c>'s <see cref="FindHooksResponse"/>.

@@ -13,7 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/resolveContainerTestTargets</c> request (issue #744, "Run
+/// Handles the custom <c>reqnroll/resolveContainerTestTargets</c> request ("Run
 /// scenarios" on a <c>Feature:</c> or <c>Rule:</c> block). Given the full body range of a Feature or
 /// Rule in a <c>.feature</c> file, resolves the generated C# test method(s) for every
 /// Scenario/Scenario Outline it contains, by delegating to

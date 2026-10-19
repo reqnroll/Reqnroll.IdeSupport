@@ -6,13 +6,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// Builds a content-addressed key identifying <i>which</i> binding a
 /// <c>reqnroll/selectRenameTarget</c> disambiguation picked, so the subsequent
 /// <c>textDocument/rename</c> can find that same binding again rather than trusting a positional
-/// index (issue #671, R5).
+/// index.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The session used to remember only the picker's <c>attributeIndex</c>, and
-/// <see cref="RenameBindingResolver.ResolveBindingForRename"/> re-derived the candidate list at
-/// rename time and indexed into it. The list is therefore recomputed against current state while
+/// Remembering only the picker's <c>attributeIndex</c> and having
+/// <see cref="RenameBindingResolver.ResolveBindingForRename"/> re-derive the candidate list at
+/// rename time and index into it is unsafe. The list is recomputed against current state while
 /// the index was chosen against the old one: if the user edits the <c>.cs</c> file while the
 /// "Enter the new step expression" dialog is open — adding an attribute, reordering two — index
 /// <c>N</c> now denotes a different binding, and the server renames the wrong step while producing

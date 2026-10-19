@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// <summary>
 /// Resolves the step, and the step-definition bindings it matched, at a caret position in a
 /// <c>.feature</c> file. Shared by <see cref="DefinitionHandler"/> (<c>textDocument/definition</c>)
-/// and <see cref="FindStepDefinitionsHandler"/> (<c>reqnroll/findStepDefinitions</c>, issue #757) so the
+/// and <see cref="FindStepDefinitionsHandler"/> (<c>reqnroll/findStepDefinitions</c>) so the
 /// two can never disagree about which bindings a step has.
 /// </summary>
 internal sealed class StepAtPositionResolver
@@ -81,7 +81,7 @@ internal sealed class StepAtPositionResolver
     }
 
     /// <summary>
-    /// The <c>Status</c> telemetry value (issue #849) for a step whose Go To Definition offered
+    /// The <c>Status</c> telemetry value for a step whose Go To Definition offered
     /// <paramref name="navigableCount"/> rows: ambiguous is reported as such, a step with no defined binding is <c>Undefined</c>, and a defined step
     /// with nothing navigable (no binding source on this machine) is <c>Unresolved</c>.
     /// </summary>
@@ -94,8 +94,7 @@ internal sealed class StepAtPositionResolver
     /// <summary>
     /// The bindings <paramref name="step"/> matched that record a source file, in match order.
     /// Bindings whose recorded file does not exist on this machine are included (callers decide
-    /// how to present them) but each is logged once, since they have no navigation target here
-    /// (issue #540).
+    /// how to present them) but each is logged once, since they have no navigation target here.
     /// </summary>
     public IReadOnlyList<ProjectStepDefinitionBinding> GetBindingsWithSource(StepBindingMatch step)
     {

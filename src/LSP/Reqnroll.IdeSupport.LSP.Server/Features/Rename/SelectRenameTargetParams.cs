@@ -33,7 +33,7 @@ public sealed class SelectRenameTargetParams
     /// The position the disambiguation was invoked at — the same one passed to
     /// <c>reqnroll/renameTargets</c> — so the server can re-derive that candidate list now and
     /// record <i>which</i> binding <see cref="AttributeIndex"/> denoted, rather than storing a bare
-    /// index whose meaning depends on a list rebuilt later (issue #671, R5; see
+    /// index whose meaning depends on a list rebuilt later (see
     /// <c>RenameBindingIdentity</c>).
     /// </summary>
     /// <remarks>

@@ -18,14 +18,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// Handles <c>workspace/executeCommand</c> for <see cref="CommandName"/>, the <see cref="CodeAction.Command"/>
 /// every "Define step(s)" quick fix carries. A client runs a code action's command after applying
 /// its <c>WorkspaceEdit</c>, so receiving it is the server's only exact signal that the user
-/// picked a Define Steps action (issue #847) — it sends <see cref="TelemetryEvents.DefineStepsCommandExecuted"/>.
+/// picked a Define Steps action — it sends <see cref="TelemetryEvents.DefineStepsCommandExecuted"/>.
 /// Arguments: <c>[targetFileUri]</c>.
 /// </summary>
 /// <remarks>
-/// The command used to be <c>vscode.open</c>, which VS Code runs locally to reveal the edited file.
-/// A code action has only one command slot, so VS Code now gets that behaviour from the server via
-/// <c>window/showDocument</c> instead. (Visual Studio and Rider never handled <c>vscode.open</c> — they
-/// forwarded it to the server and got "Method not found" — so for them this is a pure gain.)
+/// A code action has only one command slot, and <c>vscode.open</c> (which VS Code runs locally to reveal the
+/// edited file) is not handled by Visual Studio or Rider — they forward it to the server and get "Method not
+/// found". So this server-side command reveals the file for VS Code via <c>window/showDocument</c> instead.
 /// </remarks>
 public sealed class DefineStepsTriggeredHandler : IExecuteCommandHandler
 {

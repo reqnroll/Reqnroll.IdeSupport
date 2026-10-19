@@ -105,7 +105,7 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         {
             // Unlike the malformed-argument cases above (client bugs), this is reachable from a
             // well-behaved client — the document is simply not open in the server — and the user
-            // otherwise sees the shortcut do nothing, so it is a rejection (issue #1132).
+            // otherwise sees the shortcut do nothing, so it is a rejection.
             _logger.LogWarning($"CommentToggleHandler: buffer not found for {uri}");
             _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new()
             {

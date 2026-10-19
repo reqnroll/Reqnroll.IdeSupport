@@ -8,14 +8,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// <summary>
 /// Parameters for the <c>reqnroll/renameApplied</c> notification: the client reporting whether it
 /// actually applied the <see cref="OmniSharp.Extensions.LanguageServer.Protocol.Models.WorkspaceEdit"/>
-/// returned from <c>textDocument/rename</c> (issue #671, R3).
+/// returned from <c>textDocument/rename</c>.
 /// </summary>
 /// <remarks>
-/// Without this, the server had to assume every non-Visual-Studio client applied the edit it was
-/// handed, and committed the corresponding registry/match-cache updates unconditionally. Rider
-/// disproved that: its pre-apply staleness check can discard the edit after the rename response
-/// has already been sent, which left the binding registry describing a step expression present in
-/// no file (issue #670). Clients that apply the edit themselves must send this either way — with
+/// Without this, the server would have to assume every non-Visual-Studio client applied the edit it was
+/// handed, and commit the corresponding registry/match-cache updates unconditionally. That is wrong:
+/// Rider's pre-apply staleness check can discard the edit after the rename response
+/// has already been sent, which would leave the binding registry describing a step expression present in
+/// no file. Clients that apply the edit themselves must send this either way — with
 /// <see cref="Applied"/> <see langword="false"/> when they discarded it, so the server can drop the
 /// staged updates promptly rather than holding them indefinitely.
 /// </remarks>
