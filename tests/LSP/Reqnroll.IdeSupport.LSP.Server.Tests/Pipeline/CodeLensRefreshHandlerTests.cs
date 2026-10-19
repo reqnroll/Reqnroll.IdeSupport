@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
 /// <summary>
 /// Covers <see cref="CodeLensRefreshHandler"/>'s <c>isFullReplacement: false</c> call site to
-/// <see cref="CodeLensRefreshRequester.RequestRefreshAsync"/> (from PR #342), so a <c>.feature</c>
+/// <see cref="CodeLensRefreshRequester.RequestRefreshAsync"/>, so a <c>.feature</c>
 /// file edit's own code-lens refresh always requests an incremental refresh — unlike
 /// <c>BindingRegistryChangedHandler</c>, which requests a full replacement for a full binding
 /// registry rebuild. Mirrors sibling call-site coverage in
@@ -60,7 +60,7 @@ public class CodeLensRefreshHandlerTests : IDisposable
         _languageServer.DidNotReceiveWithAnyArgs().SendNotification(default!, default(object)!);
     }
 
-    // Issue #471: passing CancellationToken.None here (as this used to, silently) means a
+    // Passing CancellationToken.None here would mean a
     // superseding MatchCacheChangedNotification can never cancel a refresh already dispatched to
     // the client -- only one still waiting out the debounce delay. See
     // IRefreshDebouncer.Schedule's remarks.

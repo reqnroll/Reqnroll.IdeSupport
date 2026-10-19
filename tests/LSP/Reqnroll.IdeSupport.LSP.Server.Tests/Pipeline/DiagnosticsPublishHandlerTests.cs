@@ -266,11 +266,11 @@ public class DiagnosticsPublishHandlerTests
         lspRange.End.Character.Should().Be(14);  // 10 + 4
     }
 
-    // ── Q24: registry-ready guard ────────────────────────────────────────────
+    // ── Registry-ready guard ────────────────────────────────────────────
 
     /// <summary>
     /// A real-but-empty match set that is clearly not <see cref="FeatureBindingMatchSet.Empty"/>.
-    /// Used by the Q24 guard tests to verify the guard correctly substitutes or preserves the
+    /// Used by the registry-ready guard tests to verify the guard correctly substitutes or preserves the
     /// match set depending on registry state. Avoids the heavy scaffolding of real
     /// <see cref="StepBindingMatch"/> entries.
     /// </summary>
@@ -303,7 +303,7 @@ public class DiagnosticsPublishHandlerTests
         // Act
         await CreateSut().Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
 
-        // Assert — the real match set must NOT have been forwarded; the Q24 guard
+        // Assert — the real match set must NOT have been forwarded; the registry-ready guard
         // substitutes FeatureBindingMatchSet.Empty when the registry is Invalid.
         _aggregator.Received(1).Aggregate(
             Arg.Any<IReadOnlyCollection<IdeSupportTag>>(),
@@ -357,7 +357,7 @@ public class DiagnosticsPublishHandlerTests
             Arg.Is<PublishDiagnosticsParams>(p => p.Diagnostics.Any()));
     }
 
-    // ── Idempotency (issue #578) ─────────────────────────────────────────────
+    // ── Idempotency ─────────────────────────────────────────────
 
     [Fact]
     public async Task Handling_the_same_notification_twice_pushes_the_same_diagnostics_both_times()

@@ -9,9 +9,8 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
 /// <summary>
-/// Tests for <see cref="CSharpDiagnosticsRegistryChangedHandler"/>. Since issue #577 split the
-/// single <c>BindingRegistryChangedNotification</c> it used to handle into three named events,
-/// the ownership-filtering tests below run once per event type (via <see cref="AllThreeEvents"/>)
+/// Tests for <see cref="CSharpDiagnosticsRegistryChangedHandler"/>. It handles three named
+/// registry events, so the ownership-filtering tests below run once per event type (via <see cref="AllThreeEvents"/>)
 /// to confirm dispatch is wired correctly for all three, not just whichever one happened to be
 /// picked as a representative.
 /// </summary>
@@ -47,7 +46,7 @@ public class CSharpDiagnosticsRegistryChangedHandlerTests : IDisposable
     private CSharpDiagnosticsRegistryChangedHandler CreateSut() =>
         new(_csharpFileTextCache, _scopeManager, _publisher);
 
-    /// <summary>The three events this handler now subscribes to (issue #577), each carrying <see cref="_project"/>.</summary>
+    /// <summary>The three events this handler now subscribes to, each carrying <see cref="_project"/>.</summary>
     public static IEnumerable<object[]> AllThreeEvents()
     {
         yield return new object[] { "Replaced" };

@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
 
 /// <summary>
-/// Unit tests for <see cref="LspWorkspaceScopeManager"/>'s Q17 project-membership behaviour
+/// Unit tests for <see cref="LspWorkspaceScopeManager"/>'s project-membership behaviour
 /// (backed internally by <see cref="MembershipIndex"/>, see <c>MembershipIndexTests.cs</c> for
 /// that class's own direct tests).  Every test here drives the manager via
 /// <see cref="ILspWorkspaceScopeManager"/> method calls and asserts the observable
@@ -36,7 +36,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     /// <summary>
     /// Polls until <see cref="_mediator"/> has received at least one <c>Publish</c> call.
     /// <see cref="LspWorkspaceScopeManager"/>/<c>MembershipIndex</c> now dispatch their
-    /// notification via <c>FireAndForgetExtensions</c> (issue #477), so it genuinely runs on a
+    /// notification via <c>FireAndForgetExtensions</c>, so it genuinely runs on a
     /// thread-pool thread rather than inline — by design, since the whole point of the fix is
     /// that the caller (here, the awaited <c>HandleProjectFilesAsync</c>/<c>HandleProjectLoadedAsync</c>
     /// call) no longer blocks on it. That means it may not have happened yet the instant those
@@ -46,7 +46,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     private Task WaitForPublishAsync(TimeSpan? timeout = null) => WaitForPublishAsync(atLeast: 1, timeout);
 
     /// <summary>
-    /// Overload for a delta that removes a binding-role file (issue #577): that path publishes
+    /// Overload for a delta that removes a binding-role file: that path publishes
     /// two notifications in sequence (ProjectBindingFilesRemovedNotification then
     /// BindingRegistryPatchedNotification) within the same background continuation, so a poll
     /// landing between them would otherwise see only the first.
@@ -143,7 +143,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
         _sut.GetMembershipState(outsideUri).Should().Be(MembershipState.Unowned);
     }
 
-    // ── I2 startup race (issue #48) ───────────────────────────────────────────
+    // ── I2 startup race ───────────────────────────────────────────
     // A workspace folder can be open (via `initialize`/workspace-folders) before the
     // `reqnroll/projectLoaded` notification for a project inside it has arrived. A file
     // sync (didOpen/didChange) landing in that window must not be permanently excluded —
@@ -167,7 +167,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     [Fact]
     public async Task GetMembershipState_becomes_Owned_once_the_racing_project_registers_and_sends_baseline()
     {
-        // Reproduces the full race from issue #48: workspace opens, a .cs file syncs before
+        // Reproduces the full startup race: workspace opens, a .cs file syncs before
         // the owning project has registered (Pending), then the project registers and its
         // baseline arrives claiming the file (Owned) — discovery must not have been
         // permanently gated in between.
@@ -490,7 +490,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
         owners.Should().HaveCount(2);
     }
 
-    // ── ResolvePrimaryOwner (Q18 2A) ─────────────────────────────────────────
+    // ── ResolvePrimaryOwner ─────────────────────────────────────────
 
     [Fact]
     public async Task ResolvePrimaryOwner_returns_null_when_no_owners()
@@ -637,7 +637,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     [Fact]
     public async Task Baseline_before_projectLoaded_fires_deferred_full_rescan_once_project_registers()
     {
-        // Reproduces the other half of issue #48's race: the baseline (and therefore the full
+        // Reproduces the other half of the startup race: the baseline (and therefore the full
         // re-scan it would normally trigger) arrives before `reqnroll/projectLoaded` registers
         // the project. Any .cs buffer synced in that window was evaluated with zero known
         // owners; without a deferred re-scan firing once the project registers, that buffer's
@@ -678,7 +678,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     [Fact]
     public async Task Delta_after_baseline_publishes_a_BindingRegistryPatchedNotification()
     {
-        // Reproduces issue #32's follow-up: a Solution Explorer rename's delta typically arrives
+        // A Solution Explorer rename's delta typically arrives
         // just after the client's didClose/didOpen for the new URI, so the file's first
         // parse/diagnostics pass ran with zero known owners. Without a notification here, that
         // already-open buffer's diagnostics would stay stale until the next full build.
@@ -707,7 +707,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     [Fact]
     public async Task Delta_removing_a_binding_file_includes_it_in_RemovedBindingFilePaths()
     {
-        // Issue #94: deleting a .cs step-definition file must be surfaced so the registry can
+        // Deleting a .cs step-definition file must be surfaced so the registry can
         // strip its stale bindings, not just the membership index.
         var p = ProjectParams();
         await _sut.HandleProjectLoadedAsync(p, CancellationToken.None);
@@ -725,7 +725,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
                 (stepsFile, ProjectFileRole.Binding, false)),
             CancellationToken.None);
         // This delta publishes ProjectBindingFilesRemovedNotification then
-        // BindingRegistryPatchedNotification in sequence (issue #577).
+        // BindingRegistryPatchedNotification in sequence.
         await WaitForPublishAsync(atLeast: 2);
 
         _ = _mediator.Received(1).Publish(
@@ -756,7 +756,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
         await WaitForPublishAsync();
 
         // A feature-file (not binding-role) removal must not trigger the binding-files-removed
-        // signal at all (issue #577), though the delta's Patched notification still fires.
+        // signal at all, though the delta's Patched notification still fires.
         _ = _mediator.DidNotReceive().Publish(
             Arg.Any<ProjectBindingFilesRemovedNotification>(), Arg.Any<CancellationToken>());
         _ = _mediator.Received(1).Publish(

@@ -138,7 +138,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
         _sut.GetScopeForUri(uri).Should().BeNull();
     }
 
-    // ── OpenProject telemetry (issue #581 finding 2) ──────────────────────────
+    // ── OpenProject telemetry ──────────────────────────
 
     private ReqnrollProjectLoadedParams ProjectParams(string root, string projectFileName = "Proj.csproj")
         => new()
@@ -150,7 +150,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
             TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0"
         };
 
-    // ── Shared projects (issue #735) ──────────────────────────────────────────
+    // ── Shared projects ──────────────────────────────────────────
 
     [Fact]
     public async Task HandleProjectLoadedAsync_ignores_a_shared_project()
@@ -233,7 +233,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
     public async Task HandleProjectLoadedAsync_OpenProject_telemetry_carries_the_project_profile(
         string projectFileName, string expectedLanguage)
     {
-        // Issue #846: the profile is emitted server-side so VS Code and Rider get it too.
+        // The profile is emitted server-side so VS Code and Rider get it too.
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
 
@@ -252,7 +252,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
     [Fact]
     public async Task HandleProjectLoadedAsync_does_not_re_emit_OpenProject_telemetry_for_a_re_sent_load()
     {
-        // VS re-sends projectLoaded after every successful build (issue #542) -- that is a
+        // VS re-sends projectLoaded after every successful build -- that is a
         // rebuild signal, not a second "project opened" event.
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
