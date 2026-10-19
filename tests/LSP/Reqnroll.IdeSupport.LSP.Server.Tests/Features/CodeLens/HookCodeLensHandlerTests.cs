@@ -159,7 +159,7 @@ public class HookCodeLensHandlerTests
     [Fact]
     public async Task Handle_feature_scoped_hook_produces_a_lens_only_on_the_feature_line()
     {
-        // BeforeFeature no longer bleeds into the Scenario/Step lenses now that counts are
+        // BeforeFeature must not bleed into the Scenario/Step lenses: counts are
         // own-level only.
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeFeature)));
 

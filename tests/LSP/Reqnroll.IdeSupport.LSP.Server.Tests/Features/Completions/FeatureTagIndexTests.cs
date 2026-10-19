@@ -22,7 +22,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Completions;
 /// Tests for <see cref="FeatureTagIndex"/> against a real file system and the real
 /// <see cref="IdeSupportTagParser"/> — open buffers preferred over disk, closed files parsed from
 /// disk once and cached until their write time changes, and the membership-index file list
-/// overriding the disk scan once the project baseline has arrived (issue #828).
+/// overriding the disk scan once the project baseline has arrived.
 /// </summary>
 public class FeatureTagIndexTests : IDisposable
 {
@@ -362,7 +362,7 @@ public class FeatureTagIndexTests : IDisposable
         // A multi-targeted project's membership index keys ownership per (project file, TFM), so
         // ResolveOwners legitimately hands back the same LspReqnrollProject once per target
         // framework even though all of them are the single project for that .csproj. Counts must
-        // not be multiplied by the number of TFMs (issue #943).
+        // not be multiplied by the number of TFMs.
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
         var project = RegisterOwner(uri, _root, hasBaseline: true,
             indexedFiles: new[]

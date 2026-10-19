@@ -37,7 +37,7 @@ public class StepCodeLensHandlerTests
     /// Builds the handler for a client identified by <paramref name="ide"/>. The default
     /// (<c>supportsCodeLensResolve: false</c>) is what EVERY shipped client gets today — the
     /// <c>codeLens/resolve</c> allowlist in <see cref="ClientIdeContext"/> is empty, so the eager
-    /// path is the production path for VS, VS Code and Rider alike (issue #471).
+    /// path is the production path for VS, VS Code and Rider alike.
     /// Pass <c>supportsCodeLensResolve: true</c> to exercise the deferred branch, which is real
     /// code kept ready for the first client that implements the resolve round trip.
     /// </summary>
@@ -252,17 +252,17 @@ public class StepCodeLensHandlerTests
     }
 
     /// <summary>
-    /// Regression test for issue #552: a method carrying multiple binding attributes (e.g.
+    /// Regression guard: a method carrying multiple binding attributes (e.g.
     /// <c>[When("...")]</c> + <c>[When("...")]</c> + <c>[Then("...")]</c> on one method) reports
     /// the identical (SourceFileLine, SourceFileColumn) for every attribute -- the shared method
-    /// identifier position (see the anchor-fix remarks in StepCodeLensHandler, issue #484). That
+    /// identifier position (see the anchor remarks in StepCodeLensHandler). That
     /// must still collapse to a SINGLE lens (matching the conventional "N references"-per-method
     /// CodeLens every client renders one of per line) whose count is the aggregate of every
     /// attribute's usages, looked up via the same location-based <c>FindUsages</c> overload Find
     /// Step Usages (FAR) already uses -- not one lens per attribute (an earlier version of this
     /// fix tried that; VS Code rendered three separate lenses side by side instead of one, and
     /// Rider's CodeVision engine silently dropped every lens but the first at that position) and
-    /// not a per-attribute BindingId lookup (the original #552 bug, which undercounted to a single
+    /// not a per-attribute BindingId lookup (which would undercount to a single
     /// attribute's own usages instead of the method's total).
     /// </summary>
     [Fact]
@@ -296,15 +296,15 @@ public class StepCodeLensHandlerTests
 
     // ── Project-owner filter ──────────────────────────────────────────────────
     //
-    // The scoping decision itself (direct owners + issue #548 widening for a binding declared in
-    // an externally-referenced assembly, narrowed per issue #552) is now owned by
-    // IProjectBindingRegistryLookup.ResolveUsageSearchScope and unit-tested against the real
+    // The scoping decision itself (direct owners, widened for a binding declared in an
+    // externally-referenced assembly, then narrowed to projects that report the same physical
+    // source file) is owned by IProjectBindingRegistryLookup.ResolveUsageSearchScope and unit-tested against the real
     // implementation in BindingRegistryProviderRouterTests. These tests only need to prove the
     // handler forwards whatever that method returns straight through to FindUsages -- this is
-    // also the regression guard for the bug that motivated moving it there: the step-usage
-    // CodeLens (which used to apply the #548 widening itself) reported "1 step usage" while
+    // also the regression guard for the bug that motivated sharing it: if the step-usage
+    // CodeLens applied its own widening it would report "1 step usage" while
     // clicking it to navigate opened a "0 usages" Find Step Usages window for the same binding,
-    // because FindStepUsagesHandler computed its own, narrower, direct-owners-only filter.
+    // because FindStepUsagesHandler computes its own, narrower, direct-owners-only filter.
 
     [Fact]
     public async Task Handle_passes_the_registry_lookups_resolved_scope_to_FindUsages()
@@ -339,7 +339,7 @@ public class StepCodeLensHandlerTests
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
     }
 
-    // ── Usage lookup is by location, not per-attribute BindingId (issue #552) ────
+    // ── Usage lookup is by location, not per-attribute BindingId ────
 
     [Fact]
     public async Task Handle_passes_the_bindings_location_to_FindUsages()
@@ -364,7 +364,7 @@ public class StepCodeLensHandlerTests
     // ── Deferred resolve (allowlisted resolve-capable clients only) ───────────
 
     /// <summary>
-    /// The regression guard for issue #471's final-review fix: the deferred path must NOT be
+    /// Regression guard: the deferred path must NOT be
     /// active for any client the repo actually ships. Every one of these goes through the
     /// production <see cref="ClientIdeContext"/> constructor, i.e. the real allowlist lookup —
     /// so this fails the moment someone adds an entry without also shipping client-side
@@ -470,7 +470,7 @@ public class StepCodeLensHandlerTests
     [Fact]
     public async Task ResolveAsync_resolves_from_bindingId_alone_with_no_sourceFile_line_or_column()
     {
-        // Confirms the index-only resolve path (issue #471): a Data payload carrying only
+        // Confirms the index-only resolve path: a Data payload carrying only
         // bindingId+uri (no sourceFile/sourceLine/sourceColumn) must still resolve via the direct
         // reverse-index lookup, with zero location math.
         var csPath  = CsUri.GetFileSystemPath()!;
