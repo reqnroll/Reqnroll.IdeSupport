@@ -39,7 +39,7 @@ async function withStubbedWindow<T>(
 // so these tests exercise vscode.Uri#fsPath's actual, platform-specific separator convention --
 // this suite runs in the real Extension Host, on Linux CI runners as well as Windows.
 suite('stepNavigation', () => {
-  // ── doGoToStepDefinition (reqnroll/findStepDefinitions, issue #757) ──────────
+  // ── doGoToStepDefinition (reqnroll/findStepDefinitions) ──────────
 
   suite('doGoToStepDefinition', () => {
     const stepsFile = path.join(path.parse(process.cwd()).root, 'work', 'Steps.cs');

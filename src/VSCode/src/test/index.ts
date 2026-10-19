@@ -4,14 +4,13 @@ import Mocha from 'mocha';
 /**
  * Bootstraps the Mocha `suite`/`test` globals inside the Extension Development Host and runs the
  * bundled test file. `@vscode/test-electron` loads this module's `run` export as
- * `extensionTestsPath` — pointing that directly at a compiled test file (as this used to) never
+ * `extensionTestsPath` — pointing that directly at a compiled test file never
  * registers Mocha's BDD globals, so every suite/test call throws `ReferenceError: suite is not
  * defined` before a single test runs.
  */
 export function run(): Promise<void> {
   // Default Mocha timeout (2000ms) races against extension.test.ts's own 2000ms activation
-  // wait; give suites headroom now that they actually run (this harness was previously never
-  // invoking them at all — see remarks above).
+  // wait; give suites headroom for the suites that actually run.
   const mocha = new Mocha({ ui: 'tdd', color: true, timeout: 10000 });
   const testsRoot = path.resolve(__dirname);
 

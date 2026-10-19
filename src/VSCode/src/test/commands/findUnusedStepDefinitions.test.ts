@@ -169,7 +169,7 @@ suite('findUnusedStepDefinitions', () => {
     });
 
     test('treats an item from an older server with no isResolved field as navigable', async () => {
-      // Back-compat: the field is absent in responses from a server predating issue #540.
+      // Back-compat: the field is absent in responses from an older server that does not send it.
       const client = fakeClient(() =>
         Promise.resolve({
           items: [

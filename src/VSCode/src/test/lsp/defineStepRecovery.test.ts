@@ -8,11 +8,11 @@ import * as vscode from 'vscode';
 const execFileAsync = util.promisify(execFile);
 
 /**
- * Recreates issue #2's original scenario end-to-end, using the real bundled LSP server and a real
+ * Recreates the unbuilt-project binding-discovery scenario end-to-end, using the real bundled LSP server and a real
  * `dotnet build` (not the stubbed spec-suite fixtures, which announce a pre-existing output
  * assembly and so never exercise this gap): a project is discovered and registered before it has
- * ever been built, exactly as PR #26 describes ("a freshly cloned repo opened before ever running
- * `dotnet build`"). The fixture lives under `__defineStepE2E__` at the repo root, written to disk
+ * ever been built, as in a freshly cloned repo opened before ever running
+ * `dotnet build`. The fixture lives under `__defineStepE2E__` at the repo root, written to disk
  * by `suiteSetup` below.
  *
  * `Recovery.feature` has two steps: one genuinely bound by `RecoverySteps.cs` (compiled into the

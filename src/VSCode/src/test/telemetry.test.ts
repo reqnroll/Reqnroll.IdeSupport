@@ -130,7 +130,7 @@ suite('telemetry', () => {
     });
   });
 
-  // The activated extension owns a module-level reporter (ensureTelemetryReporter, #845); start clean.
+  // The activated extension owns a module-level reporter (ensureTelemetryReporter); start clean.
   setup(() => resetTelemetryReporterForTests());
 
   suite('client identity (#844)', () => {

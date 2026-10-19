@@ -7,7 +7,7 @@ import { setAppLogChannel } from '../../logging/appNotify';
 import { evaluateViaMsBuild, isMtpCapable } from '../../testOutcomes/mtpProjectDetection';
 import { MAX_BUFFER_OVERFLOW_CODE } from '../../util/msbuildProcess';
 
-/** Covers {@link isMtpCapable}, the TypeScript port of the VS/Rider ad hoc MTP-capability scan (issue #715 plan §5.7). */
+/** Covers {@link isMtpCapable}, the TypeScript port of the VS/Rider ad hoc MTP-capability scan. */
 suite('isMtpCapable', () => {
   let dir: string;
 
@@ -106,7 +106,7 @@ suite('isMtpCapable', () => {
     );
   });
 
-  // ── MSBuild-evaluation fallback (issue #722: imported-props-file gap) ────────────────────────
+  // ── MSBuild-evaluation fallback (imported-props-file gap) ────────────────────────
 
   suite('MSBuild evaluation fallback', () => {
     function testSdkProjectFile(): string {

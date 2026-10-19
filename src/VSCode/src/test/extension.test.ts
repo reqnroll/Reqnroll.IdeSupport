@@ -55,7 +55,7 @@ import './testOutcomes/mtpProjectStubs.test';
 import './testOutcomes/testOutcomesService.test';
 
 /**
- * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.
+ * Waits for the language client to reach `State.Running`.
  * Checks the current state first — the client may already be running by the time this is
  * called — before subscribing, to avoid missing a transition that already happened.
  */

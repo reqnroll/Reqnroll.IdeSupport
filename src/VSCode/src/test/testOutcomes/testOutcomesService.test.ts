@@ -9,11 +9,11 @@ import {
 } from '../../testOutcomes/testOutcomesService';
 
 /**
- * Issue #749: turning `reqnroll.testOutcomes.enabled` off used to leave
- * `dotnet.unitTests.runSettingsPath` pointing at the generated runsettings file forever, and the
- * generated file itself was one fixed name shared by every open workspace, so two windows on
- * different workspaces overwrote each other's registration. These tests cover the two pieces that
- * fix that: `generatedFileName` (per-workspace keying) and the record/restore pair around
+ * Turning `reqnroll.testOutcomes.enabled` off must not leave
+ * `dotnet.unitTests.runSettingsPath` pointing at the generated runsettings file, and the
+ * generated file must not be one fixed name shared by every open workspace (two windows on
+ * different workspaces would overwrite each other's registration). These tests cover the two pieces
+ * that guarantee that: `generatedFileName` (per-workspace keying) and the record/restore pair around
  * `context.workspaceState` (`recordPriorSettingIfNeeded` / `cleanupRunSettingsOnOptOut`).
  *
  * `dotnet.unitTests.runSettingsPath` is contributed by C# Dev Kit, not this extension - in the

@@ -41,9 +41,9 @@ function createFakeInner(): { inner: vscode.LogOutputChannel; showCalls: unknown
   return { inner: fake as unknown as vscode.LogOutputChannel, showCalls };
 }
 
-// Issue #1000: autoShowOnWarnOrError is documented as "first warn/error", but both warn() and
-// error() used to show on every call, and show() ignored its preserveFocus argument — so the
-// Output panel grabbed focus mid-typing on every warning.
+// autoShowOnWarnOrError means "first warn/error": neither warn() nor error() may show on every
+// call, and show() must honour its preserveFocus argument — otherwise the Output panel grabs
+// focus mid-typing on every warning.
 suite('GeneralFileLogChannel auto-show (issue #1000)', () => {
   test('auto-show fires only once across repeated warn/error calls', () => {
     const { inner, showCalls } = createFakeInner();

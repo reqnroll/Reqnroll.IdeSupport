@@ -18,8 +18,8 @@ import { parseLspTraceMessage } from '../../lsp/lspInspectorLogger';
  * shape changes.
  *
  * Deliberately excluded from the comparison: `timestamp` (wall-clock, inherently different per
- * run) and `traceId` (issue #633 found this can't be ported here - see `LspEntry`'s doc comment
- * in `lspInspectorLogger.ts`). `latencyMs` **is** compared below (added in #633): unlike `traceId`,
+ * run) and `traceId` (this can't be ported here - see `LspEntry`'s doc comment
+ * in `lspInspectorLogger.ts`). `latencyMs` **is** compared below: unlike `traceId`,
  * the round-trip time is already present in vscode-languageclient's own response trace text, so
  * this side only needed to start capturing it, not invent new tracking state.
  */

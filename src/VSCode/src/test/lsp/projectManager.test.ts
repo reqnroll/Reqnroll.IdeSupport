@@ -417,7 +417,7 @@ suite('ProjectManager', () => {
     });
   });
 
-  // Issue #997: vscode-languageclient restarts a crashed server on the same LanguageClient
+  // vscode-languageclient restarts a crashed server on the same LanguageClient
   // (Running -> Stopped -> Starting -> Running), so the new server must be re-sent project state.
   suite('server restart (issue #997)', () => {
     const managers: ProjectManager[] = [];
@@ -603,7 +603,7 @@ suite('ProjectManager', () => {
 });
 
 /**
- * Regression tests for issue #1010: a debounced membership resend — or a resend that is already
+ * Regression tests: a debounced membership resend — or a resend that is already
  * in flight — must never re-announce a project after it has been unregistered, and a pending
  * timer must not fire after the manager has been disposed. `resendProjectFiles` calls
  * `sendProjectLoaded`, which sends even when MSBuild evaluation fails, so without a guard the
