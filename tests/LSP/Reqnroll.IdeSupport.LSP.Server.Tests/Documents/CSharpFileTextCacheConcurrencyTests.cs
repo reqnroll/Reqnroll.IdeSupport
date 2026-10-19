@@ -3,11 +3,10 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Documents;
 
 /// <summary>
-/// Issue #568: <see cref="CSharpFileTextCache"/> tracks the live text of every open <c>.cs</c>
+/// <see cref="CSharpFileTextCache"/> tracks the live text of every open <c>.cs</c>
 /// file — <c>TextDocumentSyncHandler</c> writes to it from <c>didOpen</c>/<c>didChange</c>/
-/// <c>didClose</c> on whatever thread the LSP dispatch lane hands the notification to, so the
-/// same class of concurrent-access gap flagged for <see cref="DocumentBufferService"/> applies
-/// here too. These tests exercise concurrent callers rather than the sequential-only coverage in
+/// <c>didClose</c> on whatever thread the LSP dispatch lane hands the notification to, so it is
+/// exposed to the same concurrent-access hazards as <see cref="DocumentBufferService"/>. These tests exercise concurrent callers rather than the sequential-only coverage in
 /// <see cref="CSharpFileTextCacheTests"/>.
 /// </summary>
 public class CSharpFileTextCacheConcurrencyTests

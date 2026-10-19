@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 
 /// <summary>
-/// Covers <see cref="ResilientMediator"/>'s fan-out fault isolation (issue #575). Stock MediatR
+/// Covers <see cref="ResilientMediator"/>'s fan-out fault isolation. Stock MediatR
 /// awaits each <see cref="INotificationHandler{TNotification}"/> in a bare <c>foreach</c>, so the
 /// first handler to throw suppresses every handler after it — and which ones are lost depends on
 /// the order the container returns them, i.e. on assembly-scan order.
@@ -76,7 +76,7 @@ public class ResilientMediatorTests
     [Fact]
     public async Task A_handler_throwing_first_still_lets_every_later_handler_run()
     {
-        // The production shape of issue #575: DiagnosticsPublishHandler throwing ahead of
+        // The production shape: DiagnosticsPublishHandler throwing ahead of
         // SemanticTokensPushHandler cost the user both diagnostics AND colouring for that edit.
         var log = new List<string>();
         var logger = Substitute.For<IIdeSupportLogger>();

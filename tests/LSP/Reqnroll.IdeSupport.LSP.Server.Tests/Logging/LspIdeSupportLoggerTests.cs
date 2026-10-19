@@ -6,8 +6,7 @@ using Reqnroll.IdeSupport.LSP.Server.Logging;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Logging;
 
 /// <summary>
-/// Issue #568: <see cref="LspIdeSupportLogger"/> has zero test references anywhere in the
-/// codebase. It composes a real <see cref="Common.Logging.SynchronousFileLogger"/> that writes to
+/// Covers <see cref="LspIdeSupportLogger"/>. It composes a real <see cref="Common.Logging.SynchronousFileLogger"/> that writes to
 /// the developer's actual log folder (already exercised the same way by
 /// <c>SynchronousFileLoggerTests</c> in the Common test project), so these tests avoid asserting
 /// on that file's exact path/content and instead cover the composition behaviour the class itself

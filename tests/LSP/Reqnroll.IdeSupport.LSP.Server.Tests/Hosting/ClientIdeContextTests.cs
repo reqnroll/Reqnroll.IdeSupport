@@ -33,7 +33,7 @@ public class ClientIdeContextTests
         context.Behaviours.RequiresPushedSemanticTokens.Should().BeTrue();
     }
 
-    // ── codeLens/resolve opt-in allowlist (issue #471) ─────────────────────────
+    // ── codeLens/resolve opt-in allowlist ─────────────────────────
 
     /// <summary>
     /// The allowlist is deliberately empty: no client this repo ships implements the
@@ -66,7 +66,7 @@ public class ClientIdeContextTests
             .LogLevel.Should().Be(TraceLevel.Verbose);
     }
 
-    // ── InitializeParams.ClientInfo identity (issue #709) ───────────────────────
+    // ── InitializeParams.ClientInfo identity ───────────────────────
     //
     // Two sources feed the IDE identity: the --ide process argument (primary, available before the
     // client connects) and InitializeParams.ClientInfo (secondary, arrives in the initialize
@@ -103,7 +103,7 @@ public class ClientIdeContextTests
 
         context.ApplyClientInfo(new ClientInfo { Name = "Visual Studio", Version = "17.14.0" });
 
-        // The cross-check half of issue #709: the disagreement is recorded (ClientName), but it never
+        // The cross-check half: the disagreement is recorded (ClientName), but it never
         // changes which IDE the server thinks it is talking to.
         context.Ide.Should().Be("vscode");
         context.Behaviours.RequiresPushedSemanticTokens.Should().BeFalse();

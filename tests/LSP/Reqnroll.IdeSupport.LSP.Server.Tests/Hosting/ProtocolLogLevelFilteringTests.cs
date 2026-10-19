@@ -8,11 +8,11 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 
 /// <summary>
-/// Issue #660: OmniSharp's internal <c>LanguageServerLoggingManager</c> unconditionally overwrites
+/// OmniSharp's internal <c>LanguageServerLoggingManager</c> unconditionally overwrites
 /// <see cref="LoggerFilterOptions.MinLevel"/> from the current LSP trace level, discarding whatever
 /// <c>--protocol-log-level</c> configured via <c>SetMinimumLevel</c> in <see cref="Program.ConfigureServer"/>.
 /// These tests exercise the real DI container OmniSharp builds (not a hand-rolled substitute) so a
-/// regression in either our fix or a future OmniSharp upgrade that changes this behaviour is caught.
+/// regression in either our workaround or a future OmniSharp upgrade that changes this behaviour is caught.
 /// </summary>
 public class ProtocolLogLevelFilteringTests
 {

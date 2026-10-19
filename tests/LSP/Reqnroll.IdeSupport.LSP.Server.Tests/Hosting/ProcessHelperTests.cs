@@ -5,8 +5,8 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 
 /// <summary>
-/// Issue #568: <see cref="ProcessHelper"/> (external process spawning for the out-of-process
-/// reflection connector) has zero test references anywhere in the codebase. These tests spawn the
+/// Tests for <see cref="ProcessHelper"/> (external process spawning for the out-of-process
+/// reflection connector). These tests spawn the
 /// real <c>dotnet</c> executable — guaranteed present in this repository's build/test
 /// environment — rather than mocking <see cref="System.Diagnostics.Process"/>, since the class's
 /// entire job is orchestrating a real OS process (argument quoting, timeout, output capture).
@@ -46,7 +46,7 @@ public class ProcessHelperTests
     [Fact]
     public void RunProcess_records_the_processId_of_a_process_that_actually_started()
     {
-        // Issue #637: lets a caller (OutProcReqnrollConnector) point a reader at the matching
+        // Lets a caller (OutProcReqnrollConnector) point a reader at the matching
         // reqnroll-*-connector-*-{pid}.log file for this specific invocation.
         var result = ProcessHelper.RunProcess(WorkingDirectory, "dotnet", new[] { "--version" });
 

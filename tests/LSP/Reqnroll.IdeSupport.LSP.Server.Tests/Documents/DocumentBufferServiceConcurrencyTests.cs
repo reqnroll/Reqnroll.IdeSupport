@@ -4,9 +4,9 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Documents;
 
 /// <summary>
-/// Issue #568: <see cref="DocumentBufferService"/> is the open-document buffer map every
+/// <see cref="DocumentBufferService"/> is the open-document buffer map every
 /// <c>didChange</c>/<c>didClose</c>/read handler touches concurrently from the thread pool — the
-/// single most concurrency-exposed class in the server, per the audit that raised this issue.
+/// most concurrency-exposed class in the server.
 /// These tests exercise concurrent callers rather than the sequential-only coverage in
 /// <see cref="DocumentBufferServiceTests"/>.
 /// </summary>
@@ -79,7 +79,7 @@ public class DocumentBufferServiceConcurrencyTests
     [Fact]
     public async Task Concurrent_UpdateTags_and_Remove_for_the_same_uri_never_leave_a_ghost_buffer()
     {
-        // Issue #938: whichever of a racing UpdateTags/Remove pair runs first, the document is
+        // Whichever of a racing UpdateTags/Remove pair runs first, the document is
         // closed afterwards, so no buffer may survive.
         var uri = MakeUri(0);
         var ghostAt = -1;

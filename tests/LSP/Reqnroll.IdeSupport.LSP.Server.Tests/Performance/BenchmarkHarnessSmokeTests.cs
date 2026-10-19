@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.LSP.Server.Benchmarks.Scenarios;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 
 /// <summary>
-/// Harness self-test (implementation plan §2): drives the real in-process server against a tiny
+/// Harness self-test: drives the real in-process server against a tiny
 /// corpus subset with low iteration counts and asserts the benchmark produces a populated result.
 /// Guards against the harness silently measuring nothing (e.g. a handler returning null for the
 /// corpus URIs, or positions that never hit a step).
@@ -40,8 +40,8 @@ public class BenchmarkHarnessSmokeTests
     [Fact]
     public async Task FindStepDefinitions_scenario_measures_a_real_binding_lookup()
     {
-        // Issue #757: reqnroll/findStepDefinitions is field-instrumented, so it has synthetic coverage
-        // too (the #495 lesson) — and that coverage must hit a bound step, not time an empty result.
+        // reqnroll/findStepDefinitions is field-instrumented, so it has synthetic coverage
+        // too, and that coverage must hit a bound step, not time an empty result.
         var corpusRoot = CorpusLocator.FindCorpusRoot();
 
         await using var harness = new BenchmarkLspHarness();

@@ -13,8 +13,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 
 /// <summary>
-/// Investigation probe for issue #471 (item #3 of the investigation plan): a fast, CI-runnable
-/// duration-vs-cache-size curve for <c>textDocument/codeLens</c>, to confirm/quantify the shape of
+/// Scaling probe: a fast, CI-runnable
+/// duration-vs-cache-size curve for <c>textDocument/codeLens</c>, to quantify the shape of
 /// <c>BindingMatchService.FindUsages</c>'s cost (called once per binding by
 /// <see cref="Reqnroll.IdeSupport.LSP.Server.Features.CodeLens.StepCodeLensHandler"/>, an unindexed
 /// scan over the whole match-set cache) as the cache grows — without needing the full VS +
@@ -29,8 +29,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 /// (e.g. re-scanning already-scanned state, or growth in something other than cache size) shape.
 /// </remarks>
 /// <remarks>
-/// <b>Regression gate, not a pure diagnostic</b> (tightened once the root cause was confirmed —
-/// see issue #471): asserts the largest measured point stays within a generous multiple of a
+/// <b>Regression gate, not a pure diagnostic:</b> asserts the largest measured point stays within a generous multiple of a
 /// naive linear-scaling prediction from the smallest point. Real runs measured ~44.3ms at 50
 /// features against a linear prediction of ~312.5ms (12.5ms × 25x the feature count) — nowhere
 /// close to the 5x-of-linear threshold below, and true O(n²) growth would land an order of
@@ -131,8 +130,7 @@ public class FindUsagesScalingProbeTests
     /// compares its per-binding cost to CorpusSteps.cs's (64 bindings) at the same cache size.
     /// </summary>
     /// <remarks>
-    /// <b>Regression gate, not a pure diagnostic</b> (tightened once the root cause was confirmed —
-    /// see issue #471): same shape as <see cref="CodeLens_latency_vs_cached_step_count"/> — asserts
+    /// <b>Regression gate, not a pure diagnostic:</b> same shape as <see cref="CodeLens_latency_vs_cached_step_count"/> — asserts
     /// the large-file cost stays within a generous multiple of a naive linear-scaling prediction
     /// from the baseline. Real runs measured ~533ms against a ~581ms linear prediction (already
     /// under it) — the 3x-headroom threshold below leaves ample margin for noise while still

@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Concurrency;
 /// Tests for <see cref="RefreshDebouncer"/>: a burst of rapid <see cref="IRefreshDebouncer.Schedule"/>
 /// calls for the same key should collapse into a single run of the most recently scheduled action,
 /// after a quiet period — including across separate <see cref="RefreshDebouncer"/> callers, which is
-/// the scenario a transient MediatR handler actually produces in production (issue #156).
+/// the scenario a transient MediatR handler actually produces in production.
 /// </summary>
 public class RefreshDebouncerTests : IDisposable
 {
@@ -89,7 +89,7 @@ public class RefreshDebouncerTests : IDisposable
     {
         // This is the scenario that broke before this type existed: MediatR constructs a new
         // handler instance per notification, so debounce state living in the handler's own field
-        // never collapses anything (issue #156). Here, three separate "callers" (standing in for
+        // never collapses anything. Here, three separate "callers" (standing in for
         // three separate handler instances) all schedule against the *same* shared IRefreshDebouncer
         // — only the last one scheduled for the key should actually run.
         var runCount = 0;

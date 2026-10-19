@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry.FeatureUsage;
 
-/// <summary>Tests for <see cref="FeatureUsageFlushService"/> (issue #582).</summary>
+/// <summary>Tests for <see cref="FeatureUsageFlushService"/>.</summary>
 public class FeatureUsageFlushServiceTests
 {
     private static readonly TimeSpan Enabled = TimeSpan.FromMinutes(10);

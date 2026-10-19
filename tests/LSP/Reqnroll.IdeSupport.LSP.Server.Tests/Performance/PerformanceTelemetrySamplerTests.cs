@@ -68,7 +68,7 @@ public class PerfTelemetrySamplerTests
     [InlineData("false", 0.0, false)]
     [InlineData("no", 0.0, false)]
     [InlineData(" off ", 0.0, false)]
-    [InlineData("-1", 0.0, false)]            // finite negative: disabled, as before #862
+    [InlineData("-1", 0.0, false)]            // finite negative: disabled
     [InlineData(" 0.1 ", 0.1, false)]
     [InlineData("1", 1.0, false)]
     [InlineData("1.0", 1.0, false)]

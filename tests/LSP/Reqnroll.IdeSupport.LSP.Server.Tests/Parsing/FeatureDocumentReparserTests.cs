@@ -10,9 +10,8 @@ using Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Parsing;
 
 /// <summary>
-/// Covers <see cref="FeatureDocumentReparser"/> (issue #578) — the extraction of the
-/// parse-then-publish pair that four independent handlers each used to implement as their own
-/// private <c>ParseAndNotifyAsync</c> copy. <see cref="TextDocumentSyncHandlerTests"/>,
+/// Covers <see cref="FeatureDocumentReparser"/> — the extraction of the
+/// parse-then-publish pair shared by four handlers. <see cref="TextDocumentSyncHandlerTests"/>,
 /// <see cref="BindingRegistryChangedHandlerTests"/>, <see cref="ReqnrollConfigChangedHandlerTests"/>,
 /// and <c>DocumentActivatedHandlerTests</c> substitute <see cref="IFeatureDocumentReparser"/> and
 /// verify only that they call it correctly; this class verifies the contract itself.
@@ -73,7 +72,7 @@ public class FeatureDocumentReparserTests
     [Fact]
     public async Task ReparseOpenDocumentAsync_is_idempotent_when_called_twice_with_the_same_arguments()
     {
-        // Issue #578: consumers of MatchCacheChangedNotification must be idempotent -- calling
+        // Consumers of MatchCacheChangedNotification must be idempotent -- calling
         // the reparse-then-publish pair twice with identical inputs must not compound into a
         // different observable outcome than calling it once (beyond the expected doubled count).
         _taggerService.ParseAsync(FeatureUri, 1).Returns(Array.Empty<IdeSupportTag>());

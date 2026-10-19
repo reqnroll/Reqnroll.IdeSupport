@@ -35,7 +35,7 @@ public class OperationDurationRecorderTests
         var line = logger.Messages.Should().ContainSingle().Subject;
         line.Should().StartWith("PERF ");
         line.Should().Contain("op=textDocument/completion#step");
-        // Rounded to the nearest whole millisecond (issue #627) - previously "ms=42.5" (tenths).
+        // Rounded to the nearest whole millisecond (not "ms=42.5").
         line.Should().Contain("ms=43");
     }
 
@@ -144,7 +144,7 @@ public class OperationDurationRecorderTests
 
         sut.Record("textDocument/completion#step", 42.5);
 
-        // Rounded to the nearest whole millisecond (issue #627) - previously "42.5ms" (tenths).
+        // Rounded to the nearest whole millisecond (not "42.5ms").
         trace.Received(1).Trace("textDocument/completion#step: 43ms", Arg.Any<Func<string>?>());
     }
 
@@ -216,7 +216,7 @@ public class OperationDurationRecorderTests
     public void Bucket_maps_durations_to_coarse_bands(double ms, string expected)
         => OperationDurationRecorder.Bucket(ms).Should().Be(expected);
 
-    // ── Feature usage counting (issue #582) ───────────────────────────────────
+    // ── Feature usage counting ───────────────────────────────────
 
     [Fact]
     public void Record_increments_the_feature_usage_counter_for_a_catalogued_operation()

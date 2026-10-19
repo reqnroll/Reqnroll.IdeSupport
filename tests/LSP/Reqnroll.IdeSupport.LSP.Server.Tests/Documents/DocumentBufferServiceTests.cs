@@ -87,7 +87,7 @@ public class DocumentBufferServiceTests
     [Fact]
     public void UpdateTags_without_prior_Update_does_not_create_buffer()
     {
-        // Issue #938: only didOpen/didChange (Update) may create a buffer; a tag update for a
+        // Only didOpen/didChange (Update) may create a buffer; a tag update for a
         // document that is not open must not leave a ghost "open" entry behind.
         var sut = CreateSut();
         var uri = MakeUri();

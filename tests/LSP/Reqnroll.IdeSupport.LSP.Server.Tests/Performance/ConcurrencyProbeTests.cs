@@ -12,44 +12,38 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 
 /// <summary>
-/// Investigation probe for issue #471 ("LSP server: workspace/inlayHint/refresh and
-/// workspace/semanticTokens/refresh scale badly on large solutions, blocking unrelated requests
-/// for tens of seconds"). Answers the fork-in-the-road question the issue leaves open — "Confirm
-/// whether the server's request dispatch is intentionally serial" — empirically, against the real
-/// in-process server, rather than by reading OmniSharp internals.
+/// Concurrency probe: does a slow <c>textDocument/codeLens</c> workload block unrelated requests?
+/// Large solutions saw <c>workspace/inlayHint/refresh</c> and <c>workspace/semanticTokens/refresh</c>
+/// scale badly and block other requests for tens of seconds. This test answers whether the server's
+/// request dispatch is intentionally serial, empirically against the real in-process server rather
+/// than by reading OmniSharp internals.
 /// </summary>
 /// <remarks>
 /// Method: fire a batch of concurrent <c>textDocument/codeLens</c> requests against the corpus's
 /// binding file (64 patterns; each lens computation scans <see cref="BindingMatchService"/>'s
-/// full match-set cache via <c>FindUsages</c> — see <c>StepCodeLensHandler</c> — which is the #1
-/// suspect for the workload that's actually saturating the server while the corpus's 1,350 cached
-/// steps sit in memory, close to the issue's reported ~1,300-method scale), then fire one cheap,
-/// unrelated <c>textDocument/foldingRange</c> request on a different document at the same time.
+/// full match-set cache via <c>FindUsages</c> — see <c>StepCodeLensHandler</c> — the likeliest
+/// source of load while the corpus's 1,350 cached steps sit in memory, close to the ~1,300-method
+/// scale seen on large solutions), then fire one cheap, unrelated <c>textDocument/foldingRange</c>
+/// request on a different document at the same time.
 /// </remarks>
 /// <remarks>
-/// <b>Regression gate, not a pure diagnostic (tightened once the root cause was confirmed — see
-/// issue #471):</b> decompiling OmniSharp 0.19.9 confirmed <c>textDocument/codeLens</c> and
-/// <c>textDocument/foldingRange</c> are both <c>[Parallel]</c>-tagged by the library, so they
-/// should genuinely run concurrently — the slowdown this test asserts below is not "inherent to
-/// LSP," it's a symptom of the dispatch pipeline (a slow <c>[Serial]</c>-tagged
-/// <c>textDocument/didOpen</c>/<c>didChange</c> stalls the whole pipeline until it drains — see
-/// the issue for the full mechanism).
+/// <b>Regression gate, not a pure diagnostic:</b> OmniSharp 0.19.9 tags <c>textDocument/codeLens</c>
+/// and <c>textDocument/foldingRange</c> as <c>[Parallel]</c>, so they should genuinely run
+/// concurrently — the slowdown this test asserts below is not inherent to LSP, it is a symptom of
+/// the dispatch pipeline (a slow <c>[Serial]</c>-tagged <c>textDocument/didOpen</c>/<c>didChange</c>
+/// stalls the whole pipeline until it drains).
 /// </remarks>
 /// <remarks>
-/// <b>History (see #477):</b> real runs originally measured 45x-56x, asserted as a &gt;5x floor
-/// documenting known-bad behavior. #477 fixed one confirmed contributor — four
-/// <c>_ = _mediator.Publish(...)</c> discards that looked fire-and-forget but actually ran their
-/// entire reparse cascade inline on the calling <c>[Serial]</c> handler's thread — and measurably
-/// improved this: local runs on a dev machine post-fix land around 16x-19x (down from 45x-56x),
-/// and one CI run measured as low as ~1.3x. That CI number is <i>not</i> the reliable new
-/// steady-state, though — it doesn't reproduce locally across five separate runs — so this is not
-/// yet a "the stall is gone, flip the assertion to require good behavior" situation the class's
-/// history once anticipated it would become. The residual ~16x-19x is plausibly genuine CPU
-/// contention from 20 concurrent <c>FindUsages</c> scans saturating the machine rather than a
-/// dispatch-blocking bug, but that's unconfirmed — worth its own investigation under #471, not
-/// something to declare fixed here. Until then this is a <b>regression ceiling</b>: normal
-/// (reduced but nonzero, and evidently environment-variable) stall passes; a return toward the
-/// original, fully-unfixed 45x-56x magnitude fails loudly.
+/// <b>Calibration:</b> with <c>_ = _mediator.Publish(...)</c> discards that look fire-and-forget but
+/// actually run their entire reparse cascade inline on the calling <c>[Serial]</c> handler's thread,
+/// the stall measured 45x-56x the solo baseline. With those discards made genuinely fire-and-forget,
+/// local runs on a dev machine land around 16x-19x, and one CI run measured as low as ~1.3x. That CI
+/// number is <i>not</i> a reliable steady state — it does not reproduce locally — so the assertion
+/// cannot require good behavior outright. The residual ~16x-19x is plausibly genuine CPU contention
+/// from 20 concurrent <c>FindUsages</c> scans saturating the machine rather than a dispatch-blocking
+/// bug, but that is unconfirmed. So this is a <b>regression ceiling</b>: normal (reduced but
+/// nonzero, and environment-dependent) stall passes; a return toward the 45x-56x magnitude fails
+/// loudly.
 /// </remarks>
 public class ConcurrencyProbeTests
 {
@@ -118,10 +112,9 @@ public class ConcurrencyProbeTests
         Console.WriteLine($"Folding-range latency under {concurrentCodeLensCount} concurrent codeLens calls: {underLoadMs:F1} ms " +
                            $"({underLoadMs / baselineMs:F1}x baseline)");
 
-        // Regression ceiling, not a "must reproduce the bug" floor (see the class remarks and
-        // #477): the original >5x floor asserted known-bad, fully-unfixed behavior. #477 reduced
-        // but did not eliminate this stall, and the residual magnitude has proven noisy across
-        // environments (~16x-19x on a dev machine, ~1.3x on one CI run) rather than converging to
+        // Regression ceiling, not a "must reproduce the bug" floor (see the class remarks): a floor
+        // would assert known-bad behavior. The stall is reduced but not eliminated, and the
+        // residual magnitude is noisy across environments (~16x-19x on a dev machine, ~1.3x on one CI run) rather than converging to
         // a small, stable ratio -- so a tight floor or ceiling around that residual would just
         // move the flakiness, not remove it. 30x sits well below the original 45x-56x while
         // comfortably clearing the observed post-fix range on both sides, so it still catches a
