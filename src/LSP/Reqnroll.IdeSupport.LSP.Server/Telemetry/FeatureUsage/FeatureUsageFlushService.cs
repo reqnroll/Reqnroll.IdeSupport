@@ -44,7 +44,7 @@ public sealed class FeatureUsageFlushService : IFeatureUsageFlushService
     /// <summary>
     /// Whether the summary is sent when <see cref="FlushIntervalEnvVar"/> is unset. On: the event is
     /// aggregate counts from a closed catalogue, and the <c>REQNROLL_TELEMETRY_ENABLED</c> kill switch
-    /// still applies in every IDE host (an env-var-only opt-in gate would
+    /// is applied by each IDE host, not by the server (an env-var-only opt-in gate would
     /// collect no field data). Set the env var to <c>0</c> to disable.
     /// </summary>
     public const bool EnabledByDefault = true;
