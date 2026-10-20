@@ -72,7 +72,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     private static readonly ReqnrollTagExpressionParser TagExpressionParser = new();
 
     // The following four members port Reqnroll.Bindings.StepDefinitionRegexCalculator's
-    // method-name-style binding algorithm (see issue #268: an attribute with no expression,
+    // method-name-style binding algorithm (an attribute with no expression,
     // e.g. [Given] public void The_First_Number_Is_P0(int p), derives its matching text from
     // the method name/parameters instead). Kept in sync by inspection since LSP.Core doesn't
     // reference the Reqnroll runtime assembly.
@@ -157,7 +157,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
                 .Where(p => p.Type != null)
                 .Select(p => p.Type.ToString())
                 .ToArray();
-            // Issue #952: use ValueText (the identifier's semantic name) rather than Text so a
+            // Use ValueText (the identifier's semantic name) rather than Text so a
             // verbatim-identifier parameter (e.g. @class) loses its leading '@'. Identifier.Text
             // keeps the '@', which the method-name regex spliced straight into a named group
             // ((?<@class>...)) -- an invalid group name that threw ArgumentException out of
@@ -168,8 +168,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             var implementation =
                 new ProjectBindingImplementation(FullMethodName(method), parameterTypes, sourceLocation);
 
-            // Structural validation shared by every attribute on this method (issue #514 —
-            // ports Reqnroll.Bindings.Discovery.BindingSourceProcessor.ValidateType/ValidateMethod).
+            // Structural validation shared by every attribute on this method (ports Reqnroll.Bindings.Discovery.BindingSourceProcessor.ValidateType/ValidateMethod).
             // A hook-specific rule (must be static for the four non-scenario-scoped hook types)
             // is layered on top per hook type below, since it doesn't apply to step definitions.
             var structuralError = GetStructuralError(method);
@@ -203,8 +202,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
 
         foreach (var block in blocks)
         {
-            // An attribute with no explicit expression is a method-name-style binding (issue
-            // #268): its matching text is derived from the method name/parameters, the same
+            // An attribute with no explicit expression is a method-name-style binding: its matching text is derived from the method name/parameters, the same
             // way Reqnroll's runtime StepDefinitionRegexCalculator does it. The prefix stripped
             // (e.g. "Given") depends on which block this particular attribute registers for, so
             // the regex is computed per-block rather than once for the whole attribute.
@@ -215,7 +213,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
                 ? BuildRegex(expression, out regexError)
                 : BuildMethodNameRegex(block, methodName, parameterNames);
             var error = CombineErrors(structuralError, regexError, bindingScope?.Error);
-            // Issue #514 follow-up: an expression or scope error is specific to this attribute,
+            // An expression or scope error is specific to this attribute,
             // not the method as a whole (unlike a structural error, shared by every attribute on
             // the method) -- anchor the diagnostic there instead of at the method identifier.
             var errorLocation = regexError != null || bindingScope?.Error != null
@@ -226,7 +224,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         }
     }
 
-    /// <summary>Captures the full span of a binding attribute (e.g. <c>[Given("...")]</c>), for anchoring an attribute-specific diagnostic (issue #514 follow-up) rather than the shared method location.</summary>
+    /// <summary>Captures the full span of a binding attribute (e.g. <c>[Given("...")]</c>), for anchoring an attribute-specific diagnostic rather than the shared method location.</summary>
     private static SourceLocation GetAttributeLocation(string sourceFile, AttributeSyntax attribute)
     {
         var span = attribute.GetLocation().GetLineSpan();
@@ -236,8 +234,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     }
 
     /// <summary>
-    /// Combines every non-empty error into one message (issue #514's expression/scope validation
-    /// follow-up), mirroring <c>BindingImporter.GetBindingError</c>'s equivalent combining step
+    /// Combines every non-empty error into one message (expression/scope validation), mirroring <c>BindingImporter.GetBindingError</c>'s equivalent combining step
     /// for the connector (reflection) discovery path — <see cref="ProjectBinding.Error"/> is the
     /// one field every diagnostics consumer reads, so both discovery paths must feed it the same
     /// way. Returns <see langword="null"/> when none apply.
@@ -273,11 +270,10 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     /// statically derivable without a semantic model.
     /// <para/>
     /// The real grammar's own validation (e.g. "an alternative may not be empty", "an optional
-    /// may not contain a parameter") can throw for a malformed expression where the old
-    /// hand-rolled version never did; those are caught and surfaced as an unmatchable binding
+    /// may not contain a parameter") can throw for a malformed expression; those are caught and surfaced as an unmatchable binding
     /// (<see langword="null"/> regex, <see cref="ProjectStepDefinitionBinding.IsValid"/> false)
     /// rather than aborting discovery of every other binding in the file. The caught exception's
-    /// own message is returned via <paramref name="error"/> (issue #514 follow-up) rather than
+    /// own message is returned via <paramref name="error"/> rather than
     /// discarded, so the binding carries a real reason instead of failing silently.
     /// </para>
     /// </remarks>
@@ -402,7 +398,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         var hookTags = GetHookTags(attribute);
         var order = GetHookOrder(attribute);
         var scope = BuildScope(CombineWithHookTags(methodScope, hookTags));
-        // Issue #514 follow-up: a scope error is specific to this hook's own attribute (e.g.
+        // A scope error is specific to this hook's own attribute (e.g.
         // [BeforeScenario]), not the method as a whole -- unlike error (structural), which is
         // shared by every attribute on the method and should stay anchored at the method.
         var errorLocation = scope?.Error != null
@@ -420,7 +416,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
 
     /// <summary>
     /// Ports the structural checks from <c>Reqnroll.Bindings.Discovery.BindingSourceProcessor</c>
-    /// (issue #514) shared by every binding attribute on <paramref name="method"/>:
+    /// shared by every binding attribute on <paramref name="method"/>:
     /// <c>ValidateType</c> (the containing type must be a class, not a generic type definition)
     /// and <c>ValidateMethod</c> (a method on an abstract type must be static; the method must not
     /// be async void). Returns <see langword="null"/> when the method/type are structurally valid.
@@ -568,7 +564,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         // Point to the method identifier (name token) — consistent with standard LSP convention
         // where textDocument/definition returns the span of the symbol being defined, not the
         // full declaration. Captures the full identifier span (not just its start) so consumers
-        // that need a real, non-zero-width range — e.g. issue #514's .cs diagnostics squiggles —
+        // that need a real, non-zero-width range — e.g. .cs diagnostics squiggles —
         // don't have to re-derive it via a live-buffer text search. ToLspLocation() (used for
         // textDocument/definition) still discards the end position and renders a zero-width
         // point, so this doesn't change Go to Definition's behavior.
@@ -622,7 +618,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     /// <summary>
     /// Combines the type-level and method-level [Scope] attributes. Reqnroll registers one binding
     /// per scope over <c>typeScopes.Concat(methodScopes)</c> (<c>BindingSourceProcessor.ProcessMethod</c>),
-    /// so a class-level and a method-level [Scope] are alternatives (OR), not a conjunction (issue #1133).
+    /// so a class-level and a method-level [Scope] are alternatives (OR), not a conjunction.
     /// </summary>
     private static IReadOnlyList<ScopeSpec> CombineScopeAlternatives(IReadOnlyList<ScopeSpec> typeScopes,
         IReadOnlyList<ScopeSpec> methodScopes)
@@ -639,7 +635,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     /// A hook applies when the scenario matches any of the method/type [Scope] alternatives or carries
     /// one of the tags listed on the hook attribute: Reqnroll appends each hook tag to the method's
     /// scopes as a further scope of its own (<c>BindingSourceProcessor.ProcessHookAttribute</c>), so the
-    /// hook's tags are alternatives to the [Scope]s, not restricted by them (issue #1133).
+    /// hook's tags are alternatives to the [Scope]s, not restricted by them.
     /// </summary>
     private static IReadOnlyList<ScopeSpec> CombineWithHookTags(IReadOnlyList<ScopeSpec> methodScopes,
         IReadOnlyList<string> hookTags)
@@ -654,7 +650,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     /// <summary>
     /// Builds the binding scope from the scopes Reqnroll would register for one attribute, using the
     /// same <see cref="ScopeNormalizer"/> the connector import uses so both discovery paths produce
-    /// the same scope for the same source (issues #953, #1133).
+    /// the same scope for the same source.
     /// </summary>
     private static BindingScope BuildScope(IReadOnlyList<ScopeSpec> scopes) =>
         scopes == null ? null : ScopeNormalizer.Build(scopes, TagExpressionParser);

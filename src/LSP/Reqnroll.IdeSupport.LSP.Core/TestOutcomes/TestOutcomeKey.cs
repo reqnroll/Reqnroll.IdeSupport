@@ -20,8 +20,7 @@ public sealed record TestOutcomeKey(string Source, string TypeFullName, string M
     /// <summary>
     /// Builds a key from a result's identity fields, preferring vstest's row-invariant
     /// <c>ManagedType</c>/<c>ManagedMethod</c> properties and falling back to splitting the FQN for
-    /// adapters that don't set them. The source path is normalized once here (issue #515 lesson:
-    /// every path comparison in the extension must go through the same routine).
+    /// adapters that don't set them. The source path is normalized once here (every path comparison in the extension must go through the same routine).
     /// </summary>
     public static TestOutcomeKey? From(string? source, string? managedType, string? managedMethod, string? fullyQualifiedName)
     {

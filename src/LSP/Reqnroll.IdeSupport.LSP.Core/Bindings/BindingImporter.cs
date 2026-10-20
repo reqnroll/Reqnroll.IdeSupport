@@ -38,7 +38,7 @@ public class BindingImporter
 
     /// <summary>Initializes a new instance of the <see cref="BindingImporter"/> class.</summary>
     /// <param name="sourceFileResolver">
-    /// Maps the source paths recorded by discovery onto paths that exist here (issue #540). Pass a
+    /// Maps the source paths recorded by discovery onto paths that exist here. Pass a
     /// <see cref="ProjectSourceFileResolver"/> when the project folder is known, which is what lets
     /// a devcontainer- or CI-built PDB's paths be remapped instead of stored as-is. Defaults to
     /// <see cref="LocalOnlySourceFileResolver"/>: existence-checked, never remapped.
@@ -112,9 +112,9 @@ public class BindingImporter
     /// <summary>Same as <see cref="TryGetAttributeSourceLine(SyntaxNode,string,ScenarioBlock)"/>, but when
     /// <paramref name="expression"/> (the connector's expression for the binding) is supplied and the
     /// candidate methods carry several attributes for <paramref name="scenarioBlock"/>, picks the
-    /// attribute that belongs to this binding instead of the first one. Every binding on such a method
-    /// used to be backfilled with the FIRST attribute's line, which pointed a rename at the wrong
-    /// attribute (issue #940). The attribute is the one whose string literal equals the expression;
+    /// attribute that belongs to this binding instead of the first one. Backfilling every binding on such a method
+    /// with the FIRST attribute's line would point a rename at the wrong
+    /// attribute. The attribute is the one whose string literal equals the expression;
     /// failing that, the only one whose literal has the same text around its parameter slots (the
     /// connector's expression can be a regex projection of a Cucumber expression). When neither singles
     /// one out, returns null rather than a line that may belong to a sibling attribute — consumers then
@@ -183,8 +183,7 @@ public class BindingImporter
     /// <see cref="TryGetMethodIdentifierLocation"/> compare by name only and never stripped this
     /// themselves, so passing the raw wire-format reference straight through made both backfills
     /// silently miss on every real connector-discovered binding (they matched only in tests, whose
-    /// fixtures used an already-bare method name that never occurs in production — issue #484
-    /// follow-up).
+    /// fixtures used an already-bare method name that never occurs in production).
     /// </summary>
     /// <remarks>
     /// Falls back to the input unchanged when it doesn't look like that shape (no <c>(</c>, or no
@@ -291,7 +290,7 @@ public class BindingImporter
                 // backfill pass that resolved it for this method succeeded.
                 // WithPosition, not a fresh SourceLocation: rebuilding it through the public
                 // constructor would silently re-assert IsResolved, discarding the fact that this
-                // binding's file could not be found on this machine (issue #540 F1).
+                // binding's file could not be found on this machine.
                 if (methodIdentifierLocation.HasValue && sourceLocation != null)
                     sourceLocation = sourceLocation.WithPosition(
                         methodIdentifierLocation.Value.Line, methodIdentifierLocation.Value.Column,
@@ -317,11 +316,11 @@ public class BindingImporter
     /// <param name="hook">The wire-format hook to import.</param>
     /// <param name="methodIdentifierLocation">
     /// The AST-backfilled method-identifier position, when the caller resolved and parsed the hook's
-    /// source file — see <see cref="TryGetMethodIdentifierLocation"/>. Hooks used to get no backfill
-    /// at all while step definitions did, which left every hook anchored on its raw PDB sequence
+    /// source file — see <see cref="TryGetMethodIdentifierLocation"/>. Hooks need the backfill as much as step definitions do:
+    /// without it a hook stays anchored on its raw PDB sequence
     /// point (the first executable statement in the body, not the declaration line) and, because the
-    /// backfill is also what forces a source path to be resolved, made hook navigation the first
-    /// casualty of a foreign-path build (issue #540 F2).
+    /// backfill is also what forces a source path to be resolved, hook navigation is the first
+    /// casualty of a foreign-path build.
     /// </param>
     /// <param name="scopes">
     /// All the scopes the runtime registered for this hook (see <see cref="GroupByAttribute(IEnumerable{Hook})"/>); when
@@ -419,8 +418,8 @@ public class BindingImporter
 
         // Resolve here, once, rather than at each use site: this is the only place that sees the
         // recorded path before anything downstream can turn it into a navigation target, and the
-        // only place with the project context needed to remap it (issue #540 F1). Before this, a
-        // foreign path was stored verbatim and every consumer handed it to the IDE unchecked.
+        // only place with the project context needed to remap it. Storing a
+        // foreign path verbatim would leave every consumer handing it to the IDE unchecked.
         var resolved = ResolveSourceFile(sourceFile);
         return resolved != null
             ? SourceLocation.Resolved(resolved, sourceFile, line, column, endLineOrNull, endColumnOrNull)

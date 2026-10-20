@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Completions;
 
 /// <summary>
 /// Gherkin tags the tag completion offers regardless of whether any file in the project has
-/// used them yet — the completion list is never empty even on a fresh project (issue #828).
+/// used them yet — the completion list is never empty even on a fresh project.
 /// </summary>
 public static class BuiltInTagNames
 {

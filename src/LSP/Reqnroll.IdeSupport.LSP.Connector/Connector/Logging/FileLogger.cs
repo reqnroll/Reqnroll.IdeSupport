@@ -3,22 +3,19 @@ using System.Text;
 namespace ReqnrollConnector.Logging;
 
 /// <summary>
-/// Appends log messages to a per-process file (issue #628) — previously the Connector had no
-/// persistent log at all: <see cref="ConsoleLogger"/> only ever wrote to stdout/stderr, which the
+/// Appends log messages to a per-process file. <see cref="ConsoleLogger"/> only writes to stdout/stderr, which the
 /// LSP server discards beyond the one summary line it logs itself
 /// (<c>ConnectorDiscoveryService.RunDiscoveryIfNeededAsync</c>), so a Connector crash mid-discovery
-/// left no artifact of its own to diagnose from.
+/// would otherwise leave no artifact of its own to diagnose from.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Buffered until something's worth persisting (issue #637):</b> the original version of this
-/// class wrote every line immediately, unconditionally — every routine, uneventful discovery run
-/// left its own file behind regardless of the ambient log level, unlike every other logger in this
-/// family (all gated by verbosity, defaulting to quiet in Release). In practice this meant a single
-/// IDE session touching a handful of projects could leave a dozen-plus tiny files behind, none of
-/// which anyone would ever need to open. Legacy Reqnroll.VisualStudio never had a Connector-side log
-/// at all and relied solely on the extension's own log, which is fine for the common case — the
-/// value here is specifically in the rare case something actually goes wrong.
+/// <b>Buffered until something's worth persisting:</b> writing every line immediately and
+/// unconditionally would leave a file behind for every routine, uneventful discovery run regardless
+/// of the ambient log level, unlike every other logger in this family (all gated by verbosity,
+/// defaulting to quiet in Release). A single IDE session touching a handful of projects would leave
+/// a dozen-plus tiny files behind, none of which anyone would ever need to open. The value of this
+/// log is specifically in the rare case something actually goes wrong.
 /// </para>
 /// <para>
 /// So: every line is always buffered in memory (cheap — a discovery run's own trace is at most a

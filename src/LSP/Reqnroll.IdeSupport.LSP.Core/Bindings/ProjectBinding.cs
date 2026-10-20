@@ -23,7 +23,7 @@ public class ProjectBinding
     /// <summary>
     /// Where a diagnostic for <see cref="Error"/> should be anchored, when it's more specific than
     /// the method itself — e.g. the <c>[Given(...)]</c> attribute for a malformed step expression,
-    /// or the binding's own attribute for an invalid scope tag expression (issue #514 follow-up).
+    /// or the binding's own attribute for an invalid scope tag expression.
     /// <see langword="null"/> for a structural (method/type-level) error, which is shared by every
     /// attribute on the method and should fall back to <see cref="ProjectBindingImplementation.SourceLocation"/>
     /// so it dedupes to one squiggle rather than one per attribute. Only populated by
@@ -45,7 +45,7 @@ public class ProjectBinding
     /// <summary>Checks whether this binding's <see cref="Scope"/> (tag expression, feature title, scenario title) matches the given context.</summary>
     protected bool MatchScope(IGherkinDocumentContext context) => Scope == null || MatchScope(Scope, context);
 
-    // A scope with alternatives (several [Scope] attributes, issue #953) matches when any one
+    // A scope with alternatives (several [Scope] attributes) matches when any one
     // alternative does; within one scope, tag, feature and scenario must all match.
     private static bool MatchScope(BindingScope scope, IGherkinDocumentContext context)
     {

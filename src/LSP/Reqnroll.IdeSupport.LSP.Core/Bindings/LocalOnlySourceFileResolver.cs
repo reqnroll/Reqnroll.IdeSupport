@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// <summary>
 /// An <see cref="ISourceFileResolver"/> that only ever confirms a path that already exists —
 /// no remapping. The default for callers with no project context (unit tests, and any importer
-/// constructed without a resolver), so behaviour there is exactly what it was before #540.
+/// constructed without a resolver), so a path is accepted only when it exists on this machine.
 /// </summary>
 public sealed class LocalOnlySourceFileResolver : ISourceFileResolver
 {

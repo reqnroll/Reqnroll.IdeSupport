@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 /// solution or the solution itself is closed.
 /// </summary>
 /// <remarks>
-/// Not a MediatR notification (issue #579) despite the name — see
+/// Not a MediatR notification despite the name — see
 /// <see cref="ReqnrollProjectLoadedParams"/>'s remarks for why.
 /// </remarks>
 public sealed class ReqnrollProjectUnloadedParams

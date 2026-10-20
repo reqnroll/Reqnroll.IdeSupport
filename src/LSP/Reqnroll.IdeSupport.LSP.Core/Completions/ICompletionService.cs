@@ -36,7 +36,7 @@ public interface ICompletionService
     /// <summary>
     /// Returns tag-definition-sample completions: the built-in tags plus the tags already used
     /// anywhere in the project, minus the tags already present on the line being completed,
-    /// ranked by <paramref name="matcher"/> against <paramref name="typedAfterAt"/> (issue #828).
+    /// ranked by <paramref name="matcher"/> against <paramref name="typedAfterAt"/>.
     /// </summary>
     CompletionResult GetTagCompletions(
         IReadOnlyCollection<StepCandidate> projectTags,

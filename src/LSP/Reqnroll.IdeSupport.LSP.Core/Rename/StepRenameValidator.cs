@@ -18,7 +18,7 @@ public static class StepRenameValidator
     /// non-parameter text: parameter delimiters (<c>{ }</c>), optional-text delimiters
     /// (<c>( )</c>), the escape character (<c>\</c>), and the alternative-text separator
     /// (<c>/</c>). Everything else — including <c>$ ^ ? * + [ ] |</c> — is a plain literal
-    /// character in a Cucumber Expression (issue #649), unlike in a regex.
+    /// character in a Cucumber Expression, unlike in a regex.
     /// </summary>
     private static readonly char[] CucumberExpressionOperators = { '{', '}', '(', ')', '\\', '/' };
 
@@ -65,7 +65,7 @@ public static class StepRenameValidator
             return new ValidationError("The new step text cannot be empty", "rename");
 
         // Rule 3: non-parameter parts must not contain expression operators. Which characters
-        // count as "operators" depends on the original binding's own syntax (issue #649): a
+        // count as "operators" depends on the original binding's own syntax: a
         // literal '$' (e.g. a currency amount in "the price is ${float}") is meaningless
         // punctuation in a Cucumber Expression but a real anchor in a regex, so the two syntaxes
         // need different forbidden-character sets rather than one shared regex-operator list.
@@ -81,7 +81,7 @@ public static class StepRenameValidator
         // command seeds its prompt with the binding's own expression and submits the edited text
         // verbatim as newName, so those characters arrive without the user having typed them.
         // Rejecting on mere presence made every anchored regex binding unrenamable in Visual
-        // Studio (issue #1126).
+        // Studio.
         var newNonParamSegments = SplitNonParameterSegments(newName, isCucumber);
         var originalNonParamSegments = SplitNonParameterSegments(originalExpression, isCucumber);
         foreach (var operatorChar in forbiddenOperators)
@@ -113,7 +113,7 @@ public static class StepRenameValidator
 
     /// <summary>
     /// Counts parameter slots in an expression. What is a slot depends on the binding's syntax
-    /// (issue #960): see <see cref="ScanExpression"/>.
+    /// (see <see cref="ScanExpression"/>).
     /// </summary>
     private static int CountParameterSlots(string expression, bool isCucumber)
         => string.IsNullOrEmpty(expression) ? 0 : ScanExpression(expression, isCucumber).Count(e => e.IsSlot);
@@ -145,10 +145,10 @@ public static class StepRenameValidator
     /// Finds the structural elements of <paramref name="expression"/>, left to right: <c>{…}</c>
     /// placeholders (including the empty <c>{}</c>), which are slots in either syntax, and
     /// parenthesised groups, matched with balanced parentheses so one containing nested groups
-    /// (<c>(\d+(\.\d+)?)</c>) is a single element (issue #1131). Escaped parentheses are literal
+    /// (<c>(\d+(\.\d+)?)</c>) is a single element. Escaped parentheses are literal
     /// text and an unbalanced <c>(</c> is plain text.
     /// <para>
-    /// Whether a group is a slot is syntax-aware (issue #960): in a regex-authored binding only a
+    /// Whether a group is a slot is syntax-aware: in a regex-authored binding only a
     /// capturing group is — non-capturing, look-around and inline-option groups are structure; in
     /// a Cucumber-authored binding <c>(text)</c> is optional text, never a parameter. Structure
     /// that is not a slot is still reported (<c>IsSlot == false</c>) so that its delimiters are
@@ -218,7 +218,7 @@ public static class StepRenameValidator
     /// <summary>
     /// Counts occurrences of <paramref name="operatorChar"/> across the given non-parameter
     /// segments, so an operator the rename introduces can be told apart from one the original
-    /// expression already carried (issue #1126).
+    /// expression already carried.
     /// </summary>
     private static int CountOccurrences(string[] segments, char operatorChar)
         => segments.Sum(segment => segment.Count(c => c == operatorChar));

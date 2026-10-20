@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Ide;
 /// baseline. A new client therefore opts in to workarounds explicitly.
 /// </para>
 /// <para>
-/// <b>codeLens/resolve is opt-in and no shipped client is opted in (issue #471).</b> The server
+/// <b>codeLens/resolve is opt-in and no shipped client is opted in.</b> The server
 /// CAN defer the per-lens count to codeLens/resolve (see
 /// <c>StepCodeLensHandler.ResolveAsync</c>/<c>HookMatchCountCodeLensHandler.ResolveAsync</c>/
 /// <c>CodeLensResolveHandler</c>) and declares <c>codeLensProvider.resolveProvider = true</c>, but

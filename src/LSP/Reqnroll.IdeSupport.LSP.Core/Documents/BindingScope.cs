@@ -15,7 +15,7 @@ public class BindingScope
     public string? Error { get; set; }
 
     /// <summary>
-    /// Gets or sets alternative scopes, any one of which puts the binding in scope (issue #953):
+    /// Gets or sets alternative scopes, any one of which puts the binding in scope:
     /// Reqnroll treats several <c>[Scope]</c> attributes on one binding as alternatives (OR),
     /// which a single tag/feature/scenario triple cannot express when the alternatives restrict
     /// different properties (e.g. <c>[Scope(Tag = "@a")]</c> + <c>[Scope(Feature = "F")]</c>).

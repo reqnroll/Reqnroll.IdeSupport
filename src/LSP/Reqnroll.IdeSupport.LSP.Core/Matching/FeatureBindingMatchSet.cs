@@ -25,7 +25,7 @@ public sealed class FeatureBindingMatchSet
 
     /// <summary>Initializes a new instance of the <see cref="FeatureBindingMatchSet"/> class.</summary>
     /// <param name="scenarios">
-    /// Every Scenario/Scenario Outline definition in the document (issue #373's hook-match-count
+    /// Every Scenario/Scenario Outline definition in the document (used by the hook-match-count
     /// CodeLens). Optional and defaults to empty so existing callers (tests, in particular) that
     /// construct a set directly rather than via <see cref="FromTags"/> don't need updating.
     /// </param>
@@ -65,7 +65,7 @@ public sealed class FeatureBindingMatchSet
     public IReadOnlyList<StepBindingMatch> Steps { get; }
 
     /// <summary>
-    /// Gets every Scenario/Scenario Outline definition in this feature document (issue #373's
+    /// Gets every Scenario/Scenario Outline definition in this feature document (used by the
     /// hook-match-count CodeLens; excludes Background blocks). Populated regardless of whether
     /// the document is currently open, since this is the same workspace-wide cache
     /// <c>GherkinDocumentTaggerService</c> populates for closed files.
@@ -154,7 +154,7 @@ public sealed class FeatureBindingMatchSet
         var steps = byStart.Values.OrderBy(s => s.Range.Start).ToArray();
 
         // Background shares ScenarioDefinitionBlock with real scenarios but isn't independently
-        // executed/countable, so it's excluded here (issue #373).
+        // executed/countable, so it's excluded here.
         var scenarios = tagList
             .Where(t => t.Type == IdeSupportTagTypes.ScenarioDefinitionBlock)
             .Where(t => !((IGherkinDocumentContext)t).IsBackground())

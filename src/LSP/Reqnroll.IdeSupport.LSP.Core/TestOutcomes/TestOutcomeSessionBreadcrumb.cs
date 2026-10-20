@@ -11,10 +11,10 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 /// <summary>
 /// Writes a small breadcrumb file recording where this server's test-outcome TCP listener is bound,
 /// so a test-runner-hosted reporter that cannot be handed the endpoint per-run (Microsoft.Testing.Platform
-/// — issue #715, which has no per-run config injection channel the way VSTest's runsettings does) can
+/// — which has no per-run config injection channel the way VSTest's runsettings does) can
 /// discover it instead: one file per LSP server process under
 /// <c>&lt;Reqnroll application dir&gt;\test-outcomes\sessions\&lt;pid&gt;.json</c> (a sibling of the
-/// <c>logs</c> subfolder, not inside it; issue #726), named by this process's own
+/// <c>logs</c> subfolder, not inside it), named by this process's own
 /// PID so concurrently-running server instances (one per open VS/Rider/VS Code window) never collide.
 /// </summary>
 /// <remarks>
@@ -25,8 +25,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 ///   <item><b>Delete</b> on clean shutdown (<see cref="Dispose"/>) — a session that exits normally
 ///   leaves nothing behind for the next reporter to trip over.</item>
 ///   <item><b>Prune</b> dead-PID entries — covers the case a previous session's own clean-shutdown
-///   delete never ran (crash, kill), so the directory doesn't grow unbounded across many sessions
-///   (issue #715 plan §7 risk #4). <see cref="Write"/> prunes before writing, so a reporter never sees
+///   delete never ran (crash, kill), so the directory doesn't grow unbounded across many sessions.
+///   <see cref="Write"/> prunes before writing, so a reporter never sees
 ///   a bind followed by leftover clutter from earlier sessions; <see cref="PruneStaleEntries"/> is also
 ///   exposed directly so it is independently testable without a real bind.</item>
 /// </list>
@@ -63,7 +63,7 @@ public sealed class TestOutcomeSessionBreadcrumb : IDisposable
 
     /// <summary>
     /// Uses <see cref="ReqnrollLogPaths.ResolveApplicationDirectory"/>, not <c>ResolveLogDirectory</c>
-    /// — these breadcrumbs are discovery state for the MTP reporter, not logs (issue #726), and this
+    /// — these breadcrumbs are discovery state for the MTP reporter, not logs, and this
     /// location must keep agreeing with the reporter side's independent
     /// <c>Reqnroll.IdeSupport.TestReporter.MTP.SessionsDirectory.Resolve</c>, which was never changed
     /// by that issue. Mirrors <see cref="Reqnroll.IdeSupport.Common.Logging.TelemetryDebugLog.DefaultPath"/>'s

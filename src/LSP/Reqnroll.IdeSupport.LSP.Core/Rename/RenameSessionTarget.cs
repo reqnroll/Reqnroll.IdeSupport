@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Rename;
 /// <remarks>
 /// The index alone is not a safe identifier across the modal "Enter the new step expression"
 /// dialog: the rename re-derives the candidate list against current state, so an edit made while
-/// the dialog was open can leave index <c>N</c> denoting a different binding (issue #671, R5).
+/// the dialog was open can leave index <c>N</c> denoting a different binding.
 /// The identity is what lets the rename find the same binding again, or determine that it is gone.
 /// </remarks>
 public sealed record RenameSessionTarget(int AttributeIndex, string? BindingIdentity);

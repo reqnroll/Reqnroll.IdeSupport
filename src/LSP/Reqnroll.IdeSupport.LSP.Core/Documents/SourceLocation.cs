@@ -78,9 +78,8 @@ public class SourceLocation
     /// <remarks>
     /// <para>
     /// <see langword="false"/> means discovery recorded a path that could not be mapped onto
-    /// anything local — see <see cref="Bindings.ProjectSourceFileResolver"/> for the mapping rules
-    /// and issue #540 for how this arises (a devcontainer or CI build, an external binding assembly
-    /// from NuGet, a solution built on another machine).
+    /// anything local — see <see cref="Bindings.ProjectSourceFileResolver"/> for the mapping rules. This arises with a devcontainer or CI build, an external binding assembly
+    /// from NuGet, or a solution built on another machine.
     /// </para>
     /// <para>
     /// <b>Callers that turn a location into a navigation target must check this and omit the target
@@ -126,14 +125,14 @@ public class SourceLocation
     /// <see cref="PathUtils.IsSamePath"/>) at the same start and end position.
     /// </summary>
     /// <remarks>
-    /// This type is a value object, but it used to inherit reference equality from <see cref="object"/>.
-    /// That silently broke <c>ProjectBindingImplementationEqualityComparer</c>, whose own summary
+    /// This type is a value object, so it must not fall back to the reference equality inherited from
+    /// <see cref="object"/>. Reference equality would silently break <c>ProjectBindingImplementationEqualityComparer</c>, whose own summary
     /// promises comparison "by method, parameter types, and source location rather than reference
-    /// identity" — its <c>Equals(x.SourceLocation, y.SourceLocation)</c> leg was a reference compare,
-    /// so two structurally identical implementations produced by two discovery passes never compared
-    /// equal. Masked in practice only because <c>BindingImporter</c> shares one implementation
-    /// instance per method within a pass; it stopped being masked as soon as connector-imported and
-    /// Roslyn-parsed bindings for the same method coexisted (issue #540 F6).
+    /// identity" — its <c>Equals(x.SourceLocation, y.SourceLocation)</c> leg would be a reference compare,
+    /// so two structurally identical implementations produced by two discovery passes would never compare
+    /// equal. That is masked within one pass only because <c>BindingImporter</c> shares one
+    /// implementation instance per method; it surfaces as soon as connector-imported and
+    /// Roslyn-parsed bindings for the same method coexist.
     /// </remarks>
     public override bool Equals(object obj)
     {

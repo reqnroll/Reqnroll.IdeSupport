@@ -289,7 +289,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
     /// The parser hands back the <b>unescaped</b> cell value (Gherkin decodes <c>\|</c>, <c>\\</c>
     /// and <c>\n</c>), so a cell containing an escape sequence is longer in the document than
     /// <see cref="TableCell.Value"/> is: sizing the span from the value left the cell's last
-    /// character unclassified for every escape it contained (issue #1014). The span is therefore
+    /// character unclassified for every escape it contained. The span is therefore
     /// measured against the snapshot text instead — from the cell's own start (the parser points
     /// past the padding that follows the opening <c>|</c>) up to the next <b>unescaped</b> <c>|</c>
     /// or the end of the line, with the padding before that separator trimmed off, mirroring the

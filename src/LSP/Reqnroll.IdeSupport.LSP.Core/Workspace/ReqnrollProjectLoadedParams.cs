@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 /// build properties change (e.g. after a rebuild).
 /// </summary>
 /// <remarks>
-/// Not a MediatR notification (issue #579) despite the name: this method is routed directly to
+/// Not a MediatR notification despite the name: this method is routed directly to
 /// <see cref="ILspWorkspaceScopeManager.HandleProjectLoadedAsync"/> via
 /// <c>OnNotification</c>/<c>LspHandlerResolver</c>, never through <c>IMediator.Publish</c>. A
 /// previous <c>: INotification</c> marker here advertised a pub/sub extension point that did not

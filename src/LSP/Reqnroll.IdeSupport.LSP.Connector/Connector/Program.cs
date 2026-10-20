@@ -2,9 +2,9 @@
 using ReqnrollConnector.AssemblyLoading;
 using ReqnrollConnector.Logging;
 
-// FileLogger (issue #628) gives a Connector crash a durable artifact of its own, independent of
+// FileLogger gives a Connector crash a durable artifact of its own, independent of
 // whatever the LSP server managed to capture from this process's stdout/stderr — but only writes
-// unconditionally when asked to: --file-log (issue #637), which OutProcReqnrollConnector adds
+// unconditionally when asked to: --file-log, which OutProcReqnrollConnector adds
 // whenever the server's own --log-level is Info or more verbose, so "turn up logging" means the
 // same thing everywhere in this system. --debug also implies it — someone who wants a debugger
 // attached almost certainly wants the log too — but --file-log is the primary, properly-wired

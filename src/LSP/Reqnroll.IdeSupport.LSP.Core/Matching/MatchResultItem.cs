@@ -111,7 +111,7 @@ public class MatchResultItem
     /// definition.
     /// </summary>
     /// <param name="nearMissErrors">
-    /// Issue #514's "cheap first step": when an <em>invalid</em> binding's regex/scope would
+    /// Near-miss errors: when an <em>invalid</em> binding's regex/scope would
     /// otherwise have matched this step (see <see cref="Bindings.ProjectStepDefinitionBinding.WouldMatchIgnoringValidity"/>),
     /// its <see cref="Bindings.ProjectBinding.Error"/> is passed here instead of leaving the step
     /// simply "not found" with no indication a near-miss binding exists. Surfaces through

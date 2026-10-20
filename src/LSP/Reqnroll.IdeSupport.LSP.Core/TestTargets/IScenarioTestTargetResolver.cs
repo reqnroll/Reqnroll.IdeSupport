@@ -38,7 +38,7 @@ public interface IScenarioTestTargetResolver
     /// <summary>
     /// Resolves the test target(s) for every Scenario/Scenario Outline fully contained within
     /// <paramref name="containerRange"/> — the "Run scenarios" case for a <c>Feature:</c> or
-    /// <c>Rule:</c> block (issue #744), as opposed to <see cref="Resolve"/>'s single-scenario
+    /// <c>Rule:</c> block, as opposed to <see cref="Resolve"/>'s single-scenario
     /// resolution. Each contained scenario/Outline contributes every one of its own targets (e.g.
     /// every Outline row), exactly as if <see cref="Resolve"/> had been called on it individually —
     /// this method only broadens which scenarios are considered, it does not change how any one

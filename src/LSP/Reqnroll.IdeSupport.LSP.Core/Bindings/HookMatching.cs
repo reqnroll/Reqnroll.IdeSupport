@@ -8,7 +8,7 @@ public enum HookContextLevel { None, Feature, Scenario, Step }
 
 /// <summary>
 /// Shared hook-applicability/matching logic used by both "Go to Hooks" (single position →
-/// applicable hooks) and the hook-count CodeLens (issue #269: every Feature/Scenario/Step line
+/// applicable hooks) and the hook-count CodeLens (every Feature/Scenario/Step line
 /// in a document → applicable hook count) — kept in one place so the two never disagree about
 /// what "applicable" means for a given context level.
 /// </summary>
@@ -131,7 +131,7 @@ public static class HookMatching
     // (IdeSupportTagParser.GetBlockSpan uses GherkinRange.FromLines, so Range.End is the offset
     // right past the last character of the block's last line). The upper bound must be
     // inclusive so a click at end-of-line still resolves — Gherkin is line-oriented, and this
-    // is the same class of off-by-one that made Go to Definition miss in #101.
+    // is the same class of off-by-one that makes Go to Definition miss.
     private static bool ContainsOffset(IdeSupportTag tag, int offset)
         => offset >= tag.Range.Start && offset <= tag.Range.End;
 }

@@ -10,10 +10,9 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 
 /// <summary>
 /// Server-side aggregate of test outcomes received from the bundled VSTest logger, keyed by generated
-/// test method. Shared by every connected IDE (design: LSP-server outcome pipeline refactor) — the
-/// receiving TCP listener, this store, and persistence used to live one-per-IDE inside the Visual
-/// Studio extension (VSSDKIntegration); moving them here gives Rider and VS Code the same
-/// implementation instead of each growing its own.
+/// test method. Shared by every connected IDE — the
+/// receiving TCP listener, this store, and persistence live in the server rather than in each IDE
+/// extension, so Visual Studio, Rider and VS Code share one implementation.
 /// </summary>
 /// <remarks>
 /// Aggregation rule per method: <c>Failed</c> if any row failed; else <c>Passed</c> if any row passed;

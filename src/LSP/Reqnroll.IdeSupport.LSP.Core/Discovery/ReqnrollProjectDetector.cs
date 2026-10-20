@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Discovery;
 /// <summary>
 /// Decides whether a project reported by the IDE glue is a Reqnroll <em>test</em> project, so
 /// that <see cref="ConnectorDiscoveryService"/> never spawns the out-of-process connector
-/// against an assembly whose bindings nothing in the workspace would match (issue #731).
+/// against an assembly whose bindings nothing in the workspace would match.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -56,7 +56,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Discovery;
 /// <c>Reqnroll.dll</c> sitting next to the project's output assembly. This is what keeps Rider
 /// working: <c>ReqnrollProjectBaseline.kt</c> sends an empty <c>packageReferences</c> list for
 /// every project because Rider exposes no model for resolved NuGet references yet. It also covers
-/// VS sending an empty list transiently while NuGet is still loading (issue #690), and projects
+/// VS sending an empty list transiently while NuGet is still loading, and projects
 /// that pull Reqnroll in transitively via an internal meta-package rather than as a direct
 /// reference.
 /// </description></item>

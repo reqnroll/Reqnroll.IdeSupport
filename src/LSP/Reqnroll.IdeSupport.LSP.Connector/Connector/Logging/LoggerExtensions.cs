@@ -7,7 +7,7 @@ public static class LoggerExtensions
         logger.Log(new Log(LogLevel.Error, message));
     }
 
-    /// <summary>Logs an error with an associated exception (issue #628) — see <see cref="Log.Exception"/>.</summary>
+    /// <summary>Logs an error with an associated exception — see <see cref="Log.Exception"/>.</summary>
     public static void Error(this ILogger logger, string message, Exception exception)
     {
         logger.Log(new Log(LogLevel.Error, message, exception));

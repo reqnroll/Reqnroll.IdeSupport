@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 /// <param name="IsResolved">
 /// Whether <paramref name="SourceFile"/> names a file that exists here. <see langword="false"/> when
 /// the assembly was built somewhere else and its recorded source path could not be mapped onto this
-/// machine (issue #540) — a devcontainer or CI build, an external binding package, another machine.
+/// machine — a devcontainer or CI build, an external binding package, another machine.
 /// </param>
 /// <param name="RecordedSourceFile">
 /// The source path exactly as binding discovery recorded it. Null when it is the same as
@@ -28,7 +28,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 /// <param name="StepDefinitionType">
 /// The binding's step keyword (<c>[Given]</c>/<c>[When]</c>/<c>[Then]</c>). A <c>[StepDefinition]</c>
 /// attribute is registered as one binding per keyword, so it reports whichever of the three this
-/// binding is (issue #757).
+/// binding is.
 /// </param>
 public sealed record UnusedStepDefinition(
     string? ProjectName,

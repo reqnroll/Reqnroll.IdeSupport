@@ -1,6 +1,6 @@
 namespace ReqnrollConnector.Logging;
 
-/// <summary>Fans a log entry out to every composed <see cref="ILogger"/> sink (issue #628).</summary>
+/// <summary>Fans a log entry out to every composed <see cref="ILogger"/> sink.</summary>
 public sealed class CompositeLogger : ILogger
 {
     private readonly ILogger[] _loggers;

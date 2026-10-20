@@ -36,7 +36,7 @@ public record ProjectBindingRegistry
     // synthesized equality compares every instance field, so a cache field here would silently
     // break structural equality (harmless today -- nothing compares registries structurally --
     // but a footgun worth avoiding). A registry is immutable and replaced wholesale on every
-    // mutation, so the index only ever needs building once per instance (issue #471).
+    // mutation, so the index only ever needs building once per instance.
     private static readonly ConditionalWeakTable<ProjectBindingRegistry, StepLiteralIndex> _literalIndexCache = new();
 
     // Stateless (all fields are static readonly), so one shared instance avoids a fresh
@@ -148,7 +148,7 @@ public record ProjectBindingRegistry
 
     private MatchResultItem[] MatchSingleContextResult(Step step, IGherkinDocumentContext context, string stepText)
     {
-        // Literal prefilter (issue #471): narrows the O(bindings) regex-attempt loop below to
+        // Literal prefilter: narrows the O(bindings) regex-attempt loop below to
         // bindings whose statically-known literal text is actually present in this step, via one
         // Aho-Corasick scan instead of a per-binding regex attempt. See StepLiteralIndex's remarks
         // for why this can never exclude a binding that would have genuinely matched.
@@ -170,7 +170,7 @@ public record ProjectBindingRegistry
     }
 
     /// <summary>
-    /// Issue #514's "cheap first step": when a step has no valid match, checks whether any
+    /// Near-miss lookup: when a step has no valid match, checks whether any
     /// <em>invalid</em> candidate binding's regex/scope would otherwise have matched it (via
     /// <see cref="ProjectStepDefinitionBinding.WouldMatchIgnoringValidity"/>, which — unlike
     /// <see cref="ProjectStepDefinitionBinding.Match"/> — doesn't short-circuit on
@@ -324,7 +324,7 @@ public record ProjectBindingRegistry
     /// A binding is also dropped from the "other files" side when it's superseded by identity
     /// (see <see cref="BindingIdentity"/>) by one of the freshly parsed bindings, even if
     /// <see cref="IsSameSourceFile"/> says it comes from a different file. This is a safety net
-    /// for issues #469/#503/#515: the reflection connector's and Roslyn's source paths for the
+    /// against duplicate bindings: the reflection connector's and Roslyn's source paths for the
     /// very same file can legitimately disagree (a PDB path baked in from a devcontainer/CI build
     /// vs. the live LSP workspace path; a stale/unreadable PDB source location that resolves to
     /// null; a stale IDE-side cache), so path comparison alone can fail to recognize an existing
@@ -354,7 +354,7 @@ public record ProjectBindingRegistry
             FromOtherFile(h) &&
             !newHookIdentities.Contains((h.HookType, BindingIdentity(h.Implementation)));
 
-        // Diagnostic safety net for the #469/#503/#515 duplicate-bindings failure mode: an
+        // Diagnostic safety net for the duplicate-bindings failure mode: an
         // existing binding whose source file *name* matches the file being reconciled but whose
         // full path doesn't (SameSourceFile=false) is exactly the shape that identity requires
         // is caught. Silent in the overwhelmingly common case (nothing matches by name alone);
@@ -397,7 +397,7 @@ public record ProjectBindingRegistry
     /// A path-independent identity for a binding's implementation: its method identity plus its
     /// parameter types, each normalized (see <see cref="BindingMethodIdentity"/>, shared with
     /// <see cref="BindingId"/> so both recognize the very same method regardless of which
-    /// discovery path produced it -- issue #547/#548). Used by <see cref="ReplaceBindings"/> to
+    /// discovery path produced it). Used by <see cref="ReplaceBindings"/> to
     /// recognize that an existing binding and a freshly parsed one describe the same method even
     /// when their source-file paths don't match.
     /// </summary>
@@ -423,7 +423,7 @@ public record ProjectBindingRegistry
     /// multiset of expression/error pairs per key, rather than a single expression per key.
     /// </para>
     /// <para>
-    /// <see cref="ProjectBinding.Error"/> is included (issue #514) because a binding's validity
+    /// <see cref="ProjectBinding.Error"/> is included because a binding's validity
     /// affects matching independent of its expression text: <c>ProjectStepDefinitionBinding.Match</c>
     /// returns <see langword="null"/> whenever <c>!IsValid</c>, so a binding transitioning
     /// valid⇄invalid (e.g. a step-definition method losing/gaining a required <c>static</c>
@@ -531,8 +531,8 @@ public record ProjectBindingRegistry
     /// Compares two source-file paths for identity. Delegates to <see cref="PathUtils.IsSamePath"/>,
     /// which is the single normalization/comparison rule shared with every other "is this the same
     /// file?" site in the server — the CodeLens handlers, <see cref="BindingLocationMatcher"/> and
-    /// the workspace scope manager all used to carry their own subtly different copy of it, and
-    /// #469 / #503 / #515 were all failures of exactly that divergence (issue #540 F4).
+    /// the workspace scope manager must all use it: separately maintained copies diverged subtly, which caused duplicate
+    /// bindings and mismatched usage counts.
     /// </summary>
     internal static bool IsSameSourceFile(string? sourceFile, string targetFullName) =>
         PathUtils.IsSamePath(sourceFile, targetFullName);
@@ -540,7 +540,7 @@ public record ProjectBindingRegistry
     /// <summary>
     /// Returns whether this registry already has at least one step-definition or hook binding whose
     /// source location points at <paramref name="filePath"/>. Used to distinguish "this file was
-    /// already reconciled" from "a connector run merely happened for its project" — see issue #517.
+    /// already reconciled" from "a connector run merely happened for its project".
     /// </summary>
     public bool HasAnyBindingFor(string filePath)
     {
