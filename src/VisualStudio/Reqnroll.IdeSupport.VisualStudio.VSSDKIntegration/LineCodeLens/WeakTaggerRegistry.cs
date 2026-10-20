@@ -11,9 +11,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// Tracks live classic-CodeLens taggers per file, weakly (so a closed buffer's tagger can be
 /// collected), and lets a feature's static redirect bridge request a re-pull of server data for a
 /// file (or every tracked file) without needing a live reference to the tagger itself. Shared by
-/// every Reqnroll classic CodeLens feature (issue #372/#262) — extracted from what were two
-/// near-identical copies of this exact registry embedded in <c>HookCodeLensRedirect</c>/
-/// <c>RunTestCodeLensRedirect</c>.
+/// every Reqnroll classic CodeLens feature.
 /// </summary>
 /// <remarks>
 /// A classic <c>ICodeLensTag</c> has no re-tag/invalidate mechanism of its own; the standard pattern

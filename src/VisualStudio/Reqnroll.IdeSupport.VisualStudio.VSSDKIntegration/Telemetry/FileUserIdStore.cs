@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 /// <remarks>
 /// This store is constructed by MEF inside <c>TelemetryTransmitter</c>'s importing constructor, so
 /// it must never throw: a read-only, locked, unreachable or unset profile must not fault the
-/// telemetry chain (#1029). All file I/O is therefore guarded, and when the profile cannot be read
+/// telemetry chain. All file I/O is therefore guarded, and when the profile cannot be read
 /// or written an in-memory GUID is used for the session instead. The <see cref="Lazy{T}"/> must
 /// never observe an exception — a faulted <see cref="Lazy{T}"/> caches and rethrows it, turning a
 /// transient I/O failure into a permanently broken transmitter — so

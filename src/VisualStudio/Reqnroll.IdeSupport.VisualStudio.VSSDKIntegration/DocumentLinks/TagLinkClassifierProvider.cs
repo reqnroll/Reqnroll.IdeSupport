@@ -12,7 +12,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
 /// <summary>
-/// Keeps every clickable Gherkin tag permanently styled as a link (issue #921). Visual Studio only draws its
+/// Keeps every clickable Gherkin tag permanently styled as a link. Visual Studio only draws its
 /// Ctrl+hover underline for the tag under the pointer, which hides which tags are links at all; this classifies each
 /// link's span with the editor's own <c>url</c> classification (the one it uses for URLs in plain text: link colour
 /// and underline), the way the legacy extension's <c>UrlTag</c> did.

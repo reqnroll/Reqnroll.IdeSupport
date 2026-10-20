@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 
 /// <summary>
 /// Static bridge that the Extension project populates so the VSSDK command filter
-/// (which has no reference to <c>LspInterceptingPipe</c>) can run Go To Definition itself (issue #757).
+/// (which has no reference to <c>LspInterceptingPipe</c>) can run Go To Definition itself.
 /// </summary>
 /// <remarks>
 /// Set by <c>ReqnrollLanguageClient</c> once the server connection is established;
@@ -24,7 +24,7 @@ public static class GoToDefinitionRedirect
 
     /// <summary>
     /// Delegate set by the Extension project: <c>(fileUri, line, character, ct)</c> -> whether the step at
-    /// that 0-based position has a binding Go To Definition can navigate to (issue #898). Lets
+    /// that 0-based position has a binding Go To Definition can navigate to. Lets
     /// <c>GoToDefinitionNavigableSymbolProvider</c> offer the Ctrl+hover underline only where a click would go
     /// somewhere. Null when the server has not yet initialized or has been disposed.
     /// </summary>

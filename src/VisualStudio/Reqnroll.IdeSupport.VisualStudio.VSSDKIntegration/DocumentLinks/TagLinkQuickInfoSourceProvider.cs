@@ -14,7 +14,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
 /// <summary>
-/// Shows where a clickable Gherkin tag leads when the pointer rests on it, with no modifier key (issue #921): the
+/// Shows where a clickable Gherkin tag leads when the pointer rests on it, with no modifier key: the
 /// target URL and how to follow it, like the legacy extension's link tooltip. Reads the links from the shared
 /// <see cref="TagLinkTracker"/> and answers nothing off a link, so other Quick Info on the line is unaffected.
 /// </summary>

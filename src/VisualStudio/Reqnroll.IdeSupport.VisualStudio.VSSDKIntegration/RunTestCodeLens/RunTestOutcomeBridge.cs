@@ -24,8 +24,7 @@ internal enum RunTestOutcome
 }
 
 /// <summary>
-/// Best-effort bridge to VS's own cached test outcome, for the Run CodeLens pass/fail glyph (issue
-/// #504 follow-up). This is the same mechanism VS's own built-in <c>TestStatusProvider</c> CodeLens
+/// Best-effort bridge to VS's own cached test outcome, for the Run CodeLens pass/fail glyph. This is the same mechanism VS's own built-in <c>TestStatusProvider</c> CodeLens
 /// uses — decompiled from <c>Microsoft.VisualStudio.TestWindow.Internal.dll</c>/<c>...CodeLens.dll</c>
 /// (Test-Outcomes-Pipeline, "Client rendering") — but <c>ICodeLensTestInformationService</c>, <c>CodeLensTestInformationProxy</c>,
 /// and <c>RemoteTestWindowServiceProvider</c> are all <c>internal</c> to that assembly: not part of
@@ -41,7 +40,7 @@ internal enum RunTestOutcome
 /// service independently instead.
 ///
 /// <b>Every reflection step is wrapped</b> so a future VS update that renames, reshapes, or removes
-/// any of this can only ever degrade the CodeLens back to "no glyph" (the pre-#504 behavior) — never
+/// any of this can only ever degrade the CodeLens back to "no glyph" — never
 /// throw into the CodeLens host. Two different failure kinds are handled differently, deliberately:
 /// a <see cref="TypeLoadException"/> or <see cref="MissingMemberException"/> (thrown by this class
 /// itself when a type/field/method/constructor lookup comes back empty) means the API's *shape* has
@@ -56,7 +55,7 @@ internal enum RunTestOutcome
 internal static class RunTestOutcomeBridge
 {
     // Runs only in the CodeLens ServiceHub host (its sole caller is RunTestCodeLensDataPoint), so
-    // it shares that host's logger instead of owning a second one for the same file (issue #748).
+    // it shares that host's logger instead of owning a second one for the same file.
     private static IIdeSupportLogger Logger => CodeLensHostLogger.Instance;
 
     // Stable per-process id for the (never-unsubscribed) implicit "subscription" GetTestOutcomeAsync
@@ -75,7 +74,7 @@ internal static class RunTestOutcomeBridge
     /// including a future VS update changing its shape. Never throws.
     /// </summary>
     /// <remarks>
-    /// Three stages (issue #590), each independently testable: <b>acquire</b>
+    /// Three stages, each independently testable: <b>acquire</b>
     /// (<see cref="GetOrCreateProxyAsync"/> — locate the assembly, resolve the internal types, bind
     /// the method handles; fails once, permanently), <b>invoke</b>
     /// (<see cref="InvokeGetTestOutcomeAsync"/> — call through the bound handle and await the
@@ -273,7 +272,7 @@ internal static class RunTestOutcomeBridge
     /// <see cref="DisablePermanently"/>) drop the connection, and nothing else ever disposes it —
     /// this class holds no instance state and has no finalizer, so without this an
     /// <see cref="IDisposable"/> proxy (and the stream it owns) is leaked on every transient
-    /// failure and again on a permanent shape change (issue #1034). Disposal is best-effort and
+    /// failure and again on a permanent shape change. Disposal is best-effort and
     /// never throws: <see cref="HandleFailure"/> is always invoked from inside a catch clause, so
     /// a Dispose that itself fails must not escape it.
     /// </summary>

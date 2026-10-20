@@ -12,15 +12,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// Static bridge that the Extension project populates so the classic (VSSDK) hook-match-count
 /// CodeLens components — which have no reference to <c>LspInterceptingPipe</c> and run via the
 /// classic <c>Microsoft.VisualStudio.Language.CodeLens</c> API rather than
-/// <c>Microsoft.VisualStudio.Extensibility</c>'s <c>ICodeLensProvider</c> (see issue #372) — can
+/// <c>Microsoft.VisualStudio.Extensibility</c>'s <c>ICodeLensProvider</c> — can
 /// reach the LSP server.
 /// </summary>
 /// <remarks>
 /// Set by <c>ReqnrollLanguageClient</c> once the server connection is established; cleared on
 /// dispose. Mirrors <see cref="CommentToggleRedirect"/>/<see cref="NavigationBar.NavigationBarRedirect"/>.
 /// Safe to call from any thread. Tagger tracking/invalidation itself lives in the shared
-/// <see cref="WeakTaggerRegistry{TTagger}"/> (issue #262 follow-up — this class used to hold its own
-/// copy of that registry, near-identical to <c>RunTestCodeLensRedirect</c>'s).
+/// <see cref="WeakTaggerRegistry{TTagger}"/>.
 /// </remarks>
 public static class HookCodeLensRedirect
 {

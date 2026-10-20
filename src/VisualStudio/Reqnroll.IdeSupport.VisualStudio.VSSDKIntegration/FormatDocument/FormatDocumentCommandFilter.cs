@@ -146,7 +146,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                 _logger.LogVerbose(
                     $"FormatDocumentCommandFilter: redirecting command id={commandId} uri='{fileUri}' isSelection={isSelection} lines[{startLine}..{endLine}]");
 
-                // Same shape as GoToDefinitionCommandFilter (issue #766): a tracked, cancellable
+                // Same shape as GoToDefinitionCommandFilter: a tracked, cancellable
                 // JoinableTask instead of a bare Task.Run, so a newer press supersedes this one,
                 // VS shutdown cancels it, and FileAndForget reports a failure as a VS fault
                 // instead of only logging it.
@@ -184,7 +184,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                     catch (EditRejectedException ex)
                     {
                         // The server refused to format this document for a reason the user can fix
-                        // (issue #1132). An empty edit list is "already formatted" and never reaches here.
+                        // (it is shown to them). An empty edit list is "already formatted" and never reaches here.
                         _logger.LogInfo($"FormatDocumentCommandFilter: format rejected by server: {ex.Message}");
 
                         // A format fired from the save sequence (a format-on-save extension, Code Cleanup
@@ -257,7 +257,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
     /// Computes the line range a Format Document/Format Selection request should cover, applying the
     /// shared <see cref="SelectionLineRange.AdjustEndLineForWholeLineSelection"/> correction so a
     /// whole-line selection whose end sits at column 0 of the line <em>after</em> the last selected
-    /// line does not format one extra line (issue #1035).
+    /// line does not format one extra line.
     /// </summary>
     /// <remarks>
     /// Kept pure (no <c>ThreadHelper</c>), like <see cref="IsSnapshotStale"/>, so the line-range

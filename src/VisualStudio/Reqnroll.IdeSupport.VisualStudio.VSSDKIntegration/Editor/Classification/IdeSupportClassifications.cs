@@ -27,7 +27,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Editor.Classification;
 /// classifier/tagger, but the classification <i>definitions</i> and their default formats are
 /// carried forward verbatim for continuity.  The <c>.feature</c> content type itself is
 /// registered both via VisualStudio.Extensibility and statically in
-/// <see cref="GherkinContentTypeDefinition"/> (issue #78).
+/// <see cref="GherkinContentTypeDefinition"/>.
 /// </para>
 /// </remarks>
 internal static class IdeSupportClassifications

@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
 /// In-process (<c>devenv.exe</c>) callback target for the out-of-process Run CodeLens data point
-/// provider (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262). Mirrors <c>HookCodeLensCallbackListener</c> exactly —
+/// provider (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step")). Mirrors <c>HookCodeLensCallbackListener</c> exactly —
 /// see its remarks for why <c>[ContentType]</c> is required (not decorative) and why a static
 /// bridge alone can't reach across the OOP ServiceHub process boundary.
 /// </summary>
@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 [ContentType(VsWellKnownIds.GherkinContentType)]
 public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
 {
-    /// <summary>Resolves exactly one line's Run target(s), instead of the whole file (issue #495).</summary>
+    /// <summary>Resolves exactly one line's Run target(s), instead of the whole file.</summary>
     public const string GetTargetsForLineMethod = "Reqnroll.RunTestCodeLens.GetTargetsForLine";
 
     /// <summary>

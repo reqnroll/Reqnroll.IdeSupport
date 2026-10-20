@@ -29,10 +29,9 @@ internal enum DropdownBarAttachOutcome
 /// so the rule is testable without a live editor.
 /// </summary>
 /// <remarks>
-/// Issue #78: a client whose view closed before it attached retried every ~300ms until VS shut
-/// down, because the <c>Closed</c> handler was only hooked on a successful attach. The scratch
-/// <c>.feature</c> file of <c>ScratchFileActivationTrigger</c> produced one such zombie on every
-/// launch where it fired (143 retries in one 45-second session).
+/// A client whose view closed before it attached would retry every ~300ms until VS shut down if the
+/// <c>Closed</c> handler were hooked only on a successful attach. The scratch <c>.feature</c> file of
+/// <c>ScratchFileActivationTrigger</c> can produce such a zombie on any launch where it fires.
 /// </remarks>
 internal static class DropdownBarAttachRetryPolicy
 {
@@ -54,7 +53,7 @@ internal static class DropdownBarAttachRetryPolicy
     }
 }
 
-/// <summary>Recognises the panes of VS's difference viewer, which have no drop-down bar (#907).</summary>
+/// <summary>Recognises the panes of VS's difference viewer, which have no drop-down bar.</summary>
 internal static class DiffViewDetector
 {
     /// <summary>Role carried by every difference-viewer pane (seen alongside LEFTDIFF and INLINEDIFF).</summary>
@@ -77,7 +76,7 @@ internal static class DiffViewDetector
 /// for caret tracking/navigation) can be unavailable at <c>VsTextViewCreated</c> time — most visibly
 /// when a solution is opened with <c>.feature</c> files already restored from a previous session,
 /// where many views are created back-to-back before VS finishes wiring up their WPF/frame plumbing.
-/// A single missed resolution used to mean the drop-down bar for that view was silently never
+/// A single missed resolution would otherwise mean the drop-down bar for that view was silently never
 /// attached at all. Every step below (attach, then LSP fetch) retries on the same 300ms debounce
 /// timer until it succeeds, rather than giving up after one failed attempt.
 /// </remarks>
@@ -103,7 +102,7 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
     private IReadOnlyList<GherkinSymbolNode> _roots            = Array.Empty<GherkinSymbolNode>();
     private IReadOnlyList<GherkinSymbolNode> _structureEntries = Array.Empty<GherkinSymbolNode>();
 
-    // Issue #83: a successful-but-empty fetch during the startup window must not be trusted as
+    // A successful-but-empty fetch during the startup window must not be trusted as
     // final the way a genuinely-empty file would be — otherwise the combo can get stuck empty
     // until some unrelated event (caret move, buffer edit) happens to call ScheduleRefresh()
     // again. Bounded so a genuinely empty file still settles.
@@ -172,7 +171,7 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
     /// <summary>
     /// Hooks the view's <c>Closed</c> event as soon as the WPF view resolves — from construction on,
     /// not only after a successful attach, so a view closed before the bar attached still disposes
-    /// this client (issue #78). Idempotent; safe to call on every tick.
+    /// this client. Idempotent; safe to call on every tick.
     /// </summary>
     private void WatchForViewClose()
     {
@@ -328,7 +327,7 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
 
         // Diff panes (Git Changes compare window) never get a code window with a drop-down bar
         // manager, and some never resolve one at all — which would otherwise retry for the whole
-        // attempt budget and end in a "giving up" warning (#907).
+        // attempt budget and end in a "giving up" warning.
         var roles = _editorAdapter.GetWpfTextView(_vsTextView)?.Roles;
         if (roles is not null && DiffViewDetector.IsDiffView(roles))
         {
@@ -347,7 +346,7 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
         if (codeWindow is not IVsDropdownBarManager dropdownBarManager)
         {
             // Permanent, not transient: a host whose code window has no drop-down bar support never
-            // gains it, so retrying would repeat this warning every 300ms (#907). Known diff panes
+            // gains it, so retrying would repeat this warning every 300ms. Known diff panes
             // are caught by DiffViewDetector above; warn once for any other unrecognised host.
             _logger.LogWarning(
                 "GherkinDropdownBarClient: IVsCodeWindow does not implement IVsDropdownBarManager; standing down.");

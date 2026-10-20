@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Editor;
 
 /// <summary>
 /// Static MEF registration of the <c>Gherkin</c> content type and its <c>.feature</c> file
-/// extension, so both exist the moment Visual Studio starts restoring documents (issue #78).
+/// extension, so both exist the moment Visual Studio starts restoring documents.
 /// </summary>
 /// <remarks>
 /// <para>

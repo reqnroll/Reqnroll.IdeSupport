@@ -3,7 +3,7 @@ using System.IO;
 namespace Reqnroll.IdeSupport.VisualStudio.TestReporter;
 
 /// <summary>
-/// Resolves the bundled Microsoft.Testing.Platform (MTP) reporter <em>source bundle</em> (issue #741)
+/// Resolves the bundled Microsoft.Testing.Platform (MTP) reporter <em>source bundle</em>
 /// — the MTP counterpart to <see cref="TestLogger.TestLoggerActivationRules"/>, packaged under
 /// <c>MtpReporter\</c>: <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c> plus the
 /// <c>ReporterSource\*.cs</c> it compiles into a user's test project.

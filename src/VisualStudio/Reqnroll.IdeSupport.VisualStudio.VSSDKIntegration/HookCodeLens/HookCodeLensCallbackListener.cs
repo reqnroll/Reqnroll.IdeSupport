@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 /// <summary>
 /// In-process (<c>devenv.exe</c>) callback target for the out-of-process hook-match-count CodeLens
-/// data point provider (issue #372). <see cref="HookCodeLensDataPointProvider"/>/<see cref="HookCodeLensDataPoint"/>
+/// data point provider. <see cref="HookCodeLensDataPointProvider"/>/<see cref="HookCodeLensDataPoint"/>
 /// run in the CodeLens ServiceHub host process, not <c>devenv.exe</c> — confirmed live by checking
 /// the PID that invoked them against <c>tasklist</c> (<c>ServiceHub.Host.netfx.Any</c>). A static
 /// bridge populated by <c>ReqnrollLanguageClient</c> (like <see cref="HookCodeLensRedirect"/>, which
@@ -28,7 +28,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// <remarks>
 /// <c>[ContentType]</c> is required, not decorative: the devenv-side bridge
 /// (<c>Microsoft.VisualStudio.CodeLens.Proxy.CodeLensHubClient</c>, decompiled from
-/// <c>Microsoft.VisualStudio.Editor.Implementation.dll</c> while debugging issue #372) imports
+/// <c>Microsoft.VisualStudio.Editor.Implementation.dll</c>) imports
 /// listeners as <c>Lazy&lt;ICodeLensCallbackListener, IDeferrableContentTypeMetadata&gt;</c> and only
 /// calls <c>AddLocalRpcTarget</c> for listeners whose declared content types match the connection's —
 /// otherwise the listener is composed but never wired to the RPC channel, and every callback fails

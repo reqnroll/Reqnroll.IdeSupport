@@ -138,7 +138,7 @@ public class VsIdeScope : IVsIdeScope
     /// Evicts and disposes the cached <see cref="VsProjectScope"/> for <paramref name="project"/>, if
     /// any, so the next <see cref="GetProjectScope"/> call for a project at the same path (e.g. after
     /// an unload/reload) builds a fresh scope around the new DTE <see cref="Project"/> instead of
-    /// serving the stale one (issue #1030). Call when the project is removed from the solution
+    /// serving the stale one. Call when the project is removed from the solution
     /// (DTE also reports an unload as a removal). Callers that still hold the evicted scope keep a
     /// usable object; only its <see cref="VsProjectScope.Properties"/> disposables are released.
     /// </summary>
@@ -156,7 +156,7 @@ public class VsIdeScope : IVsIdeScope
     /// <summary>
     /// Evicts and disposes every cached <see cref="VsProjectScope"/>; call when the solution closes,
     /// so scopes cached under a path that no later removal will name (e.g. a renamed project's old
-    /// path) do not outlive the solution (issue #1030).
+    /// path) do not outlive the solution.
     /// </summary>
     public void RemoveAllProjectScopes()
     {

@@ -17,10 +17,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
 /// Classic MEF <see cref="ITaggerProvider"/> supplying <see cref="ICodeLensTag"/>s for
-/// <c>Gherkin</c> buffers (Run CodeLens — Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262). Constructs the shared
+/// <c>Gherkin</c> buffers (Run CodeLens — Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step")). Constructs the shared
 /// <see cref="LineKeyedCodeLensTagger{TEntry}"/>, supplying only this feature's fetch/group/encode
-/// functions (follow-up — this used to construct its own bespoke <c>RunTestCodeLensTagger</c>,
-/// near-identical to <c>HookCodeLensTaggerProvider</c>'s).
+/// functions.
 /// </summary>
 [Export(typeof(ITaggerProvider))]
 [ContentType(VsWellKnownIds.GherkinContentType)]
@@ -54,7 +53,7 @@ internal sealed class RunTestCodeLensTaggerProvider : ITaggerProvider
     }
 
     /// <summary>
-    /// Fetches tag placements only (issue #495) — the symbol tree, with no
+    /// Fetches tag placements only — the symbol tree, with no
     /// <c>reqnroll/resolveTestTargets</c> calls. The actual target(s) for a line are resolved
     /// lazily, once that line's own <see cref="RunTestCodeLensDataPoint"/> is created, not here.
     /// </summary>

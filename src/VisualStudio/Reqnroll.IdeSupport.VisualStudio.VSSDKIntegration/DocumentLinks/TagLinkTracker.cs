@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 internal readonly record struct TrackedLink(ITrackingSpan Span, string Target);
 
 /// <summary>
-/// Per-buffer cache of the clickable-tag links of one <c>.feature</c> file (issue #921), shared by
+/// Per-buffer cache of the clickable-tag links of one <c>.feature</c> file, shared by
 /// <see cref="TagLinkClassifier"/> (permanent link styling) and <see cref="TagLinkQuickInfoSourceProvider"/>
 /// (hover target). The editor asks for classifications and quick info synchronously and constantly, so the links are
 /// fetched from the server in the background through <see cref="TagLinkRedirect.GetLinksAsync"/> and the last answer is
