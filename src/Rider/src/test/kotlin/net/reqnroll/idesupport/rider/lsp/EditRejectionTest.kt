@@ -19,7 +19,7 @@ class EditRejectionTest {
 
     @Test
     fun `messageOf reads the message off a direct -32803 ResponseErrorException`() {
-        // The shape textDocument/rename (and executeCommand) now fail with (issues #650, #1132):
+        // The shape textDocument/rename (and executeCommand) now fail with:
         // the server throwing RpcErrorException becomes a JSON-RPC error response, which LSP4J
         // surfaces client-side as a ResponseErrorException.
         assertEquals("Parameter count mismatch", EditRejection.messageOf(responseError(-32803, "Parameter count mismatch")))

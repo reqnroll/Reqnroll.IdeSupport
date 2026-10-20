@@ -24,7 +24,7 @@ class ReqnrollGoToDefinitionPromoter : ActionPromoter {
     /**
      * Also puts ours first: F12 and Ctrl+click resolve to several actions sharing the shortcut
      * (`GotoDeclaration`, `ClickLink`, Rider's `InlayClickAction`, ...), and suppressing only
-     * `GotoDeclaration` left another of them to win the shortcut ahead of this action (#909).
+     * `GotoDeclaration` left another of them to win the shortcut ahead of this action.
      */
     override fun promote(actions: List<AnAction>, context: DataContext): List<AnAction> {
         if (!appliesTo(context)) return emptyList()

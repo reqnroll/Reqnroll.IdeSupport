@@ -9,7 +9,7 @@ data class TagLinkRange(val start: Int, val end: Int, val target: String) {
 }
 
 /**
- * Pure logic of clickable tags (issue #755), kept apart from [ReqnrollFeatureTagLinkController] so it can be
+ * Pure logic of clickable tags, kept apart from [ReqnrollFeatureTagLinkController] so it can be
  * unit-tested without an editor.
  */
 object TagLinkSupport {
@@ -49,7 +49,7 @@ object TagLinkSupport {
     }
 
     /**
-     * The HTML of the hover hint shown over a clickable tag (issue #921): the target, and the gesture that follows it
+     * The HTML of the hover hint shown over a clickable tag: the target, and the gesture that follows it
      * ([modifier] is the platform's link modifier, "Ctrl" or "Cmd"). The target comes from `reqnroll.json`, so it is escaped.
      */
     fun hoverHtml(target: String, modifier: String): String =

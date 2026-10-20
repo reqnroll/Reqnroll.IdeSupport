@@ -8,8 +8,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * Debug-only sink that mirrors telemetry events to a local JSONL file for later review (issue
- * #799), giving Rider the same local mirror VS's `TelemetryTransmitter`/`TelemetryDebugLog.cs`
+ * Debug-only sink that mirrors telemetry events to a local JSONL file for later review, giving Rider the same local mirror VS's `TelemetryTransmitter`/`TelemetryDebugLog.cs`
  * and VS Code's `telemetry.ts`/`telemetryDebugLog.ts` already have. Deliberately independent of
  * the `REQNROLL_TELEMETRY_ENABLED` opt-out gate — [RiderTelemetryTransmitter] records what it
  * *attempted* to send even when transmission is disabled or fails.

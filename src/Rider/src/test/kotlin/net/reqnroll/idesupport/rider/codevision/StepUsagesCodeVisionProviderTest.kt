@@ -42,7 +42,7 @@ class StepUsagesCodeVisionProviderTest {
         assertEquals("Reqnroll.StepUsagesCodeVision", entry.providerId)
     }
 
-    // Command-free overload (issue #262 follow-up) — used by RunLensSupport.buildEntry, whose
+    // Command-free overload — used by RunLensSupport.buildEntry, whose
     // title comes from a cached run outcome rather than an LSP Command. Same wrong-argument-order
     // risk as the Command-based overload above, since it's the one now doing the actual
     // ClickableTextCodeVisionEntry construction.

@@ -17,7 +17,7 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
  * of this Lsp4jClient... annotated functions... called via reflection by the lsp4j library" —
  * confirmed against the actual platform source, `platform/lsp/src/api/Lsp4jClient.kt` in
  * intellij-community, not assumed): adds the one reqnroll-custom server-to-client push this plugin
- * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline, #700/#702).
+ * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline).
  *
  * A decorator of [LspServerNotificationsHandler] — the approach [ReqnrollCodeLensRefreshInterceptor]
  * and [ReqnrollInlayHintRefreshInterceptor] use for the *standard* LSP pushes — cannot add this: every

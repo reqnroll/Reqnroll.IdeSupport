@@ -10,7 +10,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.util.TextRange
 
 /**
- * "N step hooks" CodeVision lens — the consolidated per-scenario step-hooks count (issue #372)
+ * "N step hooks" CodeVision lens — the consolidated per-scenario step-hooks count
  * shown alongside [HookCodeVisionProvider]'s Scenario-only "N hooks" lens on the same `Scenario:`
  * line. A *separate* registered provider rather than a second entry from `HookCodeVisionProvider`
  * itself: see [HookLensSupport]'s doc comment for why a single provider can't reliably show two

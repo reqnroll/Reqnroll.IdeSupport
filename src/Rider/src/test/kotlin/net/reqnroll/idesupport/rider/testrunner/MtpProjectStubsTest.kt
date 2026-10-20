@@ -12,7 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Covers [MtpProjectStubs] — where and when Rider writes the issue #741 project-local
+ * Covers [MtpProjectStubs] — where and when Rider writes the project-local
  * `obj/<Project>.csproj.reqnroll-ide.targets` stub. What the stub's import does to a build is covered by
  * `SourceInjectionBuildTests` in Reqnroll.IdeSupport.TestReporter.MTP.Tests.
  */

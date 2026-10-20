@@ -91,7 +91,7 @@ object ReqnrollProjectBaseline {
      * (project file, TFM), so a `projectFiles` sent with a different TFM than the project registered
      * with is stored under a key the project never looks up — every per-project membership query then
      * falls back to a folder-prefix scan, which never sees files outside the project folder such as a
-     * shared project's (issue #736). Before #736 `projectFiles` always sent `""`.
+     * shared project's, so `projectFiles` must send the same TFM, never `""`.
      */
     fun targetFrameworkMoniker(runnableProject: RunnableProject): String =
         runnableProject.projectOutputs.firstOrNull()?.tfm?.let(::toClassicMoniker) ?: ""
@@ -115,7 +115,7 @@ object ReqnrollProjectBaseline {
 
     /**
      * The feature/binding files of [projectFile]: everything under its folder, plus the files it
-     * compiles from the shared projects it imports (issue #736) — those live outside its folder by
+     * compiles from the shared projects it imports — those live outside its folder by
      * definition, so the walk alone never finds them. The walk skips the project's own `bin/` and
      * `obj/` (see [isBuildOutput]). Null when [projectFile] has no parent folder. `internal` purely
      * so it's unit-testable without a `Project` fixture.
@@ -149,11 +149,11 @@ object ReqnrollProjectBaseline {
      * `obj/…/<Project>.AssemblyInfo.cs` and `<Project>.GlobalUsings.g.cs`, which the server then
      * Roslyn-reconciled as binding files on every registry change for no result. Only the
      * project-root `bin`/`obj` count: a `bin` folder deeper down is ordinary source.
-     * Case-insensitive, like the rest of this plugin's path matching (issue #328).
+     * Case-insensitive, like the rest of this plugin's path matching.
      */
     internal fun isBuildOutput(path: String, projectFolder: String): Boolean {
-        // Both "/" (VFileEvent.path) and "\\" (File.path on Windows) spellings arrive here
-        // (issue #978): compare in "/" form.
+        // Both "/" (VFileEvent.path) and "\\" (File.path on Windows) spellings arrive here:
+        // compare in "/" form.
         val normalizedPath = path.replace('\\', '/')
         val normalizedFolder = projectFolder.replace('\\', '/').trimEnd('/')
         return listOf("bin", "obj").any { name ->

@@ -3,7 +3,7 @@ package net.reqnroll.idesupport.rider.inlayhints
 import com.intellij.openapi.extensions.ExtensionPointName
 
 /**
- * Whether the running Rider renders `textDocument/inlayHint` natively (#909).
+ * Whether the running Rider renders `textDocument/inlayHint` natively.
  *
  * Rider 2026.2 registers a generic inlay-hints provider for LSP servers
  * (`com.intellij.platform.lsp.impl.features.inlayCommon.LspInlayHintsProviderFactory`) that — unlike

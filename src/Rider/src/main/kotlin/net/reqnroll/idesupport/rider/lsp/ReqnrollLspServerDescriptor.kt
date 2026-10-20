@@ -56,19 +56,19 @@ class ReqnrollLspServerDescriptor(project: Project) :
     // Diagnostic.message verbatim into AnnotationBuilder.tooltip(String), which Rider's hover popup
     // renders as HTML, collapsing bare '\n' the same as any other whitespace run — so multi-candidate
     // messages rendered with the platform default all merge onto one row instead of one candidate per
-    // line. See com/reqnroll/ide/rider/lsp/diagnostics/ReqnrollLspDiagnosticsSupport.kt. (#176)
+    // line. See com/reqnroll/ide/rider/lsp/diagnostics/ReqnrollLspDiagnosticsSupport.kt.
     override val lspDiagnosticsSupport: LspDiagnosticsSupport = ReqnrollLspDiagnosticsSupport()
 
     // Deliberately NO lspFormattingSupport: its presence enables the platform's LspFormattingService,
     // whose formatting task uses sendRequestSync and so swallows the server's -32803 "edit rejected"
-    // error. Whole-document Reformat Code is handled by ReqnrollFormattingService instead (issue #1172).
+    // error. Whole-document Reformat Code is handled by ReqnrollFormattingService instead.
     // The dynamic-registration capabilities advertised in clientCapabilities below stay: they are
     // harmless without the platform service, and the server registers its handlers dynamically.
 
 
     // Rider 2026.2 renders textDocument/codeLens natively and runs a clicked lens's command through
     // this; without it the server's client-side commands (reqnroll.findStepUsages, ...) go back to the
-    // server as workspace/executeCommand and nothing happens (#909).
+    // server as workspace/executeCommand and nothing happens.
     override val lspCommandsSupport: LspCommandsSupport = ReqnrollLspCommandsSupport()
 
     // Adds the reqnroll-prefixed client-to-server notifications (ReqnrollNotificationSender) on top

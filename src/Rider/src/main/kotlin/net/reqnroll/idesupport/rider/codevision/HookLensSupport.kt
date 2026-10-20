@@ -13,7 +13,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
  * Shared lens-computation logic for [HookCodeVisionProvider] and [StepHooksCodeVisionProvider] —
- * split into two separate `CodeVisionProvider` registrations (issue #372 follow-up) because a
+ * split into two separate `CodeVisionProvider` registrations because a
  * *single* provider can't reliably show two entries on the same `Scenario:` line (empirically,
  * even distinct `TextRange`s on the same line only rendered the last one), whereas two separate
  * registered providers compose side by side automatically — the same platform mechanism that
@@ -101,7 +101,7 @@ internal object HookLensSupport {
 
                 // alwaysShowPicker=true: clicking a lens always shows the picker, even for a
                 // single matching hook, so the user can see which hook it refers to rather than
-                // being jumped straight there (issue #372 follow-up, mirrors VS Code's behavior).
+                // being jumped straight there (mirrors VS Code's behavior).
                 val entry = StepUsagesCodeVisionProvider.buildEntry(command, providerId) {
                     GoToHooksRunner.runAndShow(
                         project, uri, clickLine, clickCharacter, ownLevelOnly, alwaysShowPicker = true,

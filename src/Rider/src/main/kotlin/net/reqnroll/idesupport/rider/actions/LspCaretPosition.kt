@@ -16,8 +16,8 @@ data class LspCaretPosition(val line: Int, val character: Int)
  * [com.intellij.openapi.editor.LogicalPosition.column] expands tabs to the editor's configured
  * tab size. In tab-indented files the two disagree, so sending `logicalPosition.column` shifts
  * the request position right and makes the position-based `reqnroll/findStepUsages`,
- * `reqnroll/findHooks` and `reqnroll/renameTargets` requests miss or hit the wrong element
- * (issue #980). Use the raw caret offset minus the line's start offset instead — the same
+ * `reqnroll/findHooks` and `reqnroll/renameTargets` requests miss or hit the wrong element.
+ * Use the raw caret offset minus the line's start offset instead — the same
  * offset-based math the on-type-formatting handler and the breadcrumbs collector already use.
  */
 fun lspCaretPosition(editor: Editor): LspCaretPosition =

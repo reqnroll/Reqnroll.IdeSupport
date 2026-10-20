@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** Issue #987: the check-then-register race and N-files-opened-during-startup => N actions. */
+/** The check-then-register race and N-files-opened-during-startup => N actions. */
 class ServerReadinessGateTest {
     /**
      * Stands in for `LspServerManager`: [isRunning] reads the current state, and [reachRunning]

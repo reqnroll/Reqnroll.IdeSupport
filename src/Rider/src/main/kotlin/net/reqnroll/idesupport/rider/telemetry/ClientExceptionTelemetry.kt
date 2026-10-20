@@ -6,7 +6,7 @@ import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import java.util.concurrent.CancellationException
 
 /**
- * Client-side exception telemetry for the Rider plugin (issue #621): reports exceptions caught in the
+ * Client-side exception telemetry for the Rider plugin: reports exceptions caught in the
  * plugin's own code as the same `UnhandledException` event the LSP server sends for its exceptions
  * (`LspErrorTelemetryService.MonitorError`), so error-rate queries stay uniform. Events from here carry
  * `ExceptionOrigin = "Client"` (absent on server-originated ones); [RiderTelemetryTransmitter] stamps
@@ -24,12 +24,12 @@ import java.util.concurrent.CancellationException
  * cancellations (`ProcessCanceledException`, `CancellationException`, which includes the timeout
  * cancellations of requests such as rename — a timeout is not a plugin failure).
  *
- * **Privacy contract** (same bar as the server's `UnhandledException`, issues #620/#843, hardened because
+ * **Privacy contract** (same bar as the server's `UnhandledException`, hardened because
  * client exception text is arbitrary): only the exception class name, a scrubbed message capped at
  * [MAX_MESSAGE_LENGTH] characters and a closed `Source` (the simple name of the topmost plugin class on the
  * stack) are sent. The message has every quoted substring dropped, URLs removed, and absolute, UNC, home,
  * relative and bare source/config file-name paths redacted. The stack is sent only as the sanitized
- * `StackFrames` of [ClientStackSanitizer] (issue #1199: the plugin's own frames as `package.Class.method:line`,
+ * `StackFrames` of [ClientStackSanitizer] (the plugin's own frames as `package.Class.method:line`,
  * no file names, everything else collapsed), matching the server's contract; it rides on each event that is
  * sent, so the dedupe and cap below bound how many distinct stacks that can be. `ClientSessionId` is added to
  * every event by [RiderTelemetryTransmitter] (see [ClientSession]).

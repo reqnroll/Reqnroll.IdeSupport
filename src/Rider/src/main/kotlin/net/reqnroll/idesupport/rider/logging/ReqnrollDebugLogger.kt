@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Receives every [ReqnrollDebugLogger] entry at `Info` level or above — implemented by the
- * "Reqnroll" console tool window's panel (issue #662; see
+ * "Reqnroll" console tool window's panel (see
  * `net.reqnroll.idesupport.rider.console.ReqnrollConsolePanel`), which registers/unregisters itself via
  * [ReqnrollDebugLogger.addConsoleSink]/[ReqnrollDebugLogger.removeConsoleSink] as it's created and
  * disposed. `Verbose` entries (see [ReqnrollDebugLogger.verbose]) never reach a sink — see that
@@ -25,20 +25,19 @@ fun interface ReqnrollConsoleSink {
  * lifecycle/diagnostic messages — not LSP wire traffic, see CONTRIBUTING.md for why that
  * part isn't replicable here — appended to
  * `<Reqnroll log dir>/reqnroll-rider-ext-<yyyyMMdd>-<pid>.log`, pruned after 10 days. The log
- * directory is a `logs` subfolder of the shared Reqnroll application directory (issue #726),
+ * directory is a `logs` subfolder of the shared Reqnroll application directory,
  * keeping it separate from unrelated persisted state that directory may hold. Its per-OS
  * resolution follows the VS Code extension's convention (logPaths.ts's resolveLogDirectory),
  * since this plugin runs on the JVM across the same OSes VS Code does, unlike the Windows-only
  * VS extension.
  *
- * Timestamps are UTC (issue #625) — the previous `LocalDateTime.now()` carried no offset at
- * all, so a log collected from a machine in an unknown timezone couldn't be correlated with
+ * Timestamps are UTC — a local time with no offset would mean a log collected from a machine in an unknown timezone couldn't be correlated with
  * the UTC timestamps the LSP server and VS extension write to their own log files.
  *
- * The line shape (issue #626) is the portable subset of the canonical format shared with the
+ * The line shape is the portable subset of the canonical format shared with the
  * .NET side's `LogLineFormatter` — UTC timestamp, a level padded to a fixed width, then the
  * message. The .NET format also carries a managed-thread-id segment; that's specific to the LSP
- * server's multi-threaded handler model (added to help diagnose issue #554) and has no
+ * server's multi-threaded handler model (its thread id helps diagnose concurrent-request problems) and has no
  * equivalent here. A per-call "source" segment is likewise not attempted: C# gets that for free
  * from the compiler's `[CallerFilePath]`, which Kotlin has no equivalent of, and this file's ~30
  * call sites already hand-write their originating class name into the message text itself (e.g.
@@ -90,7 +89,7 @@ object ReqnrollDebugLogger {
 
     /**
      * Every exception this plugin catches and logs at Warning or Error is also reported as client-side
-     * exception telemetry (issue #621; see [ClientExceptionTelemetry] for the privacy contract and rate
+     * exception telemetry (see [ClientExceptionTelemetry] for the privacy contract and rate
      * limits). `Verbose` entries are diagnostics, not failures, and are never reported. Never throws.
      */
     private fun reportException(throwable: Throwable?) {
@@ -107,10 +106,10 @@ object ReqnrollDebugLogger {
      * by the LSP server's `--log-level` and VS Code's `reqnroll.trace.server`/`traceServerToLogLevel`
      * mapping) — for the per-request diagnostic call sites (folding, inlay hints,
      * per-viewport CodeLens/documentSymbol, project/document sync, telemetry) that fire far too
-     * often to belong in the curated console (issue #662): [log] never forwards `Verbose` entries
+     * often to belong in the curated console: [log] never forwards `Verbose` entries
      * to a [ReqnrollConsoleSink], only writes them to the file. This is a fixed threshold, not a
      * configurable one — there's no UI surface in this plugin for a user to change it, matching
-     * `VsOutputPaneLogger`'s hardcoded default `TraceLevel.Info` on the VS side (issue #651/#656):
+     * `VsOutputPaneLogger`'s hardcoded default `TraceLevel.Info` on the VS side:
      * `Info`/`Warning`/`Error` always reach the console, `Verbose` never does.
      */
     fun verbose(message: String, throwable: Throwable? = null) = log("Verbose", message, throwable)
@@ -178,7 +177,7 @@ object ReqnrollDebugLogger {
      * `rid`/`isWindows` functions.
      *
      * Returns the `logs` subfolder of the per-OS Reqnroll application directory, not that
-     * directory itself (issue #726) — this plugin has no non-log state to keep at the
+     * directory itself — this plugin has no non-log state to keep at the
      * application-directory root, so unlike the .NET host side there is no separate
      * `resolveApplicationDirectory` equivalent here; every caller wants the log location.
      */

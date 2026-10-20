@@ -115,7 +115,7 @@ class RunTestRunnerTest {
 
     @Test
     fun `normalizeToManagedAssemblyPath resolves an apphost binary to its dll sibling when it exists`() {
-        // Reproduces issue #722 follow-up: an MTP-mode project's exePath points at the native
+        // Regression guard: an MTP-mode project's exePath points at the native
         // apphost (no extension on Linux/macOS), not the managed .dll the reporter actually reports.
         val root = tempDir()
         val exePath = File(root, "Tests").path
@@ -268,7 +268,7 @@ class RunTestRunnerTest {
 
     @Test
     fun `trxResult is not Passed when the TRX has no result rows`() {
-        // Issue #983: an empty (or unparseable) TRX carries no signal, so it must never render as a green pass.
+        // An empty (or unparseable) TRX carries no signal, so it must never render as a green pass.
         assertEquals(RunOutcome.INCONCLUSIVE, RunTestRunner.trxResult(emptyList()).outcome)
     }
 
@@ -348,8 +348,7 @@ class RunTestRunnerTest {
 
     @Test
     fun `looksLikeMtpProject is true when only MTP-capable, with no evidence dotnet test actually redirects to it`() {
-        // Corrected (issue #722 follow-up) from the original plan §7 risk #5 assumption that
-        // capability alone is harmless without a redirect/native signal — live-verified false: a
+        // Capability alone is not harmless without a redirect/native signal — live-verified: a
         // project with IsTestingPlatformApplication=true and neither TestingPlatformDotnetTestSupport
         // nor a native global.json opt-in set still has *every* dotnet test invocation hard-rejected
         // by Microsoft.Testing.Platform.MSBuild.targets on the .NET 10 SDK ("Testing with VSTest
@@ -509,11 +508,11 @@ class RunTestRunnerTest {
         assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path) { null })
     }
 
-    // ── detectDotnetTestMode: MSBuild-evaluated signal (issue #722) ─────────────
+    // ── detectDotnetTestMode: MSBuild-evaluated signal ─────────────
 
     @Test
     fun `detectDotnetTestMode trusts a true MSBuild evaluation even when the project file text says nothing`() {
-        // Reproduces issue #722: a project made MTP-capable only through an imported props file
+        // Regression guard: a project made MTP-capable only through an imported props file
         // (e.g. referencing the full xunit.v3 runner package) has none of the marker properties as
         // literal text anywhere a scan would look, but a real MSBuild evaluation sees it.
         val root = tempDir()

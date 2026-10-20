@@ -3,7 +3,7 @@ package net.reqnroll.idesupport.rider.lsp
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 
 /**
- * Client side of the server's "edit rejected" contract (issue #1132): a JSON-RPC error with code
+ * Client side of the server's "edit rejected" contract: a JSON-RPC error with code
  * [ERROR_CODE] (LSP `RequestFailed`) and a non-blank message is a rejection the user can act on, and
  * its message is meant to be shown verbatim (in a modal, via
  * [net.reqnroll.idesupport.rider.actions.ReqnrollNotify.editRejected]). Every other error code is an
@@ -19,7 +19,7 @@ internal object EditRejection {
      * [ResponseErrorException] with code [ERROR_CODE] and a non-blank message; otherwise `null`.
      *
      * Checks one level of [Throwable.cause] as cheap insurance against a call site that wraps the
-     * exception again; the suspend `sendRequest` used by the senders delivers it bare (issue #655).
+     * exception again; the suspend `sendRequest` used by the senders delivers it bare.
      */
     fun messageOf(ex: Throwable): String? {
         val error = ((ex as? ResponseErrorException) ?: (ex.cause as? ResponseErrorException))

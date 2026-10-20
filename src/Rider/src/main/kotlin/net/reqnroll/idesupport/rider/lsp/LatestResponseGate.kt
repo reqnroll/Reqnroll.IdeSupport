@@ -5,7 +5,7 @@ import com.intellij.openapi.application.ModalityState
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Applies only the response of the most recent request (issue #990). The `.feature` inlay-hint,
+ * Applies only the response of the most recent request. The `.feature` inlay-hint,
  * folding and tag-link refreshes each send their LSP request on a
  * pooled thread and render the result on the EDT. Refreshes overlap (the debounced edit, the
  * server's `workspace/inlayHint/refresh`, editor creation), and nothing orders their completion,

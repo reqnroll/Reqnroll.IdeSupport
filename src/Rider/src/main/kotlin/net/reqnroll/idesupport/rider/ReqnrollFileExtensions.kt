@@ -7,8 +7,7 @@ package net.reqnroll.idesupport.rider
  * case-insensitive filesystem (Windows, default macOS) a file can easily end up named
  * `Steps.CS`/`Login.Feature` without anyone noticing, so every call site deciding whether a file
  * is "a Reqnroll file" needs to compare case-insensitively, matching how `ProjectFileRole.classify`
- * already does it for full paths. See issue #358: several call sites used case-sensitive `==`/`!=`
- * instead, silently disagreeing with the rest of the plugin about which files it applies to.
+ * already does it for full paths. A case-sensitive `==`/`!=` would silently disagree with the rest of the plugin about which files it applies to.
  */
 internal fun isFeatureExtension(extension: String?): Boolean = extension.equals("feature", ignoreCase = true)
 

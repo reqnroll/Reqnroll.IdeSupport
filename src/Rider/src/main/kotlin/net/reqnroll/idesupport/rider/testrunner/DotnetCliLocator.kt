@@ -5,7 +5,7 @@ import java.io.File
 
 /**
  * Resolves the `dotnet` executable to launch. Rider's process `PATH` isn't guaranteed to include
- * it (issue #452) — most concretely, macOS GUI-launched apps commonly inherit a minimal `PATH`
+ * it — most concretely, macOS GUI-launched apps commonly inherit a minimal `PATH`
  * (`/usr/bin:/bin:/usr/sbin:/sbin`) that omits a login-shell-only install. Falls back to
  * `DOTNET_ROOT` and well-known per-OS install locations before giving up and returning the bare
  * command name, which then fails with the OS's normal "not found" error.

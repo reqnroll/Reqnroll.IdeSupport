@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
 /**
- * Regression coverage for issue #980: the four position-based Rider actions must send the LSP
+ * Regression coverage: the four position-based Rider actions must send the LSP
  * `character` as a UTF-16 offset within the line, not IntelliJ's tab-expanded
  * `LogicalPosition.column`. In a tab-indented file the two disagree, so the buggy column shifts
  * every request to the right and makes the server look up the wrong element.

@@ -12,7 +12,7 @@ import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
 
 /**
  * Turns the Reqnroll language server's [LspServerState] transitions into the client-originated
- * server-lifecycle telemetry events (issue #845), because a dead server cannot report itself:
+ * server-lifecycle telemetry events, because a dead server cannot report itself:
  *
  * - `ServerStartFailed`: [LspServerState.ShutdownUnexpectedly] before the server ever reached [LspServerState.Running].
  * - `ServerExitedUnexpectedly`: [LspServerState.ShutdownUnexpectedly] after it had been running.

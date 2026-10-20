@@ -27,7 +27,7 @@ import javax.swing.Icon
 internal data class FailedStepMark(val line: Int, val tooltip: String)
 
 /**
- * Failed-step gutter marks in `.feature` editors (issue #451): after a Run lens run, a red
+ * Failed-step gutter marks in `.feature` editors: after a Run lens run, a red
  * test-failed icon next to the step that failed, with a hover tooltip carrying the traced step and
  * error text - the low-noise gutter-icon-plus-tooltip presentation the legacy Reqnroll.Rider plugin
  * used (Test-Runner-Integration-Design, "Rider" under "Run and Debug per IDE"), not a squiggle or a line background.

@@ -24,8 +24,7 @@ class FindUnusedStepDefinitionsAction : AnAction() {
 
     override fun update(e: AnActionEvent) {
         // Always enabled (reachable through Find Action); in an editor context menu only for C#
-        // files, so it doesn't appear in the .feature context menu or in every other editor
-        // (issue #1118).
+        // files, so it doesn't appear in the .feature context menu or in every other editor.
         e.presentation.isEnabledAndVisible = e.project != null &&
             (!e.isFromContextMenu || isCSharpContextMenuFile(e.getData(CommonDataKeys.VIRTUAL_FILE)?.extension))
     }
@@ -70,7 +69,7 @@ class FindUnusedStepDefinitionsAction : AnAction() {
     /**
      * Navigates to the picked binding, or explains why it cannot be opened. The server sends a null
      * [UnusedStepDefinitionItem.sourceFile] when the binding's source is not on this machine, so
-     * navigating would otherwise silently do nothing (issue #540).
+     * navigating would otherwise silently do nothing.
      */
     private fun navigateOrExplain(project: Project, item: UnusedStepDefinitionItem) {
         if (item.sourceFile.isNullOrBlank()) {
@@ -90,7 +89,7 @@ class FindUnusedStepDefinitionsAction : AnAction() {
     companion object {
         /**
          * `.cs` only: Find Unused is offered from the C# editor context menu, not the `.feature`
-         * one (issue #1118) — the scan is workspace-wide, so it isn't feature-file specific, but
+         * one — the scan is workspace-wide, so it isn't feature-file specific, but
          * keeping it C#-side stops it competing with Find Hooks in the feature menu.
          */
         internal fun isCSharpContextMenuFile(extension: String?): Boolean =
@@ -102,13 +101,13 @@ class FindUnusedStepDefinitionsAction : AnAction() {
             val attribute = renderAttribute(item)?.let { " - $it" } ?: ""
             val project = item.projectName?.let { " [$it]" } ?: ""
             // Marks a row that cannot be navigated to, so the popup doesn't present it as
-            // identical to the rest and then do nothing when it's chosen (issue #540).
+            // identical to the rest and then do nothing when it's chosen.
             val unresolved = if (item.isResolved) "" else " (source not on this machine)"
             return "$name$attribute$project$unresolved"
         }
 
         /**
-         * The binding attribute as it would appear on the method (issue #757) — `[Given("the sum is {int}")]`,
+         * The binding attribute as it would appear on the method — `[Given("the sum is {int}")]`,
          * or `[Given]` for a method-name-style binding with no expression. With no known keyword the
          * expression is shown quoted on its own; with neither, null. Matches the Visual Studio and
          * VS Code step-definition lists.

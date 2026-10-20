@@ -16,7 +16,7 @@ import org.eclipse.lsp4j.Command
 /**
  * Runs the server's *client-side* CodeLens commands (`reqnroll.findStepUsages`,
  * `reqnroll.goToHooks`, `reqnroll.goToMatchingScenarios`, `reqnroll.noStepUsages`) when a lens is
- * clicked (#909).
+ * clicked.
  *
  * Rider 2026.2's generic LSP client renders `textDocument/codeLens` natively and, on a click, hands
  * the lens's [Command] to `LspCommandsSupport.executeCommand` — whose default sends it back to the

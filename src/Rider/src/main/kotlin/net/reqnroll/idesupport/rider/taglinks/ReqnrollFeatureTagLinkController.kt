@@ -45,11 +45,11 @@ import org.eclipse.lsp4j.DocumentLink
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Makes Gherkin tags that match a configured `Traceability.TagLinks` pattern clickable (issue #755): the server
+ * Makes Gherkin tags that match a configured `Traceability.TagLinks` pattern clickable: the server
  * answers `textDocument/documentLink`, but Rider's generic LSP client never requests it (the same class of gap as
  * folding, CodeLens and inlay hints), so this controller requests the links itself.
  *
- * Each link is shown **permanently** as a link (issue #921): a range highlighter in the hyperlink colour with an
+ * Each link is shown **permanently** as a link: a range highlighter in the hyperlink colour with an
  * underline, which follows edits until the next debounced refresh replaces it, so it is visible which tags are
  * clickable without holding a key. Hovering one (no modifier needed, after a short delay) shows its target and how
  * to follow it. Ctrl/Cmd+hover adds the hand cursor and Ctrl/Cmd+click opens the link in the browser.
@@ -135,7 +135,7 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
 
             // ReqnrollRequestSender.documentLink uses sendRequestSync, which blocks the calling thread, so the
             // request runs on a background thread - same rationale as ReqnrollFeatureFoldingController. The gate
-            // applies only the newest response and skips a failed (null) one (issue #990).
+            // applies only the newest response and skips a failed (null) one.
             gate.fetchThenApply(
                 fetch = fetch@{
                     if (project.isDisposed || editor.isDisposed) return@fetch null

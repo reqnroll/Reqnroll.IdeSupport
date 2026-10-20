@@ -13,7 +13,7 @@ import net.reqnroll.idesupport.rider.codevision.EditorLensRefresh
 
 /**
  * "▶ Run" CodeVision lens on each Scenario/Scenario Outline line in `.feature` files (design doc
- * §5/§6, issue #262) — the Rider counterpart to VS Code's Run CodeLens / VS's classic Run CodeLens.
+ * §5/§6) — the Rider counterpart to VS Code's Run CodeLens / VS's classic Run CodeLens.
  *
  * The design doc's original Rider recommendation was `RunLineMarkerContributor` (a true left-gutter
  * icon). That API is inherently PSI-based (`getInfo(PsiElement)`, invoked as the platform walks a

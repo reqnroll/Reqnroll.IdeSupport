@@ -19,8 +19,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
  * CodeVision lens above `.cs` binding methods showing either "N step usages" (step-definition
- * methods, see StepCodeLensHandler.cs) or "N scenarios matched" (hook-binding methods, issue
- * #373, see HookMatchCountCodeLensHandler.cs) — the Rider equivalent of VS Code's built-in
+ * methods, see StepCodeLensHandler.cs) or "N scenarios matched" (hook-binding methods, see HookMatchCountCodeLensHandler.cs) — the Rider equivalent of VS Code's built-in
  * CodeLens support for the standard `textDocument/codeLens` request. Both lens kinds share this
  * one provider/request rather than each getting its own: Rider's generic LSP client has no
  * rendering-side consumer for `textDocument/codeLens` at all (confirmed by decompiling — only
@@ -64,8 +63,8 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
         /**
          * Command-free variant of [buildEntry] for lenses with no LSP `Command` to source a title
          * from — e.g. [net.reqnroll.idesupport.rider.testrunner.RunLensSupport.buildEntry], whose title is
-         * a cached run outcome rather than server-supplied text (issue #262 follow-up — this used to
-         * duplicate the `ClickableTextCodeVisionEntry` constructor call inline). `ClickableTextCodeVisionEntry`'s
+         * a cached run outcome rather than server-supplied text so the
+         * `ClickableTextCodeVisionEntry` construction lives in one place. `ClickableTextCodeVisionEntry`'s
          * constructor is `(text, providerId, onClick, icon, longPresentation, tooltip,
          * extraActions)`, confirmed via the JVM parameter-name assertions embedded in its decompiled
          * bytecode; an earlier version of this code had `text`/`providerId` swapped, so the lens
@@ -95,7 +94,7 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
      * Declaring [CodeVisionRelativeOrdering.CodeVisionRelativeOrderingLast] still fixes this
      * provider's position deterministically at the end of the combined per-line entry list,
      * instead of racing the backend-sourced entries for the same slot depending on which
-     * finishes its (synchronous LSP round-trip vs. backend) computation first — see #177.
+     * finishes its (synchronous LSP round-trip vs. backend) computation first.
      */
     override val relativeOrderings: List<CodeVisionRelativeOrdering> =
         listOf(CodeVisionRelativeOrdering.CodeVisionRelativeOrderingLast)
@@ -126,7 +125,7 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
             val offset = document.getLineStartOffset(line)
             val entry = buildEntry(command, id) {
                 // Dispatch by command name, not just a findStepUsages/else binary: this .cs
-                // response can now also carry hook-match-count lenses (issue #373) alongside
+                // response can now also carry hook-match-count lenses alongside
                 // step-usage ones, since a single [Binding] class routinely mixes both kinds of
                 // methods in one file and StepCodeLensHandler/HookMatchCountCodeLensHandler are
                 // combined into the same textDocument/codeLens response. An earlier version of

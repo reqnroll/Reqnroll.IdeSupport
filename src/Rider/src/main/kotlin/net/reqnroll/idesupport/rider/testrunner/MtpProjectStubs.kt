@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Connects a project to the Microsoft.Testing.Platform (MTP) reporter by writing a project-local
  * stub, `obj/<Project>.csproj.reqnroll-ide.targets`, that imports the bundled
- * `Reqnroll.IdeSupport.TestReporter.MTP.targets` (issue #741) — the Rider counterpart of the Visual
+ * `Reqnroll.IdeSupport.TestReporter.MTP.targets` — the Rider counterpart of the Visual
  * Studio extension's `MtpProjectStubs.cs` and VS Code's `mtpProjectStubs.ts`.
  *
  * `Microsoft.Common.targets` imports `$(MSBuildProjectExtensionsPath)$(MSBuildProjectFile).*.targets`,

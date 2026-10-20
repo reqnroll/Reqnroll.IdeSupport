@@ -8,7 +8,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Issue #982: the timeout must fire even when the child produces no output and never exits. */
+/** The timeout must fire even when the child produces no output and never exits. */
 class BoundedProcessRunnerTest {
     private val sh = File("/bin/sh")
 

@@ -6,7 +6,7 @@ import java.nio.file.Path
 
 /**
  * Resolves the directory containing the bundled `Reqnroll.IdeSupport.TestLogger.dll` (LSP-server
- * outcome pipeline, #700/#702) — the same VSTest logger the Visual Studio extension bundles under
+ * outcome pipeline) — the same VSTest logger the Visual Studio extension bundles under
  * its own `TestLogger/` subdirectory, packaged here under `testlogger/` instead.
  *
  * Unlike [ReqnrollServerPathResolver], there is no per-OS/arch RID to resolve: the logger targets

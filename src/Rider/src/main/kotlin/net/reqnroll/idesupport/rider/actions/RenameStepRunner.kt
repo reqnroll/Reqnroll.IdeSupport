@@ -18,7 +18,7 @@ import org.eclipse.lsp4j.Position
 
 /**
  * Shared "disambiguate, prompt, rename" logic for [RenameFeatureStepAction]/[RenameCSharpStepAction]
- * — the Rider-side surface for the Step Rename refactoring (issue #160). Mirrors VS's
+ * — the Rider-side surface for the Step Rename refactoring. Mirrors VS's
  * `RenameStepCommand`/VS Code's `renameDisambiguation.ts`: `reqnroll/renameTargets` picks the
  * candidate binding (skipping straight past `textDocument/prepareRename` and seeding the prompt
  * from the target's own `expression` field, exactly like VS's command does), then
@@ -104,8 +104,7 @@ object RenameStepRunner {
         val newExpression = if (isValidNewExpression(target.expression, input)) input else null
         if (newExpression == null) return
 
-        // Captured here, immediately before the request — NOT when the action was invoked
-        // (issue #671, R4; originally #326).
+        // Captured here, immediately before the request — NOT when the action was invoked.
         //
         // The server computes the edit's offsets fresh inside `textDocument/rename`, from its own
         // current view of the document, and that request is dispatched on its Serial lane, so any
@@ -114,16 +113,16 @@ object RenameStepRunner {
         // them is therefore only the request's own round trip — not the arbitrarily long stretch
         // the modal dialog was open for.
         //
-        // Spanning the modal made this fire on changes that could not invalidate the edit, and
+        // Spanning the modal would fire on changes that could not invalidate the edit, and
         // (via a stamp bumped by a VFS reload rather than a real edit) on changes that had not
         // happened at all — discarding the user's rename and leaving the server's registry
-        // describing a step present in no file, since the discard went unreported (issue #670).
+        // describing a step present in no file, since the discard went unreported.
         val requestModificationStamp =
             RenameWorkspaceEditApplier.documentForUriWithoutRefresh(uri)?.modificationStamp
 
         val outcome = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
         val edit = when (outcome) {
-            // A server rejection (-32803) the user can fix: its reason, in the shared modal (issue #1132).
+            // A server rejection (-32803) the user can fix: its reason, in the shared modal.
             is RenameOutcome.Rejected -> {
                 showOnEdt(project) {
                     ReqnrollNotify.editRejected(project, outcome.message, "Rename Step")
@@ -152,9 +151,9 @@ object RenameStepRunner {
                 )
                 // The server has staged the binding-registry/match-cache updates this edit implies
                 // and is waiting to hear whether we applied it. Reporting the discard drops them;
-                // staying silent is what used to leave the registry describing a step expression
+                // staying silent would leave the registry describing a step expression
                 // present in no file — "0 step usages" plus unbound-step diagnostics surviving a
-                // rebuild and a close/reopen (issue #670).
+                // rebuild and a close/reopen.
                 reportRenameApplied(project, uri, applied = false)
                 showOnEdt(project) {
                     ReqnrollNotify.error(
@@ -188,7 +187,7 @@ object RenameStepRunner {
 
     /**
      * Tells the server whether the returned edit was applied, so it can commit or drop the cache
-     * updates it staged (issue #671 R3).
+     * updates it staged.
      *
      * Dispatched off the EDT because both call sites sit inside the `invokeLater` block that owns
      * the document write — matching every other notification in this flow, which is sent from a

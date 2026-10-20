@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 /**
  * Exercises [ReqnrollResultPopup.resultListCellRenderer] directly (no platform/popup fixture
  * needed): the renderer is plain Swing, so we can drive its `ListCellRenderer` contract by hand
- * and assert the selection cue that issue #992 was about.
+ * and assert the selection cue on the highlighted row.
  */
 class ReqnrollResultPopupTest {
 

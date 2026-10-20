@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Issue #859: an unreachable analytics endpoint must be silent, bounded and reported once. */
+/** An unreachable analytics endpoint must be silent, bounded and reported once. */
 class TelemetryUnreachableEndpointTest {
     private companion object {
         val FAST_RETRIES = RiderTelemetryTransmitter.RetryPolicy(3, Duration.ofMillis(10), Duration.ofMillis(50))

@@ -3,7 +3,7 @@ package net.reqnroll.idesupport.rider.codevision
 import com.intellij.openapi.extensions.ExtensionPointName
 
 /**
- * Whether the running Rider renders `textDocument/codeLens` natively (#909).
+ * Whether the running Rider renders `textDocument/codeLens` natively.
  *
  * Rider 2026.2 added a generic CodeVision provider for LSP code lenses
  * (`com.intellij.platform.lsp.impl.features.codeLens.LspCodeVisionProvider`); earlier versions

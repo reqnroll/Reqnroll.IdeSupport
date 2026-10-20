@@ -14,17 +14,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Outcome of the last `dotnet test` run for one scenario. [INCONCLUSIVE] means the run produced no
- * usable result (e.g. an empty or unparseable TRX, issue #983) — it must never render as a pass.
+ * usable result (e.g. an empty or unparseable TRX) — it must never render as a pass.
  */
 enum class RunOutcome { PASSED, FAILED, INCONCLUSIVE }
 
 /**
  * Last-run result for one scenario, keyed by (file URI, 0-based scenario header line).
  *
- * [rows] carries per-row detail sourced from the LSP server's `TestOutcomeStore` (#700/#702) when
+ * [rows] carries per-row detail sourced from the LSP server's `TestOutcomeStore` when
  * the run went through that pipeline — one entry per Scenario Outline example row, each with its
  * own failed-step text when available. Empty for a result that fell back to plain TRX parsing
- * (the pre-#700 path, kept as a fallback for one release — see [RunTestRunner]), which only ever
+ * (the TRX-only fallback path — see [RunTestRunner]), which only ever
  * knew the coarse pass/fail bit.
  */
 data class RunResult(val outcome: RunOutcome, val rows: List<RunResultRow> = emptyList())
@@ -44,11 +44,11 @@ data class ScenarioRunTarget(val startLine: Int, val targets: List<ScenarioTestT
 
 /**
  * In-memory, per-scenario last-run result — tracked entirely in the plugin's own state (design doc
- * §5's "own execution" decision, mirrored from VS Code's `testResultStore.ts`; issue #262). Not
+ * §5's "own execution" decision, mirrored from VS Code's `testResultStore.ts`). Not
  * persisted across IDE restarts.
  *
  * Results are keyed by line, which describes the file as it was run, so a file's results are
- * dropped on the first edit to its document (#985) — otherwise lines inserted above a scenario
+ * dropped on the first edit to its document — otherwise lines inserted above a scenario
  * would leave another scenario showing the old glyph/tooltip. This mirrors [FailedStepGutterMarks],
  * and also bounds the store to the files run since their last edit.
  */

@@ -74,7 +74,7 @@ class ReqnrollProjectFilesSyncTest {
         )
     }
 
-    // Issue #978: on Windows the folders are backslash-separated (File(...).parent) but
+    // On Windows the folders are backslash-separated (File(...).parent) but
     // VFileEvent.path is always "/"-separated. Pure string inputs, so these run on any OS.
     @Test
     fun `findOwningProject matches a slash event path against a backslash Windows folder (issue 978)`() {

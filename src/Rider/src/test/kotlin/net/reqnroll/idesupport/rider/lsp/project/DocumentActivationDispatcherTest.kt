@@ -3,7 +3,7 @@ package net.reqnroll.idesupport.rider.lsp.project
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Issue #986: the documentActivated notification must wait for the server to be Running. */
+/** The documentActivated notification must wait for the server to be Running. */
 class DocumentActivationDispatcherTest {
     private class Harness {
         val sent = mutableListOf<String>()

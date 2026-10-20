@@ -15,7 +15,7 @@ class ReqnrollLspDiagnosticsSupportTest {
         assertEquals("<html><nobr>Step definition not found.</nobr></html>", tooltipFor("Step definition not found."))
     }
 
-    // Regression test for #176: the platform default forwards Diagnostic.message verbatim into a
+    // Regression test: the platform default forwards Diagnostic.message verbatim into a
     // tooltip that Rider renders as HTML, where a bare '\n' collapses like ordinary whitespace — so
     // every candidate merged onto the header's line instead of getting its own row.
     @Test

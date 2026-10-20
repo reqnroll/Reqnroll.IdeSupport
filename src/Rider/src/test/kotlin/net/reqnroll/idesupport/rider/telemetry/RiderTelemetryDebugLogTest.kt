@@ -8,7 +8,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Mirrors Reqnroll.IdeSupport.Common.Tests.Logging.TelemetryDebugLogTests and VS Code's
-// telemetryDebugLog.test.ts (issue #799) — same resolution rules and record shape, so VS, VS
+// telemetryDebugLog.test.ts — same resolution rules and record shape, so VS, VS
 // Code, Rider and the LSP server all produce one consistent reqnroll-telemetry-{date}.jsonl.
 class RiderTelemetryDebugLogTest {
     @Test

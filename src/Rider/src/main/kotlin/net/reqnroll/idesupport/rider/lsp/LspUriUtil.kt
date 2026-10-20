@@ -33,7 +33,7 @@ fun lspUriToLocalPath(uri: String): String? =
  *
  * The server keys its document buffers, match sets and binding registries by this string, so every
  * request the plugin sends itself must use the same form as the platform's didOpen or it silently
- * finds nothing (#909). Do not build it with `VirtualFileManager.constructUrl("file", path)`: that
+ * finds nothing. Do not build it with `VirtualFileManager.constructUrl("file", path)`: that
  * is just `"file://" + path`, which for `W:/repo/F.feature` yields the malformed
  * `file://W:/repo/F.feature` (two slashes, upper-case drive) — correct only for paths starting
  * with `/`.

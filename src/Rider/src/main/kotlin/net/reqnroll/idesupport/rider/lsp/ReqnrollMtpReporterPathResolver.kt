@@ -6,7 +6,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Resolves the bundled Microsoft.Testing.Platform (MTP) reporter *source bundle* (issue #741) — the
+ * Resolves the bundled Microsoft.Testing.Platform (MTP) reporter *source bundle* — the
  * MTP counterpart to [ReqnrollTestLoggerPathResolver], packaged under `mtpreporter/`:
  * `Reqnroll.IdeSupport.TestReporter.MTP.targets` plus the `ReporterSource/` C# files it compiles into
  * a user's test project.

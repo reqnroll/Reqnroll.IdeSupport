@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Coverage for issue #495: [RunTestTargetCache] is the only lever Rider has for skipping repeat `reqnroll/resolveTestTargets` calls, since `CodeVisionProvider` gives it no per-line/visible-range hook the way VS's classic CodeLens and VS Code's `resolveCodeLens` do. */
+/** [RunTestTargetCache] is the only lever Rider has for skipping repeat `reqnroll/resolveTestTargets` calls, since `CodeVisionProvider` gives it no per-line/visible-range hook the way VS's classic CodeLens and VS Code's `resolveCodeLens` do. */
 class RunTestTargetCacheTest {
     @AfterTest
     fun cleanUp() = RunTestTargetCache.invalidateAll()

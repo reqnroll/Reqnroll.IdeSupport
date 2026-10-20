@@ -12,7 +12,7 @@ import net.reqnroll.idesupport.rider.lsp.protocol.DocumentActivatedParams
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Feeds `reqnroll/documentActivated` (issue #85) — Phase 4 of
+ * Feeds `reqnroll/documentActivated` — Phase 4 of
  * docs/Rider-Project-Document-Sync-Implementation-Plan.md. Ported from VS's
  * `DocumentActivationTrackingInterceptor` + `DocumentActivationState`, adapted to the events
  * Rider's platform actually gives us: VS observes `textDocument/didOpen`/`didClose` directly by
@@ -62,7 +62,7 @@ class ReqnrollDocumentActivationSync : ProjectActivity {
 }
 
 /**
- * Turns [DocumentActivationState] decisions into notifications (issue #986). The notification
+ * Turns [DocumentActivationState] decisions into notifications. The notification
  * must not reach the server before it is Running (an Initializing server rejects it as an
  * "Unexpected notification"), which is exactly the situation for restored tabs at project open,
  * so every SEND_NOW is routed through [whenRunning] (`ReqnrollLspServerReadiness.runWhenRunning`).

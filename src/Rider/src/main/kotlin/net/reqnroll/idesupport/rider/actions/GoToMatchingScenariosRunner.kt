@@ -12,7 +12,7 @@ import net.reqnroll.idesupport.rider.lsp.protocol.MatchingScenarioLocation
 
 /**
  * Shared "run `reqnroll/findMatchingScenarios` then navigate" logic for the hook-match-count
- * CodeVision lens's click action (issue #373) — the inverse of [GoToHooksRunner]. Only ever
+ * CodeVision lens's click action — the inverse of [GoToHooksRunner]. Only ever
  * invoked from a CodeLens click with the lens's own attribute location, so unlike
  * [GoToHooksRunner] (also reachable from a dedicated caret-position action) there's no separate
  * `AnAction`/menu entry here.

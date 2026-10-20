@@ -39,7 +39,7 @@ import kotlin.concurrent.thread
  * files? correctly exclude `Compile Remove` items?) risks sending *incorrect* membership data to
  * the server, which is worse than the honest, well-understood folder-prefix approximation this
  * uses instead. That means this Phase 3, as implemented, does not yet fully solve the
- * linked/excluded-file problem `reqnroll/projectFiles` exists for (issue #32 on the VS side) —
+ * linked/excluded-file problem `reqnroll/projectFiles` exists for —
  * only the "real-time file-event refresh instead of a static/fallback view" part. Revisit with
  * `ProjectModelEntity` if linked-file correctness turns out to matter in practice.
  */
@@ -57,7 +57,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         // same-content re-fire of `advise` (see ReqnrollRunnableProjectsListener's doc comment on
         // why that happens repeatedly during solution load) doesn't re-walk and re-send it. Keyed
         // on the TFM too: a project whose outputs (and so TFM) arrive in a later snapshot must be
-        // re-sent, or its baseline stays filed under the stale TFM (issue #736).
+        // re-sent, or its baseline stays filed under the stale TFM.
         var previousProjectFiles = emptyMap<String, String>()
 
         val lifetime = project.createLifetime()
@@ -146,7 +146,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
      */
     internal fun findOwningProject(path: String, folders: List<Pair<String, String>>): String? {
         // VFileEvent.path is always "/"-separated, while the folders come from File(...).parent,
-        // which is "\\"-separated on Windows (issue #978): compare both in "/" form.
+        // which is "\\"-separated on Windows: compare both in "/" form.
         val normalizedPath = path.replace('\\', '/')
         return folders.firstOrNull { (folder, _) ->
             normalizedPath.startsWith(folder.replace('\\', '/').trimEnd('/') + "/", ignoreCase = true)

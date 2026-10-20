@@ -11,15 +11,13 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 
 /**
- * "N hooks" CodeVision lens above each `Feature:`/`Scenario:` line in `.feature` files (issue
- * #269) — the Rider equivalent of VS Code's hook-match CodeLens, and a sibling to
+ * "N hooks" CodeVision lens above each `Feature:`/`Scenario:` line in `.feature` files — the Rider equivalent of VS Code's hook-match CodeLens, and a sibling to
  * [StepUsagesCodeVisionProvider] (see that class's doc comment for why Rider needs a native
  * `CodeVisionProvider` at all rather than consuming generic `textDocument/codeLens`: Rider's LSP
  * client has no rendering-side consumer for it). Clicking a lens invokes the same
  * `GoToHooksRunner` "Go to Hooks" flow the dedicated action already uses.
  *
- * Shows only the Feature-only/Scenario-only hook count — the consolidated step-hooks count (issue
- * #372) is [StepHooksCodeVisionProvider], a *separate* registered provider. See
+ * Shows only the Feature-only/Scenario-only hook count — the consolidated step-hooks count is [StepHooksCodeVisionProvider], a *separate* registered provider. See
  * [HookLensSupport]'s doc comment for why: a single provider can't reliably show two entries on
  * the same `Scenario:` line, but two separately registered providers compose side by side
  * automatically, same as the built-in "N usages" lens next to [StepUsagesCodeVisionProvider]'s

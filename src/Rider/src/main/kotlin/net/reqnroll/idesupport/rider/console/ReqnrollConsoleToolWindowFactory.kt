@@ -7,7 +7,7 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
 
 /**
- * Registers the "Reqnroll" tool window (issue #662) — a curated, app-level-only console: plugin
+ * Registers the "Reqnroll" tool window — a curated, app-level-only console: plugin
  * lifecycle (LSP server launching, connection failures) and the outcome of user-invoked actions
  * (Find Step Usages, Find Unused Step Definitions, Go To Hooks, Rename Step, Run, etc.), not the
  * raw per-server LSP wire traffic the platform's own "Language Servers" tool window already shows
