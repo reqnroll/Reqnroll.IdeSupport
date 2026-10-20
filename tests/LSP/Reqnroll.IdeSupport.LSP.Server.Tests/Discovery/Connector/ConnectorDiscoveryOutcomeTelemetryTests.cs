@@ -16,7 +16,7 @@ using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 /// <summary>
-/// Issue #939: the real <see cref="ConnectorDiscoveryService"/> driving the real
+/// The real <see cref="ConnectorDiscoveryService"/> driving the real
 /// <see cref="ConnectorBindingRegistryProvider"/>, so the provider sees exactly what each
 /// non-success path of the service returns. A run that failed or never reached the connector must
 /// not be reported as an unchanged-hash success, and must not use up the "projectLoad" trigger

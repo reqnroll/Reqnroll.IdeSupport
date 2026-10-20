@@ -28,7 +28,7 @@ public class ProtocolLoggerProviderTests
         var message = captured.Messages.Should().ContainSingle().Subject;
         message.Message.Should().Be("handling request");
         message.Level.Should().Be(TraceLevel.Info);
-        // Shortened to the simple type name and carried as Source, not CallerMethod (issue #626)
+        // Shortened to the simple type name and carried as Source, not CallerMethod
         // — ILogger has no method-name equivalent to put there.
         message.Source.Should().Be("LanguageServer");
         message.CallerMethod.Should().BeEmpty();

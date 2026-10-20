@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 /// <summary>
 /// Covers the membership-index-backed feature-file lookup the Reqnroll-test-project gate uses
-/// (issue #731).
+///.
 /// </summary>
 public class MembershipIndexFeatureFileLookupTests
 {

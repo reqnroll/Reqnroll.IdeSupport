@@ -8,7 +8,7 @@ using GherkinLocation = Gherkin.Ast.Location;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestTargets;
 
-/// <summary>Classification of the <c>Kind</c> telemetry property (issue #849).</summary>
+/// <summary>Classification of the <c>Kind</c> telemetry property.</summary>
 public class TestTargetTelemetryTests
 {
     // Line 0 "Feature: F", 1 "Rule: R", 2 "Scenario: S", 3 "Scenario Outline: O", 4 "Examples:", 5 "| a |", 6 "| 1 |"

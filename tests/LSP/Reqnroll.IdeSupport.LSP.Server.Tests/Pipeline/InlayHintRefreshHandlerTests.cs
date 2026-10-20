@@ -14,7 +14,7 @@ public class InlayHintRefreshHandlerTests : IDisposable
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
     // A real, shared RefreshDebouncer — not a per-test-instance field on the handler itself —
-    // because that's exactly the distinction issue #156 turned on: MediatR constructs a new
+    // because MediatR constructs a new
     // handler instance per notification, so only debounce state living outside the handler
     // (here, this shared singleton stand-in) can actually collapse a burst across those instances.
     private readonly RefreshDebouncer _debouncer;
@@ -77,7 +77,7 @@ public class InlayHintRefreshHandlerTests : IDisposable
         _languageServer.Client.DidNotReceive().SendRequest(WorkspaceNames.InlayHintRefresh);
     }
 
-    // Issue #471: passing CancellationToken.None here (as this used to, silently) means a
+    // Passing CancellationToken.None here would mean a
     // superseding MatchCacheChangedNotification can never cancel a refresh already dispatched to
     // the client -- only one still waiting out the debounce delay. See
     // IRefreshDebouncer.Schedule's remarks.
@@ -114,9 +114,9 @@ public class InlayHintRefreshHandlerTests : IDisposable
     public async Task Handle_debounces_bursts_across_separate_handler_instances_sharing_the_debouncer()
     {
         // Reproduces the real production shape: MediatR constructs a new handler instance for
-        // every notification (issue #156). Three separate instances here, each backed by the same
-        // shared IRefreshDebouncer, should still collapse into a single refresh -- unlike the old
-        // instance-field debounce, which could never see across handler instances at all.
+        // every notification. Three separate instances here, each backed by the same
+        // shared IRefreshDebouncer, should still collapse into a single refresh -- unlike an
+        // instance-field debounce, which cannot see across handler instances.
         SetRefreshSupport(true);
         var sent = new TaskCompletionSource();
         _languageServer.Client.When(c => c.SendRequest(Arg.Any<string>())).Do(_ => sent.TrySetResult());

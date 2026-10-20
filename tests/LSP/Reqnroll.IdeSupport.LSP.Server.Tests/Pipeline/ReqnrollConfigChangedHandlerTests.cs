@@ -6,12 +6,12 @@ using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
 /// <summary>
-/// Covers <see cref="ReqnrollConfigChangedHandler"/> — previously untested (issue #576). The
+/// Covers <see cref="ReqnrollConfigChangedHandler"/>. The
 /// handler schedules its reparses through <see cref="IParseCoordinator"/> instead of awaiting
 /// them inline, matching every other open-document reparse path, so these tests use a real
 /// <see cref="ParseCoordinator"/> (not a substitute) and wait on it explicitly, the same
 /// convention as <c>TextDocumentSyncHandlerTests</c>. The actual parse-then-publish pair is
-/// delegated to <see cref="IFeatureDocumentReparser"/> (issue #578) and substituted here;
+/// delegated to <see cref="IFeatureDocumentReparser"/> and substituted here;
 /// <see cref="FeatureDocumentReparserTests"/> covers that contract directly.
 /// </summary>
 public class ReqnrollConfigChangedHandlerTests
@@ -87,9 +87,9 @@ public class ReqnrollConfigChangedHandlerTests
     [Fact]
     public async Task Handle_registers_a_pending_entry_the_coordinator_can_be_awaited_on()
     {
-        // The point of routing through IParseCoordinator (issue #576): a config save landing
+        // The point of routing through IParseCoordinator: a config save landing
         // while a didChange reparse is in flight for the same URI must not run two concurrent
-        // reparses against it (the #554 shape). WaitForReadyAsync must observe the scheduled
+        // reparses against it. WaitForReadyAsync must observe the scheduled
         // work as pending, not return immediately.
         var reparseStarted = new TaskCompletionSource();
         var releaseReparse = new TaskCompletionSource();
@@ -133,7 +133,7 @@ public class ReqnrollConfigChangedHandlerTests
     [Fact]
     public async Task Handle_is_idempotent_when_the_same_notification_is_published_twice()
     {
-        // Issue #578: ReqnrollConfigChangedNotification consumers must be idempotent -- a
+        // ReqnrollConfigChangedNotification consumers must be idempotent -- a
         // duplicate publish (e.g. a debounced watcher firing twice for one save) must not
         // compound into extra or different work versus a single publish.
         _bufferService.Update(InScopeUri, version: 1, "Feature: F\n");

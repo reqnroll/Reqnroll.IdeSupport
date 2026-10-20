@@ -201,7 +201,7 @@ public class SemanticTokenServiceTests
     {
         // A range result is a strict subset of the full-document result, so reusing the
         // full-document ResultId would let a later semanticTokens/full/delta request diff
-        // against the wrong baseline (issue #471 final review).
+        // against the wrong baseline.
         var text = "Feature: F\n" + string.Concat(Enumerable.Repeat("  Scenario: S\n    Given x\n", 10));
         var snapshot = new TestGherkinSnapshot(text);
         var offset = text.IndexOf("Given x", StringComparison.Ordinal);

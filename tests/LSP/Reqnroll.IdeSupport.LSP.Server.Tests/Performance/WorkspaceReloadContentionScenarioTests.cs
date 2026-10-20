@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.LSP.Server.Benchmarks.Scenarios;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 
 /// <summary>
-/// Self-test for <see cref="WorkspaceReloadContentionScenario"/> (issue #488): drives the real
+/// Self-test for <see cref="WorkspaceReloadContentionScenario"/>: drives the real
 /// in-process server through a few "many tabs restored" reload storms and asserts it produces a
 /// populated baseline/under-load comparison. This assembly already disables xUnit's cross-class
 /// parallelization (see <c>AssemblyInfo.cs</c>, added for <c>ConcurrencyProbeTests</c>) -- this

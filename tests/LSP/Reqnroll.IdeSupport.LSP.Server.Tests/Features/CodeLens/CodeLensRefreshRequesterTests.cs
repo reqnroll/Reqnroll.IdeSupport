@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 
 /// <summary>
-/// Direct coverage for <see cref="CodeLensRefreshRequester"/> (previously only exercised
+/// Direct coverage for <see cref="CodeLensRefreshRequester"/> (also exercised
 /// indirectly via <c>BindingRegistryChangedHandlerTests</c>): the VS/non-VS client branching and
 /// the <c>isFullReplacement</c>/<c>projectName</c> pass-through.
 /// </summary>
@@ -95,9 +95,9 @@ public class CodeLensRefreshRequesterTests
         _logger.Received(1).Log(Arg.Is<LogMessage>(m => m.Level == TraceLevel.Warning && m.Message.Contains("boom")));
     }
 
-    // Issue #471: the debouncer can only collapse a refresh already in flight if the request
-    // actually observes the token it was given -- passing CancellationToken.None here (as this
-    // used to, silently) makes a superseding trigger unable to cancel a slow send already
+    // The debouncer can only collapse a refresh already in flight if the request
+    // actually observes the token it was given -- passing CancellationToken.None here
+    // would make a superseding trigger unable to cancel a slow send already
     // dispatched to the client (see IRefreshDebouncer.Schedule's remarks).
     [Fact]
     public async Task RequestRefreshAsync_passes_the_given_cancellationToken_to_the_request_for_non_visual_studio()

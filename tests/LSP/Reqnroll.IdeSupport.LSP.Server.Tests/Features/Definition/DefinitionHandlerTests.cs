@@ -114,7 +114,7 @@ public class DefinitionHandlerTests
     /// <summary>
     /// Like <see cref="MakeDefinedMatch"/>, but the binding's source file is one that binding
     /// discovery recorded and could not be resolved to anything on this machine — a PDB written
-    /// inside a devcontainer, on CI, or on another developer's machine (issue #540).
+    /// inside a devcontainer, on CI, or on another developer's machine.
     /// </summary>
     private static StepBindingMatch MakeUnresolvedMatch(string recordedFile, int csLine = 10, int csColumn = 5)
     {
@@ -136,7 +136,7 @@ public class DefinitionHandlerTests
         return new StepBindingMatch(FeatureUri.ToString(), range, result);
     }
 
-    // ── Unresolved binding source path (issue #540) ───────────────────────────
+    // ── Unresolved binding source path ───────────────────────────
 
     [Fact]
     public async Task Handle_binding_whose_source_file_is_not_on_this_machine_returns_no_location_Async()
@@ -321,13 +321,13 @@ public class DefinitionHandlerTests
         range.End.Character.Should().Be(range.Start.Character);
     }
 
-    // ── Cursor beyond the exact step text span but still on the step's line (#101) ────────────
+    // ── Cursor beyond the exact step text span but still on the step's line ────────────
 
     [Fact]
     public async Task Handle_cursor_at_end_of_step_line_resolves_Async()
     {
         // Line 2 is "    Given a step" (17 chars) — character 16 is one past the final "p",
-        // matching the issue #101 repro (click just past the end of the step text).
+        // i.e. a click just past the end of the step text.
         var step = MakeDefinedMatch("Steps.cs", csLine: 10, csColumn: 5);
         _matchService.Store(new FeatureBindingMatchSet(
             FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
@@ -536,7 +536,7 @@ public class DefinitionHandlerTests
         result.Should().NotBeNull();
     }
 
-    // ── Telemetry (issue #581 finding 1; lookup event since issue #899) ──────────────────────────────────────
+    // ── Telemetry ──────────────────────────────────────
 
     [Fact]
     public async Task Handle_defined_step_emits_telemetry_with_the_location_count()
@@ -616,7 +616,7 @@ public class DefinitionHandlerTests
     [Fact]
     public async Task Handle_from_a_client_that_navigates_via_findStepDefinitions_emits_no_telemetry()
     {
-        // Visual Studio reaches textDocument/definition only as its provider's hover fall-through (issue #899).
+        // Visual Studio reaches textDocument/definition only as its provider's hover fall-through.
         var step = MakeDefinedMatch("Steps.cs", csLine: 10, csColumn: 5);
         _matchService.Store(new FeatureBindingMatchSet(
             FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));

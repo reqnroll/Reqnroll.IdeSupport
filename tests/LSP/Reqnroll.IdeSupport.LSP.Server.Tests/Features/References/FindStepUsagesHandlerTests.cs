@@ -268,13 +268,13 @@ public class FindStepUsagesHandlerTests
 
     // ── Project scoping ───────────────────────────────────────────────────────
     //
-    // The scoping decision itself (direct owners + issue #548 widening for a binding declared in
-    // an externally-referenced assembly) is now owned by
+    // The scoping decision itself (direct owners plus widening for a binding declared in
+    // an externally-referenced assembly) is owned by
     // IProjectBindingRegistryLookup.ResolveUsageSearchScope and unit-tested against the real
     // implementation in BindingRegistryProviderRouterTests. These tests only need to prove the
     // handler forwards whatever that method returns straight through to FindUsages — this is the
-    // regression guard for the bug where the step-usage CodeLens (which applied the #548
-    // widening) reported "1 step usage" while clicking it to navigate opened a "0 usages" Find
+    // regression guard for the bug where the step-usage CodeLens (which applied the widening)
+    // reported "1 step usage" while clicking it to navigate opened a "0 usages" Find
     // Step Usages window for the same binding, because this handler computed its own, narrower,
     // direct-owners-only filter instead of using the shared scope.
 
@@ -348,7 +348,7 @@ public class FindStepUsagesHandlerTests
             Arg.Is<Dictionary<string, object?>>(p => (int)p["UsagesCount"]! == 1));
     }
 
-    // ── Telemetry characteristics (issue #849) ───────────────────────────────
+    // ── Telemetry characteristics ───────────────────────────────
 
     [Fact]
     public async Task Handle_usages_across_files_emit_telemetry_with_file_count_and_duration_bucket()

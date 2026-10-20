@@ -14,7 +14,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Tagging;
 
 /// <summary>
-/// Issue #938: <see cref="GherkinDocumentTaggerService.ParseAsync"/> reads the open buffer, runs a
+/// <see cref="GherkinDocumentTaggerService.ParseAsync"/> reads the open buffer, runs a
 /// (potentially long) parse, then stores the resulting tags. The parse runs on the
 /// <see cref="Parsing.IParseCoordinator"/> lane, while <c>didClose</c> removes the buffer inline,
 /// so a close can land between the read and the store. These tests hold the parse open with a gate

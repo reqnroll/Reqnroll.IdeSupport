@@ -35,7 +35,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly ICSharpBindingDiscoveryService _csharpDiscovery = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly IFeatureRescanDebouncer      _rescanDebouncer = Substitute.For<IFeatureRescanDebouncer>();
     // Real implementation, not a mock: ReparseOpenFilesAsync now schedules each buffer's reparse
-    // through this instead of awaiting it inline (issue #471), so tests need it to actually run.
+    // through this instead of awaiting it inline, so tests need it to actually run.
     private readonly IParseCoordinator     _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IIdeSupportLogger              _logger        = Substitute.For<IIdeSupportLogger>();
     private readonly IFileSystemForIDE            _fileSystem    = new FileSystemForIDE();
@@ -147,7 +147,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
     }
 
-    // ── Closed-file scan bound (issue #580) ───────────────────────────────────
+    // ── Closed-file scan bound ───────────────────────────────────
 
     [Fact]
     public async Task ScanAllFeatureFiles_caps_at_the_configured_file_limit_and_logs_a_warning()
@@ -184,9 +184,9 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     [Fact]
     public async Task ScanAllFeatureFiles_stops_gracefully_when_the_token_is_already_cancelled()
     {
-        // Issue #580: this loop previously called ThrowIfCancellationRequested(), which would
+        // Cancellation must break out of just the closed-file scan, not throw: a throw would
         // unwind the whole Handle call and skip the open-file reparse and code-lens refresh
-        // below it. It now breaks out of just the closed-file scan instead, so the rest of
+        // below it. This way the rest of
         // Handle still runs regardless of whether the scan finished, was capped, or was
         // cancelled -- open files matter more to the user than a closed-file usage-count refresh.
         var f = Path.Combine(_projectFolder, "A.feature");
@@ -287,7 +287,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         // ReparseOpenFilesAsync now schedules each buffer's reparse through
-        // IParseCoordinator instead of awaiting it inline (issue #471).
+        // IParseCoordinator instead of awaiting it inline.
         await _parseCoordinator.WaitForReadyAsync(ownedUri, CancellationToken.None);
         await _reparser.Received(1).ReparseOpenDocumentAsync(ownedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
         await _reparser.DidNotReceive().ReparseOpenDocumentAsync(foreignUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
@@ -296,7 +296,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     [Fact]
     public async Task ReparseOpenFiles_skips_a_linked_file_whose_primary_owner_is_another_project()
     {
-        // Issue #554: a feature file linked into a second project is owned by both, but an open
+        // A feature file linked into a second project is owned by both, but an open
         // document's match set is computed against — and stored under — its PRIMARY owner only, so
         // the linking project's registry change must not drive a second, identical reparse.
         var linkedUri = DocumentUri.FromFileSystemPath(Path.Combine(_projectFolder, "Linked.feature"));
@@ -509,7 +509,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         // notify: false -- Handle's own ReparseOpenFilesAsync already reparses and notifies
-        // unconditionally once RediscoverCsFilesAsync returns (issue #471).
+        // unconditionally once RediscoverCsFilesAsync returns.
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
             project,
             Arg.Is<string>(p => PathEq(p, stepsPath)),
@@ -563,7 +563,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         // Reconciled exactly once, with the BUFFER text — not the on-disk text. notify: false --
         // Handle's own ReparseOpenFilesAsync already reparses and notifies unconditionally once
-        // RediscoverCsFilesAsync returns (issue #471).
+        // RediscoverCsFilesAsync returns.
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
             project,
             Arg.Is<string>(p => PathEq(p, openPath)),
@@ -645,7 +645,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         project.Dispose();
     }
 
-    // ── Removed-binding-file cleanup (issue #94) ──────────────────────────────
+    // ── Removed-binding-file cleanup ──────────────────────────────
 
     [Fact]
     public async Task Handle_removes_bindings_for_deleted_binding_file()
@@ -668,7 +668,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     [Fact]
     public async Task Handle_with_empty_removed_paths_is_a_safe_no_op()
     {
-        // Issue #577: removal now lives entirely behind ProjectBindingFilesRemovedNotification's
+        // Removal lives entirely behind ProjectBindingFilesRemovedNotification's
         // own handler, so an empty Paths collection (rather than the type simply not being
         // published at all) must still be a safe no-op, not a throw.
         var act = async () => await CreateSut().Handle(

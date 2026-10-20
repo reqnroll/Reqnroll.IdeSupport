@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.LSP.Server.Parsing;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.DocumentActivated;
 
 /// <summary>
-/// Covers <see cref="DocumentActivatedHandler"/>, which since issue #578 delegates the actual
+/// Covers <see cref="DocumentActivatedHandler"/>, which delegates the actual
 /// parse-then-publish work to <see cref="IFeatureDocumentReparser.ReparseIfOpenAsync"/> — these
 /// tests verify the handler schedules that call correctly through <see cref="IParseCoordinator"/>;
 /// <see cref="Pipeline.FeatureDocumentReparserTests"/> covers the reparse/publish contract itself.
@@ -30,7 +30,7 @@ public class DocumentActivatedHandlerTests
         await CreateSut().HandleAsync(new DocumentActivatedParams { Uri = FeatureUri }, CancellationToken.None);
 
         // Handle schedules the work through IParseCoordinator instead of awaiting it inline
-        // (issue #576) — wait for that scheduled work before asserting its effects.
+        // — wait for that scheduled work before asserting its effects.
         await WaitForScheduledWorkAsync(FeatureUri);
         await _reparser.Received(1).ReparseIfOpenAsync(FeatureUri, Arg.Any<CancellationToken>());
     }
@@ -55,7 +55,7 @@ public class DocumentActivatedHandlerTests
     [Fact]
     public async Task HandleAsync_registers_a_pending_entry_the_coordinator_can_be_awaited_on()
     {
-        // The whole point of routing through IParseCoordinator (issue #576): FoldingRangeHandler/
+        // The whole point of routing through IParseCoordinator: FoldingRangeHandler/
         // DocumentSymbolHandler await WaitForReadyAsync before reading buffer.Tags, so an
         // activation-triggered reparse must be visible there, not just a direct-edit one.
         var reparseStarted = new TaskCompletionSource();

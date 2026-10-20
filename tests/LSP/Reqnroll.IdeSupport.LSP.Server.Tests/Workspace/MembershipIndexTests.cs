@@ -30,7 +30,7 @@ public class MembershipIndexTests
 
     // Test-controlled stand-in for the lifecycle side's `_scopes` registry: register a project
     // to make it "live" (as if reqnroll/projectLoaded had already registered it), or leave it
-    // unregistered to simulate the baseline racing ahead of that notification (issue #48).
+    // unregistered to simulate the baseline racing ahead of that notification.
     private readonly Dictionary<ProjectKey, LspReqnrollProject> _liveProjects = new();
 
     private MembershipIndex CreateSut() =>
@@ -57,9 +57,9 @@ public class MembershipIndexTests
 
     /// <summary>
     /// Polls until <see cref="_mediator"/> has received at least one <c>Publish</c> call.
-    /// <see cref="MembershipIndex"/> now dispatches its notification via
-    /// <see cref="FireAndForgetExtensions"/> (issue #477) so it genuinely runs on a thread-pool
-    /// thread rather than inline — by design, since the whole point of the fix is that the
+    /// <see cref="MembershipIndex"/> dispatches its notification via
+    /// <see cref="FireAndForgetExtensions"/> so it genuinely runs on a thread-pool
+    /// thread rather than inline — by design, so that the
     /// caller (here, the awaited <c>HandleProjectFilesAsync</c> call) no longer blocks on it.
     /// That means it may not have happened yet the instant <c>HandleProjectFilesAsync</c>
     /// returns, so tests that assert on it (or need it flushed before <c>ClearReceivedCalls</c>)
@@ -68,10 +68,10 @@ public class MembershipIndexTests
     private Task WaitForPublishAsync(TimeSpan? timeout = null) => WaitForPublishAsync(atLeast: 1, timeout);
 
     /// <summary>
-    /// Overload for a delta that removes a binding-role file (issue #577): that path now
+    /// Overload for a delta that removes a binding-role file: that path
     /// publishes <em>two</em> notifications in sequence within the same background continuation
     /// (<see cref="ProjectBindingFilesRemovedNotification"/> then <see cref="BindingRegistryPatchedNotification"/>)
-    /// rather than the one combined notification it used to. Both land essentially back-to-back
+    /// rather than one combined notification. Both land essentially back-to-back
     /// since the substitute's <c>Publish</c> completes synchronously, but a poll landing in the
     /// narrow window between them would otherwise see the first and return early.
     /// </summary>
@@ -349,7 +349,7 @@ public class MembershipIndexTests
         sut.IsPathOwned(remove).Should().BeFalse();
     }
 
-    // ── Deferred full re-scan (issue #48) ────────────────────────────────────
+    // ── Deferred full re-scan ────────────────────────────────────
 
     [Fact]
     public async Task Baseline_before_the_project_is_live_sets_a_pending_full_rescan_and_does_not_publish()
@@ -497,7 +497,7 @@ public class MembershipIndexTests
                 (stepsFile, ProjectFileRole.Binding, false)),
             CancellationToken.None);
         // This delta publishes ProjectBindingFilesRemovedNotification then BindingRegistryPatchedNotification
-        // in sequence (issue #577) -- wait for both before asserting on the first.
+        // in sequence -- wait for both before asserting on the first.
         await WaitForPublishAsync(atLeast: 2);
 
         _ = _mediator.Received(1).Publish(
@@ -528,7 +528,7 @@ public class MembershipIndexTests
         await WaitForPublishAsync();
 
         // A feature-file (not binding-role) removal must not trigger the binding-files-removed
-        // signal at all (issue #577 -- that notification is only published when there ARE
+        // signal at all (that notification is only published when there ARE
         // removed binding paths), though the delta's Patched notification still fires.
         _ = _mediator.DidNotReceive().Publish(
             Arg.Any<ProjectBindingFilesRemovedNotification>(), Arg.Any<CancellationToken>());

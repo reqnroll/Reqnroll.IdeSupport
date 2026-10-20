@@ -6,8 +6,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Parsing;
 
 /// <summary>
 /// Tests for <see cref="ParseCoordinator"/>: <see cref="IParseCoordinator.Schedule"/>
-/// must run its work off the caller's thread (so a Serial-lane handler can return immediately —
-/// issue #471), chain same-URI work in order rather than run it concurrently, never let a fault
+/// must run its work off the caller's thread (so a Serial-lane handler can return immediately),
+/// chain same-URI work in order rather than run it concurrently, never let a fault
 /// propagate back into an unrelated <see cref="IParseCoordinator.WaitForReadyAsync"/> caller,
 /// and let <see cref="IParseCoordinator.WaitForReadyAsync"/> observe whatever is currently
 /// pending for that URI.
@@ -113,11 +113,11 @@ public class ParseCoordinatorTests
     public async Task Two_concurrent_schedules_for_the_same_uri_never_run_concurrently()
     {
         // The sequential case above takes the "chain onto the pending entry" path. This one covers
-        // the case that actually bit in issue #554: two threads scheduling the same, not-yet-pending
+        // the case that bit in production: two threads scheduling the same, not-yet-pending
         // URI at the same instant -- a didChange on the Serial dispatch lane while a
-        // BindingRegistryChanged reparse for that file runs on a pool thread. The previous
-        // ConcurrentDictionary.AddOrUpdate implementation ran its add factory (which started the
-        // work) on both threads and failed this on the very first round.
+        // BindingRegistryChanged reparse for that file runs on a pool thread. A
+        // ConcurrentDictionary.AddOrUpdate implementation would run its add factory (which starts the
+        // work) on both threads and fail this on the very first round.
         var sut = CreateSut();
         var overlapAt = -1;
 

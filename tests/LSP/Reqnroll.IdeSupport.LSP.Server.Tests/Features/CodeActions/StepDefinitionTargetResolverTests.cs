@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeActions;
 
 /// <summary>
-/// Direct unit tests for <see cref="StepDefinitionTargetResolver"/> (issue #588), extracted from
+/// Direct unit tests for <see cref="StepDefinitionTargetResolver"/>, extracted from
 /// <see cref="CodeActionHandler.Handle"/> so "where should generated code go" is testable
 /// without going through a full code-action request.
 /// </summary>

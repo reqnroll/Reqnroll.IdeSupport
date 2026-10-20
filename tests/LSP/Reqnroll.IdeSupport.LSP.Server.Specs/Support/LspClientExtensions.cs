@@ -175,7 +175,7 @@ public static class LspClientExtensions
             .Returning<CodeLens[]?>(ct);
 
     /// <summary>
-    /// Sends a <c>codeLens/resolve</c> request (issue #471) — the follow-up a spec-compliant
+    /// Sends a <c>codeLens/resolve</c> request — the follow-up a spec-compliant
     /// client makes for a lens whose <c>Command</c> came back unset from <c>textDocument/codeLens</c>
     /// (the deferred-resolve path, non-VS clients only; see <c>StepCodeLensHandler</c>/
     /// <c>HookMatchCountCodeLensHandler</c> remarks).
@@ -316,8 +316,8 @@ public static class LspClientExtensions
     /// Sends a <c>textDocument/prepareRename</c> request (F16 — Step Rename).
     /// Returns the renameable range if the cursor is on a step binding, else null. A
     /// <c>.feature</c>-triggered result carries a <see cref="PlaceholderRange"/> (the abstract
-    /// expression, not the concrete step text) rather than a bare <see cref="LspRange"/> — see
-    /// issue #33 follow-up.
+    /// expression, not the concrete step text) rather than a bare <see cref="LspRange"/>, so the
+    /// client highlights the expression.
     /// </summary>
     public static Task<RangeOrPlaceholderRange?> RequestPrepareRenameAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)

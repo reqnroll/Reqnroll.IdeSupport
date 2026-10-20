@@ -13,7 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeActions;
 
 /// <summary>
-/// Direct unit tests for <see cref="DefineStepsActionBuilder"/> (issue #588), extracted from
+/// Direct unit tests for <see cref="DefineStepsActionBuilder"/>, extracted from
 /// <see cref="CodeActionHandler.Handle"/>'s nested <c>BuildTargetedActions</c> local function so
 /// "given this target and these steps, build the actions" is testable in isolation from request
 /// handling, guards, and telemetry.
@@ -97,7 +97,7 @@ public class DefineStepsActionBuilderTests : IDisposable
     [InlineData("   ")]
     public void Build_returns_no_actions_when_the_only_undefined_step_has_blank_text(string blankText)
     {
-        // A bare keyword with no step text (issue #622) has nothing to build a skeleton from --
+        // A bare keyword with no step text has nothing to build a skeleton from --
         // BuildDescriptors filters it out, so this must behave the same as no steps at all.
         var target = MakeTarget(Path.Combine(_projectFolder, "MySteps.cs"));
 
@@ -163,7 +163,7 @@ public class DefineStepsActionBuilderTests : IDisposable
     [Fact]
     public void Build_appends_onto_the_candidate_s_live_cached_text_rather_than_stale_disk_content()
     {
-        // Reproduces issue #815: an earlier "Define step" action already appended WhenFoo to this
+        // Regression guard: an earlier "Define step" action already appended WhenFoo to this
         // candidate via workspace/applyEdit. That edit landed only in the client's open, unsaved
         // editor buffer -- disk still has the pre-edit (no-WhenFoo) content, exactly as it would
         // between two lightbulb invocations with nothing saved in between.
@@ -182,7 +182,7 @@ public class DefineStepsActionBuilderTests : IDisposable
         var newText = AppendedNewText(actions, "ExistingSteps.cs");
 
         // Both methods must be present exactly once each, inside one class -- not the doubled
-        // class/closing-brace corruption #815 reports when the append is computed from stale
+        // class/closing-brace corruption that results when the append is computed from stale
         // disk content instead of the live buffer the second edit will actually land on top of.
         CountOccurrences(newText, "public class ExistingSteps").Should().Be(1);
         CountOccurrences(newText, "WhenFoo").Should().Be(1);

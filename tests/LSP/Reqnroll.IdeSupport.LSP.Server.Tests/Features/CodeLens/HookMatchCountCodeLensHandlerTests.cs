@@ -44,7 +44,7 @@ public class HookMatchCountCodeLensHandlerTests
     /// Builds the handler for a client identified by <paramref name="ide"/>. The default
     /// (<c>supportsCodeLensResolve: false</c>) is what EVERY shipped client gets today — the
     /// <c>codeLens/resolve</c> allowlist in <see cref="ClientIdeContext"/> is empty, so the eager
-    /// path is the production path for VS, VS Code and Rider alike (issue #471).
+    /// path is the production path for VS, VS Code and Rider alike.
     /// Pass <c>supportsCodeLensResolve: true</c> to exercise the deferred branch, which is real
     /// code kept ready for the first client that implements the resolve round trip.
     /// </summary>
@@ -62,7 +62,7 @@ public class HookMatchCountCodeLensHandlerTests
             scope: null, hookType, hookOrder: null, error: null);
 
     // A scoped-but-matches-everything hook: distinct from MakeHook's unscoped (Scope == null)
-    // case, which now renders "all scenarios" instead of a count (issue #403). Scoping to the
+    // case, which now renders "all scenarios" instead of a count. Scoping to the
     // "F" feature title used throughout these fixtures matches every scenario without needing a
     // real tag on the feature.
     private static ProjectHookBinding MakeScopedHook(
@@ -141,7 +141,7 @@ public class HookMatchCountCodeLensHandlerTests
     }
 
     // A hook scoped by several [Scope]s / hook tags is one binding whose alternatives are OR-ed
-    // (ScopeNormalizer, issues #953/#1133): the lens counts the union, not just the first scope's scenarios.
+    // (ScopeNormalizer): the lens counts the union, not just the first scope's scenarios.
     private async Task<string?> TitleForHookScopedBy(params ScopeSpec[] scopes)
     {
         var hook = new ProjectHookBinding(
@@ -177,7 +177,7 @@ public class HookMatchCountCodeLensHandlerTests
     public async Task Handle_hook_with_a_bare_scope_alternative_matches_every_scenario()
     {
         // An unrestricted alternative makes the binding unrestricted, so the lens shows the static
-        // label rather than a count (issue #403).
+        // label rather than a count.
         (await TitleForHookScopedBy(new ScopeSpec(null, null, null), new ScopeSpec("@web", null, null)))
             .Should().Be("all scenarios");
     }
@@ -185,8 +185,8 @@ public class HookMatchCountCodeLensHandlerTests
     [Fact]
     public async Task Handle_hook_matching_no_scenarios_still_renders_the_lens_at_zero()
     {
-        // #373 decided semantics: zero is the most actionable case (likely a dead/mistyped
-        // hook scope), so this deliberately diverges from #269's "skip empty" convention.
+        // Zero is the most actionable case (likely a dead/mistyped hook scope), so the lens is
+        // deliberately shown even at zero, unlike step lenses, which skip empty results.
         var hook = new ProjectHookBinding(
             new ProjectBindingImplementation("MyHook", null, new SourceLocation("/workspace/Hooks.cs", 5, 1)),
             scope: new BindingScope { Tag = Reqnroll.IdeSupport.LSP.Core.TagExpressions.ReqnrollTagExpressionParser.CreateTagLiteral("@nonexistent") },
@@ -205,7 +205,7 @@ public class HookMatchCountCodeLensHandlerTests
     [Fact]
     public async Task Handle_unscoped_hook_shows_all_scenarios_label_instead_of_a_count()
     {
-        // #403: an unscoped hook (no [Scope] at all) matches every scenario in the project, so a
+        // An unscoped hook (no [Scope] at all) matches every scenario in the project, so a
         // count would be unbounded/uninformative -- show a static label and skip the corpus walk.
         var hook = MakeHook(HookType.BeforeScenario);
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
@@ -318,7 +318,7 @@ public class HookMatchCountCodeLensHandlerTests
         result.Should().BeEmpty();
     }
 
-    // ── Mixed-file coexistence (issue #373) ─────────────────────────────────────
+    // ── Mixed-file coexistence ─────────────────────────────────────
 
     [Fact]
     public async Task Handle_file_with_both_hook_and_step_bindings_only_returns_hook_lenses()
@@ -345,10 +345,10 @@ public class HookMatchCountCodeLensHandlerTests
         result[0].Range!.Start.Line.Should().Be(4);
     }
 
-    // ── Gated eager/deferred split + resolve (issue #471) ───────────────────────
+    // ── Gated eager/deferred split + resolve ───────────────────────
 
     /// <summary>
-    /// The regression guard for issue #471's final-review fix: the deferred path must NOT be
+    /// Regression guard: the deferred path must NOT be
     /// active for any client the repo actually ships. Every one of these goes through the
     /// production <see cref="ClientIdeContext"/> constructor, i.e. the real allowlist lookup —
     /// so this fails the moment someone adds an entry without also shipping client-side
@@ -398,7 +398,7 @@ public class HookMatchCountCodeLensHandlerTests
     [Fact]
     public async Task Handle_resolve_capable_client_still_resolves_unscoped_hooks_eagerly()
     {
-        // "all scenarios" needs no corpus walk (issue #403) -- no reason to defer it.
+        // "all scenarios" needs no corpus walk -- no reason to defer it.
         var hook = MakeHook(HookType.BeforeScenario); // unscoped
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
         _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
@@ -433,7 +433,7 @@ public class HookMatchCountCodeLensHandlerTests
     public async Task ResolveAsync_falls_back_to_a_non_actionable_lens_when_the_Data_is_malformed()
     {
         // Must NOT hand the client a clickable reqnroll.goToMatchingScenarios command built from
-        // a fabricated "file:///unknown" URI (issue #471 final review).
+        // a fabricated "file:///unknown" URI.
         var lens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
         {
             Range = new LspRange(new Position(4, 0), new Position(4, 0)),

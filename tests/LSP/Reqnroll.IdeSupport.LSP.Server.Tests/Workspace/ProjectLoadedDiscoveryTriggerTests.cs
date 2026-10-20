@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
 /// Verifies that a <c>reqnroll/projectLoaded</c> notification for an <em>already-known</em>
 /// project always re-runs binding discovery, whether or not the output assembly path or target
 /// framework changed. This covers both the path-change case the output-assembly file watcher can
-/// miss, and a plain rebuild (issue #542): Visual Studio re-sends projectLoaded after every
+/// miss, and a plain rebuild: Visual Studio re-sends projectLoaded after every
 /// successful build with identical OutputAssemblyPath/TFM, and that re-send is its only rebuild
 /// signal because it doesn't register the watcher at all. The assembly-hash guard downstream in
 /// ConnectorDiscoveryService makes a redundant trigger a cheap no-op when nothing actually changed.

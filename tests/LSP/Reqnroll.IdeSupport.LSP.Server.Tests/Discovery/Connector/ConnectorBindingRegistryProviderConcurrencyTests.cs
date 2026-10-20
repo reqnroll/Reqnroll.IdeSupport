@@ -10,10 +10,10 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 /// <summary>
-/// Issue #568: <see cref="ConnectorBindingRegistryProvider"/> serialises its read-modify-write on
+/// <see cref="ConnectorBindingRegistryProvider"/> serialises its read-modify-write on
 /// <c>_current</c> behind a <see cref="SemaphoreSlim"/> (<c>_currentLock</c>) that is separate from
-/// the <c>object</c> lock guarding the in-flight discovery run's cancellation token — "two
-/// independent sync primitives coordinating one lifecycle", per the audit that raised this issue.
+/// the <c>object</c> lock guarding the in-flight discovery run's cancellation token — two
+/// independent sync primitives coordinating one lifecycle.
 /// These tests exercise concurrent <see cref="ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync"/>
 /// callers rather than the sequential-only coverage in <see cref="ConnectorBindingRegistryProviderTests"/>.
 /// </summary>
@@ -108,11 +108,10 @@ namespace S
     [Fact]
     public async Task Concurrent_TriggerRefresh_and_Dispose_do_not_throw()
     {
-        // Regression guard: TriggerRefresh() used to read newCts.Token *after* publishing newCts
-        // to _cts and releasing _cts_lock. A Dispose() racing that same window disposes the CTS
-        // this method just published, so the later newCts.Token read threw ObjectDisposedException
-        // -- reproduced on round 83 of 2000 pre-fix, matching the "SemaphoreSlim + separate lock"
-        // hazard this issue's audit called out for this class.
+        // Regression guard: TriggerRefresh() must read newCts.Token *before* publishing newCts
+        // to _cts and releasing _cts_lock. Otherwise a Dispose() racing that window disposes the CTS
+        // the method just published, and the later newCts.Token read throws ObjectDisposedException
+        // -- the hazard of the "SemaphoreSlim + separate lock" pairing in this class.
         Exception? caught = null;
         var failedAtRound = -1;
 

@@ -192,7 +192,7 @@ public sealed class NavigationSteps
     }
 
     /// <summary>
-    /// Follows up with <c>codeLens/resolve</c> (issue #471) for a lens whose <c>Command</c> came
+    /// Follows up with <c>codeLens/resolve</c> for a lens whose <c>Command</c> came
     /// back unset from <c>textDocument/codeLens</c>, exactly as a spec-compliant client would.
     /// <para>
     /// This is a passthrough in practice today: the server only hands out unresolved placeholder

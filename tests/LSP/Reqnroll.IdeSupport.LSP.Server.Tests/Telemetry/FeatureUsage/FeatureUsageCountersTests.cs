@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry.FeatureUsage;
 
 /// <summary>
-/// Concurrency tests for <see cref="FeatureUsageCounters"/> (issue #582), mirroring the barrier-
+/// Concurrency tests for <see cref="FeatureUsageCounters"/>, mirroring the barrier-
 /// based style in <c>BindingMatchServiceConcurrencyTests</c>: <see cref="FeatureUsageCounters.Increment"/>
 /// is called concurrently from the OmniSharp dispatch lane, thread-pool continuations, and detached
 /// <c>FireAndForget</c> work, so an increment racing a drain must never be silently lost.

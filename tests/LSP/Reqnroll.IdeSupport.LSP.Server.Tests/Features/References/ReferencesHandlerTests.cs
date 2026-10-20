@@ -172,9 +172,9 @@ public class StepReferencesHandlerTests
         range.End.Character.Should().Be(16);
     }
 
-    // ── Project scoping (Q18 2B / issue #548) ─────────────────────────────────
+    // ── Project scoping ─────────────────────────────────
     //
-    // The scoping decision itself (direct owners + issue #548 widening) is now owned by
+    // The scoping decision itself (direct owners plus widening for a binding declared in an externally-referenced assembly) is owned by
     // IProjectBindingRegistryLookup.ResolveUsageSearchScope and unit-tested against the real
     // implementation in BindingRegistryProviderRouterTests. These tests only need to prove the
     // handler forwards whatever that method returns straight through to FindUsages.
@@ -206,7 +206,7 @@ public class StepReferencesHandlerTests
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
     }
 
-    // ── Telemetry (issue #581 finding 3) ──────────────────────────────────────
+    // ── Telemetry ──────────────────────────────────────
 
     [Fact]
     public async Task Handle_no_binding_at_position_emits_no_telemetry()
@@ -270,7 +270,7 @@ public class StepReferencesHandlerTests
         // Same event name/field shape as FindStepUsagesHandler's reqnroll/findStepUsages path,
         // distinguished by Protocol rather than by which event fired -- the two counts are now
         // directly comparable instead of the custom-request path silently being the only one
-        // with a usage-count signal (issue #581 finding 3).
+        // with a usage-count signal.
         telemetry.Received(1).SendEvent(
             "FindStepDefinitionUsages command executed",
             Arg.Is<Dictionary<string, object?>>(p =>

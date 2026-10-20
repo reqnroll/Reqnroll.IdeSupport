@@ -14,7 +14,7 @@ using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 /// <summary>
-/// Issue #928 -- scenarios A1, A6, C1 and C4: what the registry built from a compiled assembly may
+/// Scenarios A1, A6, C1 and C4: what the registry built from a compiled assembly may
 /// contain when the working tree has moved on since that assembly was built (a branch switch with
 /// no rebuild).
 /// </summary>
@@ -29,7 +29,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 /// because they will never have local source and are not stale.
 /// </para>
 /// <para>
-/// Issue #933 widens "inside the project folder" to "inside the project folder or the workspace
+/// "Inside the project folder" is widened to "inside the project folder or the workspace
 /// folder that contains it", so a deleted shared-project file beside the project folder counts too.
 /// </para>
 /// </remarks>
@@ -247,7 +247,7 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
     public void A1_a_stale_binding_with_several_scopes_is_dropped_and_counted_once()
     {
         // The runtime reports an attribute with two [Scope]s as two DTOs; they are one binding
-        // (ScopeNormalizer, issues #953/#1133), so the log counts it once.
+        // (ScopeNormalizer), so the log counts it once.
         var deletedFile = ProjectFile(Path.Combine("Support", "PriceCalculationHooks.cs"));
         var step = GivenStep("a_removed_step", "#1|12|5");
         var registry = Discover(new DiscoveryResult
@@ -432,7 +432,7 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
         }
     }
 
-    // ── C5 (issue #933): shared-project file beside the project folder, inside the workspace ──
+    // ── C5: shared-project file beside the project folder, inside the workspace ──
 
     [Fact]
     public void C5_binding_from_a_deleted_shared_project_file_under_the_workspace_folder_is_not_kept()

@@ -34,7 +34,7 @@ public class CSharpAttributeLiteralResolverTests
         CSharpAttributeLiteralResolver.ReconcileParameterTokens(source, newName).Should().Be(expected);
     }
 
-    // ── FindAttributeLiteralAsync: method-name-style bindings (issue #344 follow-up) ────
+    // ── FindAttributeLiteralAsync: method-name-style bindings ────
 
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
 
@@ -59,10 +59,10 @@ public class CSharpAttributeLiteralResolverTests
     [Fact]
     public async Task FindAttributeLiteralAsync_returns_null_for_a_method_name_style_binding_instead_of_a_nearby_methods_literal()
     {
-        // Regression: a bare [Given] with no explicit expression (method-name-style, issue #344)
-        // has no string-literal attribute argument anywhere in the file, by definition. Before this
-        // fix, the resolver's "nearest candidate method" fallback had nothing of this binding's own
-        // to find and silently snapped to a geometrically nearby method that DOES carry a literal —
+        // Regression: a bare [Given] with no explicit expression (method-name-style)
+        // has no string-literal attribute argument anywhere in the file, by definition. The
+        // resolver's "nearest candidate method" fallback has nothing of this binding's own
+        // to find and must not silently snap to a geometrically nearby method that DOES carry a literal —
         // misattributing that unrelated method's expression to this binding's rename (confirmed live
         // in VS: renaming a lone "the first number is 50" step offered "the second number is {int}"
         // from an unrelated nearby method as the placeholder).
@@ -95,7 +95,7 @@ public class CSharpAttributeLiteralResolverTests
             "a method-name-style binding has no literal to find, and must not fall back to an unrelated method's");
     }
 
-    // ── Several same-type attributes on one method (issue #940) ─────────────────────────
+    // ── Several same-type attributes on one method ─────────────────────────
     //    The binding being renamed is the SECOND [Given] on the method. A connector-discovered
     //    binding either carries no AttributeSourceLine, or carries the one ConnectorDiscoveryService
     //    backfills via BindingImporter.TryGetAttributeSourceLine — which returns the FIRST matching
@@ -238,7 +238,7 @@ public class CSharpAttributeLiteralResolverTests
         literal!.Token.ValueText.Should().Be("the only number is {int}");
     }
 
-    // ── Shared syntax-tree cache wiring (issue #491) ────────────────────────────────────
+    // ── Shared syntax-tree cache wiring ────────────────────────────────────
 
     /// <summary>Wraps a real <see cref="CSharpSyntaxTreeCache"/>, recording the root returned on
     /// each call — used to confirm <see cref="CSharpAttributeLiteralResolver"/> routes through the
@@ -264,9 +264,9 @@ public class CSharpAttributeLiteralResolverTests
     [Fact]
     public async Task FindAttributeLiteralAsync_reuses_the_cached_parse_for_a_second_binding_in_the_same_unchanged_file()
     {
-        // Regression coverage for issue #491: RenameTargetsHandler's multi-attribute picker calls
-        // FindAttributeLiteralAsync once per binding attribute found on the same method — which used
-        // to re-parse the whole file from scratch on every call. Two bindings against the same
+        // RenameTargetsHandler's multi-attribute picker calls
+        // FindAttributeLiteralAsync once per binding attribute found on the same method — which must
+        // not re-parse the whole file from scratch on every call. Two bindings against the same
         // unchanged file must share one parsed root.
         const string csText =
             "using Reqnroll;\n" +

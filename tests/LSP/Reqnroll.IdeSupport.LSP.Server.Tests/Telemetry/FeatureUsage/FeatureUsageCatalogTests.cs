@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry.FeatureUsage;
 
-/// <summary>Tests for <see cref="FeatureUsageCatalog"/> (issue #582).</summary>
+/// <summary>Tests for <see cref="FeatureUsageCatalog"/>.</summary>
 public class FeatureUsageCatalogTests
 {
     [Theory]
@@ -34,7 +34,7 @@ public class FeatureUsageCatalogTests
     }
 
     /// <summary>
-    /// Every discrete command sends its own per-call telemetry event (#849); counting it here too would
+    /// Every discrete command sends its own per-call telemetry event; counting it here too would
     /// double-count each invocation. This pins the boundary between the two mechanisms.
     /// </summary>
     [Theory]

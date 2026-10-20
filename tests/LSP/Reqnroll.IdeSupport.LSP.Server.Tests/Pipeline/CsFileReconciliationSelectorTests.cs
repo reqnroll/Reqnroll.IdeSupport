@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
 /// <summary>
-/// Direct unit tests for <see cref="CsFileReconciliationSelector"/> (issue #592), extracted from
+/// Direct unit tests for <see cref="CsFileReconciliationSelector"/>, extracted from
 /// <see cref="BindingRegistryChangedHandler"/> so the "which .cs files need Roslyn reconciliation
 /// after a full replacement" selection policy — and in particular the build-staleness rule — is
 /// testable without going through a full <see cref="BindingRegistryReplacedNotification"/>.

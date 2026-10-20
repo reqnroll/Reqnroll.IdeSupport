@@ -45,7 +45,7 @@ public sealed class LspServerHarness : IAsyncDisposable
     /// <c>textDocumentSync</c> exactly as the server's <c>initialize</c> response carried it,
     /// captured before any dynamic <c>client/registerCapability</c> is processed. Unlike
     /// <see cref="ServerInitializeResult"/>, which OmniSharp's client updates with dynamic
-    /// registrations, this tells a static entry apart from a dynamic one (issue #800).
+    /// registrations, this tells a static entry apart from a dynamic one.
     /// </summary>
     public TextDocumentSyncOptions? StaticTextDocumentSync { get; private set; }
 
@@ -88,9 +88,9 @@ public sealed class LspServerHarness : IAsyncDisposable
     }
 
     /// <param name="clientInfo">
-    /// Issue #709: the <c>InitializeParams.ClientInfo</c> the simulated client self-reports. Null
+    /// The <c>InitializeParams.ClientInfo</c> the simulated client self-reports. Null
     /// leaves OmniSharp's default (an empty <see cref="ClientInfo"/>, i.e. no name), which is what
-    /// every scenario predating the ClientInfo fallback wants — the server only reads a name that is
+    /// every scenario that does not test the ClientInfo fallback wants — the server only reads a name that is
     /// actually present.
     /// </param>
     public async Task StartAsync(
@@ -102,7 +102,7 @@ public sealed class LspServerHarness : IAsyncDisposable
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
 
         // Start the server first (do not await yet — From() completes once the client's
-        // initialize handshake lands).  The --ide identifier no longer affects the semantic
+        // initialize handshake lands).  The --ide identifier does not affect the semantic
         // token legend, but is still threaded through to exercise the startup plumbing.
         var serverTask = LanguageServer.From(options =>
         {
@@ -115,14 +115,13 @@ public sealed class LspServerHarness : IAsyncDisposable
             options.WithInput(clientStream).WithOutput(clientStream);
             options.WithRootUri(DocumentUri.FromFileSystemPath(workspaceFolder));
 
-            // Issue #709: what the client claims to be, sent in the initialize request itself.
-            // Deliberately not set by default so the specs that exercise --ide alone keep sending the
-            // same handshake they always did.
+            // What the client claims to be, sent in the initialize request itself.
+            // Not set by default so the specs that exercise --ide alone send a handshake without a name.
             if (clientInfo is not null)
                 options.WithClientInfo(clientInfo);
 
             // Snapshot the static textDocumentSync before the server's dynamic registration
-            // (sent after `initialized`) can be merged into ServerSettings (issue #800).
+            // (sent after `initialized`) can be merged into ServerSettings.
             options.OnInitialized((_, _, response, _) =>
             {
                 var sync = response.Capabilities.TextDocumentSync;
@@ -140,10 +139,10 @@ public sealed class LspServerHarness : IAsyncDisposable
 
             // Declare dynamic registration for text sync, as Visual Studio and vscode-languageclient
             // both do. Without it OmniSharp's server fills textDocumentSync statically for every
-            // client, which hid issue #800 (VS got no static entry) from the specs.
+            // client, which would hide a missing static entry (as Visual Studio needs) from the specs.
             options.WithCapability(new TextSynchronizationCapability { DynamicRegistration = true, DidSave = true });
 
-            // Issue #70: opt-in only (defaults to false) so every other spec keeps negotiating
+            // Opt-in only (defaults to false) so every other spec keeps negotiating
             // the legacy WorkspaceEdit.Changes shape unchanged — only scenarios that explicitly
             // start the harness this way exercise RenameHandler's annotated DocumentChanges path.
             if (supportsChangeAnnotations)

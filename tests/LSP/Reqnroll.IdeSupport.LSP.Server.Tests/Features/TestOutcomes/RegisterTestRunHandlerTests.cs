@@ -6,8 +6,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
 /// <summary>
 /// <see cref="RegisterTestRunHandler"/> — the server-side run registration for
-/// <c>reqnroll/testOutcomes/registerRun</c>, replacing what used to be a same-process call to a
-/// VS-only <c>TestOutcomeListener</c> (LSP-server outcome pipeline refactor).
+/// <c>reqnroll/testOutcomes/registerRun</c>, which lets any client register a run with the server rather than only a
+/// same-process VS-only listener.
 /// </summary>
 public class RegisterTestRunHandlerTests : IDisposable
 {

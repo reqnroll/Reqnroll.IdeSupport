@@ -20,13 +20,13 @@ public sealed class ProtocolSteps
     public async Task GivenTheLspServerIsStarted() => await _ctx.EnsureStartedAsync();
 
     // Bound with [^"] rather than (.*) so a longer step that starts the same way — e.g. "...for IDE
-    // "vscode" with the client identifying itself as "Visual Studio"" (issue #709) — is not also
+    // "vscode" with the client identifying itself as "Visual Studio"" — is not also
     // matched by this one and reported as an ambiguous binding.
     [Given(@"the LSP server is started for IDE ""([^""]*)""")]
     public async Task GivenTheLspServerIsStartedForIde(string ide) => await _ctx.EnsureStartedAsync(ide);
 
     /// <summary>
-    /// Issue #709: starts the server with NO <c>--ide</c> argument, so the only identity it can have
+    /// Starts the server with NO <c>--ide</c> argument, so the only identity it can have
     /// is the one the client self-reports in <c>InitializeParams.ClientInfo</c>. This is the shape
     /// the fallback exists for — a glue component that failed to wire the argument up.
     /// </summary>
@@ -37,14 +37,14 @@ public sealed class ProtocolSteps
             clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
 
     /// <summary>
-    /// Issue #709's cross-check case: an explicit <c>--ide</c> AND a contradicting
+    /// The cross-check case: an explicit <c>--ide</c> AND a contradicting
     /// <c>InitializeParams.ClientInfo</c> in the same handshake. The argument must win.
     /// </summary>
     [Given(@"the LSP server is started for IDE ""([^""]*)"" with the client identifying itself as ""([^""]*)""")]
     public async Task GivenTheLspServerIsStartedForIdeWithClientInfo(string ide, string clientName) =>
         await _ctx.EnsureStartedAsync(ide, clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
 
-    // Issue #70: the harness's simulated client negotiates LSP 3.16 change-annotation support
+    // The harness's simulated client negotiates LSP 3.16 change-annotation support
     // only when a scenario opts in via this step — every other scenario keeps the default
     // (unsupported) capabilities so its assertions against WorkspaceEdit.Changes stay unaffected.
     [Given("the LSP client supports rename change annotations")]
@@ -201,7 +201,7 @@ public sealed class ProtocolSteps
     /// <summary>
     /// Sends a <c>reqnroll/projectFiles</c> delta notification removing the given file from the
     /// project's membership index -- the VS-side notification path for a file deletion/exclusion
-    /// (issue #94), distinct from the VS Code <c>workspace/didChangeWatchedFiles</c> path exercised
+    ///, distinct from the VS Code <c>workspace/didChangeWatchedFiles</c> path exercised
     /// by <see cref="CSharpBindingSteps.WhenTheCsharpFileIsDeleted"/>. The table must have columns
     /// <c>path</c> and <c>role</c> (Feature | Binding). Paths are relative to
     /// <see cref="LspScenarioContext.WorkspaceFolder"/>.
@@ -308,7 +308,7 @@ public sealed class ProtocolSteps
     {
         // Read from the snapshot of the raw initialize response, not ServerSettings: OmniSharp's
         // client merges the later dynamic client/registerCapability into ServerSettings, which
-        // made a missing static entry look present (issue #800).
+        // made a missing static entry look present.
         _ctx.Harness.InitializeResponseSeen.Should().BeTrue();
         var ts = _ctx.Harness.StaticTextDocumentSync;
         ts.Should().NotBeNull(

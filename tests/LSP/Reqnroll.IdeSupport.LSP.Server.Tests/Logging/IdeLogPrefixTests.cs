@@ -3,8 +3,8 @@ using Reqnroll.IdeSupport.LSP.Server.Logging;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Logging;
 
 /// <summary>
-/// Issue #791: the server's log files are named after the <c>--ide</c> value. Rider used to fall through
-/// to the generic <c>lsp</c> prefix, contradicting the documented <c>reqnroll-rider-*</c> naming.
+/// The server's log files are named after the <c>--ide</c> value. Rider must not fall through
+/// to the generic <c>lsp</c> prefix, which would contradict the documented <c>reqnroll-rider-*</c> naming.
 /// </summary>
 public class IdeLogPrefixTests
 {

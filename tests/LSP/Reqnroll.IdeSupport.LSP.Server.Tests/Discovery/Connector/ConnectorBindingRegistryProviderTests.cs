@@ -89,7 +89,7 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         sut.Current.Should().BeSameAs(newRegistry);
     }
 
-    // Issue #471: CSharpBindingDiscoveryService.UpdateFromSourceAsync uses this flag to skip a
+    // CSharpBindingDiscoveryService.UpdateFromSourceAsync uses this flag to skip a
     // redundant source-level parse on textDocument/didOpen once the connector has already covered
     // the project.
     [Fact]
@@ -135,7 +135,7 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         raised.Should().BeFalse();
         sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
         _discovery.ReceivedWithAnyArgs().RunDiscovery(default!, default!, default!, default);
-        // Issue #471: a run that swaps nothing in -- this no-op, or the Skipped "no compiled DLL
+        // A run that swaps nothing in -- this no-op, or the Skipped "no compiled DLL
         // yet" case (see TriggerRefresh_sends_no_discovery_telemetry_for_a_skipped_outcome) --
         // must leave HasSuccessfulConnectorRun false so CSharpBindingDiscoveryService keeps relying
         // on didOpen/didChange as the only source of bindings for an unbuilt project.
@@ -195,7 +195,7 @@ namespace S
             .Which.Regex!.ToString().Should().Be("^the first number is (.*)$");
     }
 
-    // Issue #471: notify: false is used by BindingRegistryChangedHandler.RediscoverCsFilesAsync,
+    // notify: false is used by BindingRegistryChangedHandler.RediscoverCsFilesAsync,
     // whose own caller already reparses every open feature file and notifies unconditionally right
     // after it returns -- a second independent event here would just redundantly repeat that work.
     [Fact]
@@ -627,7 +627,7 @@ namespace S
                 true.Equals(d["HashMatched"])));
     }
 
-    // Issue #939: a Failed outcome hands back the unchanged last-good hash, exactly like an
+    // A Failed outcome hands back the unchanged last-good hash, exactly like an
     // Unchanged one; only the status tells them apart.
     [Fact]
     public async Task TriggerRefresh_reports_a_failed_outcome_as_a_failure_not_a_hash_noop()

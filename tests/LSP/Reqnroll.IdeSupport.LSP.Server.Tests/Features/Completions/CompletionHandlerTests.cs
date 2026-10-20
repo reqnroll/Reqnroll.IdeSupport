@@ -204,13 +204,13 @@ public class CompletionHandlerTests
         result.Items.Should().BeEmpty();
     }
 
-    // ── Keyword completion range (issue #561) ─────────────────────────────────
+    // ── Keyword completion range ─────────────────────────────────
 
     [Fact]
     public async Task Keyword_completion_textEdit_range_stops_at_the_cursor_not_at_the_end_of_the_line_Async()
     {
         // "Szenario:[scenario name]" with the caret right after the "S" of "Szenario" (char 1) --
-        // the exact repro from issue #561. The line has real text well beyond the caret; the old
+        // regression guard. The line has real text well beyond the caret; a
         // whole-trimmed-line range would delete all of it when a keyword was accepted.
         const string line = "Szenario:[scenario name]";
         SetupBuffer(FeatureUri, line + "\n");
@@ -258,7 +258,7 @@ public class CompletionHandlerTests
         range.End.Character.Should().BeLessThanOrEqualTo(cursorChar);
     }
 
-    // ── Stale / out-of-range request position (issue #871) ─────────────────────
+    // ── Stale / out-of-range request position ─────────────────────
 
     [Theory]
     [InlineData("  Giv", 40, 5)]   // character far beyond the end of the line
@@ -453,7 +453,7 @@ public class CompletionHandlerTests
         result.Items.Should().NotBeEmpty();
     }
 
-    // ── Group-wise narrowing by typed prefix (issue #818 follow-up) ────────────
+    // ── Group-wise narrowing by typed prefix ────────────
 
     [Fact]
     public async Task Typed_at_sign_excludes_token_groups_with_no_matching_member_Async()
@@ -510,14 +510,14 @@ public class CompletionHandlerTests
         result.Items.Select(i => i.Label).Should().BeEquivalentTo("Given ", "When ", "Then ");
     }
 
-    // ── Tag completion (issue #828) ──────────────────────────────────────────
+    // ── Tag completion ──────────────────────────────────────────
 
     [Fact]
     public async Task A_second_tag_typed_after_a_completed_tag_offers_tag_completions_Async()
     {
         // Tag positions are completed in any state — including a second tag right after a
-        // completed first one ("@tag1 @") — per the issue #828 design decision that reversed the
-        // merged #818 suppression for tag lines.
+        // completed first one ("@tag1 @") — tag lines are deliberately exempt from the
+        // typed-prefix suppression applied to other completion groups.
         SetupBuffer(FeatureUri, "@tag1 @\n");
         var dialect = new GherkinDialectProvider("en").DefaultDialect;
         _contextResolver.Resolve(
@@ -561,7 +561,7 @@ public class CompletionHandlerTests
     {
         // Clients only request completion on identifier characters (and backspace/delete) unless a
         // trigger character is declared: without " " no popup follows the space that separates two
-        // tags, or a space typed on a blank line before a tag (issue #828 follow-up).
+        // tags, or a space typed on a blank line before a tag.
         var options = CreateSut().GetRegistrationOptions(new CompletionCapability(), new ClientCapabilities());
 
         options.TriggerCharacters.Should().BeEquivalentTo(new[] { "@", " " });

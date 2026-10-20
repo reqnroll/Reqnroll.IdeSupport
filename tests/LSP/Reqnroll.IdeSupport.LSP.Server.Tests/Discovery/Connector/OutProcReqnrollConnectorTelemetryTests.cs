@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 /// <summary>
-/// Issue #846: the server-side telemetry overlay must keep the connector-reported type and version
+/// The server-side telemetry overlay must keep the connector-reported type and version
 /// reachable by <see cref="ConnectorRunTelemetry"/>, using the shape the real connector emits.
 /// </summary>
 public class OutProcReqnrollConnectorTelemetryTests

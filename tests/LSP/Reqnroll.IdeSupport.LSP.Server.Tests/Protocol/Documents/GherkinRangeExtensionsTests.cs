@@ -4,9 +4,8 @@ using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Protocol.Documents;
 
 /// <summary>
-/// Issue #568: <see cref="GherkinRangeExtensions"/> (the OmniSharp-typed conversion surface every
-/// LSP response position/range passes through) has zero direct test references anywhere in the
-/// codebase.
+/// Direct tests for <see cref="GherkinRangeExtensions"/> (the OmniSharp-typed conversion surface every
+/// LSP response position/range passes through).
 /// </summary>
 public class GherkinRangeExtensionsTests
 {

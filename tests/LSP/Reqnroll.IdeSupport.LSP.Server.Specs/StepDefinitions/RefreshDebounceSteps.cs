@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
 /// document must still end up reflecting the last edit.
 /// <para>
 /// Both halves matter and fail in opposite directions. Too many refreshes is the performance shape
-/// behind issue #491 — every keystroke costing the client a full re-encode of every open document.
+/// of a per-keystroke storm — every keystroke costing the client a full re-encode of every open document.
 /// Too few, or one that lands before the final edit, is a stale-highlighting bug.
 /// </para>
 /// </summary>

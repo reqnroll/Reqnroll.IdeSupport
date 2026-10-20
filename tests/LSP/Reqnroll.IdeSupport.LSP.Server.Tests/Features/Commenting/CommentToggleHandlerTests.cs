@@ -256,7 +256,7 @@ public class CommentToggleHandlerTests
                 (string)p["Mode"]! == "Toggle" && (string)p["LineCountBucket"]! == "1"));
     }
 
-    // Issue #861: Mode is the requested mode; ResolvedMode is the direction the request actually took.
+    // Mode is the requested mode; ResolvedMode is the direction the request actually took.
     [Theory]
     [InlineData("toggle",    false, "Toggle",    "Comment")]
     [InlineData("toggle",    true,  "Toggle",    "Uncomment")]
@@ -292,7 +292,7 @@ public class CommentToggleHandlerTests
         telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
 
-    // ── Mode argument (issue #747) ────────────────────────────────────────
+    // ── Mode argument ────────────────────────────────────────
 
     [Theory]
     [InlineData("toggle",    CommentToggleMode.Toggle)]

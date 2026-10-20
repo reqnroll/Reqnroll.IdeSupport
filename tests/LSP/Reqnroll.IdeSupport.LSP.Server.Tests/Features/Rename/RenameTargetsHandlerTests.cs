@@ -92,7 +92,7 @@ public class RenameTargetsHandlerTests
         result!.Targets.Should().BeEmpty();
     }
 
-    // ── Telemetry (issue #581 finding 5) ──────────────────────────────────────
+    // ── Telemetry ──────────────────────────────────────
 
     [Fact]
     public async Task Emits_telemetry_with_zero_target_count_when_no_binding_is_at_the_cursor()

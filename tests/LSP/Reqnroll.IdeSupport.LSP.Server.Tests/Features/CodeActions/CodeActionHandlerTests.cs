@@ -120,7 +120,7 @@ public class CodeActionHandlerTests
     public async Task Define_action_carries_the_server_command_that_reports_the_trigger()
     {
         // The client runs this command after applying the edit; it is the only signal the server
-        // gets that the quick fix was picked (issue #847).
+        // gets that the quick fix was picked.
         SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
 
         var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
@@ -138,7 +138,7 @@ public class CodeActionHandlerTests
     {
         // A bare keyword with no following step text (e.g. just "Given") has nothing to build a
         // skeleton from -- offering to "define" it would generate a meaningless empty-expression
-        // binding (issue #622).
+        // binding.
         SeedMatchService(UndefinedMatch(blankText, ScenarioBlock.When));
 
         var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
@@ -212,9 +212,9 @@ public class CodeActionHandlerTests
     [Fact]
     public async Task Returns_both_actions_when_cursor_is_on_the_first_of_several_undefined_steps()
     {
-        // Issue #816: the per-step action was previously skipped whenever the cursor's step
-        // happened to be the first undefined step in document order, regardless of whether other
-        // undefined steps existed elsewhere in the file. RequestAt(FeatureUri) defaults to line
+        // Regression guard: the per-step action must not be skipped when the cursor's step
+        // happens to be the first undefined step in document order and other
+        // undefined steps exist elsewhere in the file. RequestAt(FeatureUri) defaults to line
         // 0/char 0, which resolves to this first undefined step ("When I press add").
         SeedMatchService(
             UndefinedMatch("I press add",     ScenarioBlock.When),
@@ -508,7 +508,7 @@ public class CodeActionHandlerTests
         _telemetryService.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
 
-    // ── CodeAction.Diagnostics association (issue #563) ─────────────────────────
+    // ── CodeAction.Diagnostics association ─────────────────────────
 
     [Fact]
     public async Task Define_missing_step_action_is_associated_with_the_undefined_step_diagnostic()
@@ -524,7 +524,7 @@ public class CodeActionHandlerTests
         diagnostic.Message.Should().Be(DiagnosticsAggregator.UndefinedStepMessage);
     }
 
-    // ── Parser-error "Insert keyword" quick fixes (issue #563) ──────────────────
+    // ── Parser-error "Insert keyword" quick fixes ──────────────────
 
     // Known to produce a ParserError tag (mirrors IdeSupportTagParserTests.Malformed_feature_produces_ParserError_tag).
     private const string BrokenFeatureText = "not a feature file\nsome garbage\n";
@@ -561,7 +561,7 @@ public class CodeActionHandlerTests
             // The edit must replace the whole flagged token, not splice text in before it — an
             // insert-only edit at the error's start position left the mistyped text in place
             // (e.g. a "Th" typo plus "Insert '\"\"\"'" produced the malformed `"""Th` rather than
-            // replacing "Th" outright; confirmed live in VS, issue #563 follow-up).
+            // replacing "Th" outright; seen live in VS).
             var edit = a.Edit!.DocumentChanges!.Single().TextDocumentEdit!.Edits.Single();
             edit.Range.Should().Be(errorTag.Range.ToLspRange());
         });
@@ -571,7 +571,7 @@ public class CodeActionHandlerTests
     public async Task Insert_keyword_actions_carry_the_server_command_that_reports_the_trigger()
     {
         // The client runs this command after applying the edit; it is the only signal the server
-        // gets that the quick fix was picked (issue #877).
+        // gets that the quick fix was picked.
         var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
         var tags = ParseTags(BrokenFeatureText);
         var (errorLine, errorChar) = tags.First(t => t.Type == IdeSupportTagTypes.ParserError).Range.StartLinePosition;
@@ -705,7 +705,7 @@ public class CodeActionHandlerTests
         result!.Select(a => a.CodeAction!).Should().AllSatisfy(a => a.IsPreferred.Should().NotBe(true));
     }
 
-    // ── Honouring context.only / context.diagnostics (issue #563) ───────────────
+    // ── Honouring context.only / context.diagnostics ───────────────
 
     [Fact]
     public async Task Returns_empty_when_context_only_excludes_QuickFix()

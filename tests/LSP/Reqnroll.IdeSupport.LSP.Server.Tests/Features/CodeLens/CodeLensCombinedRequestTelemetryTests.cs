@@ -15,7 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 
 /// <summary>
-/// Regression guard for issue #941: a single client <c>textDocument/codeLens</c> request is
+/// Regression guard: a single client <c>textDocument/codeLens</c> request is
 /// dispatched by the combined registration in <c>LanguageServerOptionsExtensions</c> to every
 /// lens handler at once -- <see cref="StepCodeLensHandler"/> (.cs step usages),
 /// <see cref="HookCodeLensHandler"/> (.feature hook matches) and

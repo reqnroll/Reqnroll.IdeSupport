@@ -10,7 +10,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 
 /// <summary>
-/// Issue #845: proves <see cref="Program.ConfigureServer"/> actually wires <c>ServerSessionStarted</c> to the
+/// Proves <see cref="Program.ConfigureServer"/> actually wires <c>ServerSessionStarted</c> to the
 /// LSP handshake, using a real in-process client over an in-memory pipe (the unit tests in
 /// <c>ServerSessionTelemetryTests</c> cover the event's content).
 /// </summary>

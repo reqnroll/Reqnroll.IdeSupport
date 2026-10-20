@@ -115,7 +115,7 @@ public class FindHooksHandlerTests
 
     /// <summary>
     /// A hook whose source file binding discovery recorded but could not resolve on this machine —
-    /// the shape that made every hook in the issue #540 incident navigate nowhere.
+    /// a shape that, unhandled, makes every hook navigate nowhere.
     /// </summary>
     private static ProjectHookBinding MakeUnresolvedHook(
         HookType hookType,
@@ -132,7 +132,7 @@ public class FindHooksHandlerTests
             hookOrder: null,
             error: null);
 
-    // ── Unresolved hook source path (issue #540) ──────────────────────────────
+    // ── Unresolved hook source path ──────────────────────────────
 
     [Fact]
     public async Task Handle_hook_whose_source_file_is_not_on_this_machine_is_excluded_Async()
@@ -333,7 +333,7 @@ public class FindHooksHandlerTests
     public async Task Handle_cursor_at_end_of_step_line_still_resolves_step_context_Async()
     {
         // Line 2 "    Given a step" is 17 chars — character 17 is one past the final "p",
-        // i.e. exactly at StepBlockTag.Range.End (offset 40). Matches issue #106 repro.
+        // i.e. exactly at StepBlockTag.Range.End (offset 40). i.e. a click just past the end of the step text.
         var registry = RegistryWith(
             MakeHook(HookType.BeforeFeature),
             MakeHook(HookType.BeforeScenario),
@@ -360,7 +360,7 @@ public class FindHooksHandlerTests
         result.Hooks.Should().BeEmpty();
     }
 
-    // ── ownLevelOnly (hook-count CodeLens click-through — issue #372 follow-up) ──────────
+    // ── ownLevelOnly (hook-count CodeLens click-through) ──────────
 
     [Fact]
     public async Task Handle_scenario_line_with_ownLevelOnly_excludes_feature_hooks_Async()
