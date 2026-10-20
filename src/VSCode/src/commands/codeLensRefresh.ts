@@ -9,7 +9,7 @@ let sharedEmitter: vscode.EventEmitter<void> | undefined;
  *
  * `MessageConnection.onRequest` silently replaces any earlier handler registered for the same
  * method (a plain `Map.set` under the hood — no error, no warning), so if each CodeLens provider
- * (step usages, hooks — issue #269) registered its own `onRequest(CodeLensRefreshRequest.type, ...)`,
+ * (step usages, hooks) registered its own `onRequest(CodeLensRefreshRequest.type, ...)`,
  * whichever registered last would win and the other's refresh push would go silently dead. Every
  * provider that wants to react to the server's refresh push must share this one registration
  * instead.

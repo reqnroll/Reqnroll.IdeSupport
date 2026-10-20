@@ -21,7 +21,7 @@ export function effectiveTelemetryEnvironment(
 }
 
 /**
- * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
+ * Developer override: REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
  * replaces the built-in connection string when it carries a non-empty `InstrumentationKey`.
  * Anything else is ignored (`onInvalid` is told why) so a typo never silently drops events.
  */
@@ -70,7 +70,7 @@ function isTelemetryEnabledByEnv(): boolean {
 // that never call registerTelemetry at all).
 let reporter: TelemetryReporter | undefined;
 
-// Issue #845: the server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
+// The server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
 // handling the LSP `shutdown` request, i.e. during `client.stop()`. VS Code disposes
 // `context.subscriptions` as soon as `deactivate()` has been *called* (it does not wait for the returned
 // promise), which would detach the notification forwarder and the reporter before those events arrive.
@@ -109,7 +109,7 @@ function afterTeardownGate(action: () => void | Thenable<void>): Thenable<void> 
 const DISPOSE_TIMEOUT_MS = 500;
 
 // One breaker per session (re-created by registerTelemetry): once the endpoint has failed, every
-// later event is dropped without touching the reporter, and the user sees a single notice (#859).
+// later event is dropped without touching the reporter, and the user sees a single notice.
 let breaker = newBreaker();
 
 function newBreaker(): TelemetryCircuitBreaker {
@@ -143,7 +143,7 @@ function disposeReporterBounded(r: TelemetryReporter): Thenable<void> {
 /**
  * Creates the shared `TelemetryReporter` if telemetry is enabled and it does not exist yet. Called by
  * `extension.ts` *before* `client.start()` so that client-originated server-lifecycle events
- * (`ServerStartFailed`, issue #845) can be sent when the server never comes up, and again (as a
+ * (`ServerStartFailed`) can be sent when the server never comes up, and again (as a
  * no-op) by `registerTelemetry` once it has.
  */
 export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {
@@ -205,9 +205,9 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
 }
 
 /**
- * Stringifies `properties` (dropping null/undefined) and stamps the host's client identity (issue
- * #844), matching what VS's `TelemetryTransmitter` and Rider's `RiderTelemetryTransmitter` stamp:
- * `Ide`/`IdeVersion`/`ExtensionVersion` and `ClientSessionId` (issue #1199), plus the canonical `IdeClient` (same vocabulary the LSP
+ * Stringifies `properties` (dropping null/undefined) and stamps the host's client identity,
+ * matching what VS's `TelemetryTransmitter` and Rider's `RiderTelemetryTransmitter` stamp:
+ * `Ide`/`IdeVersion`/`ExtensionVersion` and `ClientSessionId`, plus the canonical `IdeClient` (same vocabulary the LSP
  * server stamps on server-originated events). `IdeClient` is only added when absent so a
  * server-stamped value is never overridden. Exported for tests.
  */
@@ -219,7 +219,7 @@ export function withClientIdentity(
     if (value !== undefined && value !== null) stringProps[key] = String(value);
   }
   stringProps.IdeClient ??= 'vscode';
-  stringProps[CLIENT_SESSION_ID_PROPERTY] ??= CLIENT_SESSION_ID; // issue #1199
+  stringProps[CLIENT_SESSION_ID_PROPERTY] ??= CLIENT_SESSION_ID;
   stringProps.Ide = 'Visual Studio Code';
   stringProps.IdeVersion = vscode.version;
   stringProps.ExtensionVersion = extensionVersion();
@@ -234,9 +234,8 @@ function extensionVersion(): string {
 
 /**
  * Sends a client-originated telemetry event directly, for the rare case where the event describes
- * something only the client knows (e.g. `doGoToHooks.ts`'s "GoToHook command executed" -- issue
- * #698: the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
- * the classic VS CodeLens's Details-popup prefetch, so it no longer claims to). Most telemetry
+ * something only the client knows (e.g. `doGoToHooks.ts`'s "GoToHook command executed"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
+ * the classic VS CodeLens's Details-popup prefetch, so it does not claim to). Most telemetry
  * should still be server-originated and reach Application Insights via the notification forwarder
  * in `registerTelemetry` above; reach for this only when the client itself is the source of truth.
  * A no-op (other than mirroring to the debug log, see below) before `registerTelemetry` has run,
@@ -244,7 +243,7 @@ function extensionVersion(): string {
  *
  * Also the single point every client-originated and server-relayed event passes through (the
  * notification forwarder in `registerTelemetry` calls this too), so mirroring the attempt here to
- * the local debug log (issue #799) — independent of `enabled`/whether a reporter exists, matching
+ * the local debug log — independent of `enabled`/whether a reporter exists, matching
  * VS's `TelemetryTransmitter.TransmitEvent` — covers both paths with one call site.
  */
 export function sendTelemetryEvent(
@@ -276,7 +275,7 @@ export function sendTelemetryEvent(
   try {
     reporter.sendTelemetryEvent(eventName, stringProps);
   } catch (err) {
-    // Telemetry must never surface to the user (#859): record it, open the breaker, carry on.
+    // Telemetry must never surface to the user: record it, open the breaker, carry on.
     const message = err instanceof Error ? err.message : String(err);
     breaker.recordFailure(message);
     debugLog.record('host', eventName, stringProps, enabled, false, message);

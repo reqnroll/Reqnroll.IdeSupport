@@ -151,7 +151,7 @@ suite('manualDocumentSync', () => {
       assert.strictEqual(isCSharpDocument(fakeDocument('file:///Discs.txt')), false);
     });
 
-    // Issue #1006: only real on-disk files may be synced; virtual documents of other schemes
+    // Only real on-disk files may be synced; virtual documents of other schemes
     // (git: diff/HEAD views, untitled:) must not be treated as workspace .cs files, or a HEAD
     // version could override the working file's live text on the server.
     test('false for a .cs path with the git: scheme (diff view / HEAD version)', () => {
@@ -433,7 +433,7 @@ suite('manualDocumentSync', () => {
       });
     });
 
-    // Issue #1005: the restarted server has no open documents, so every open .cs file is re-announced.
+    // The restarted server has no open documents, so every open .cs file is re-announced.
     test('a server restart re-sends didOpen for documents that are still open', () => {
       const open = fakeDocument('file:///Open.cs', { version: 7, text: 'class A {}' });
       withStubbedWorkspace([open], () => {

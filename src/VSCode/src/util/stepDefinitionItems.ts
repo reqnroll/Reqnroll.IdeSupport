@@ -9,7 +9,7 @@ export interface StepDefinitionItem {
   className?: string;
   methodName?: string;
   bindingExpression?: string;
-  /** `Given`/`When`/`Then`; absent when unknown or from a server predating issue #757. */
+  /** `Given`/`When`/`Then`; absent when unknown or from an older server that does not send it. */
   stepDefinitionType?: string;
   /** Absent when the binding's source file does not exist on this machine — see `isResolved`. */
   sourceFile?: string;
@@ -32,7 +32,7 @@ export function formatMethodName(item: StepDefinitionItem): string {
 }
 
 /**
- * The binding attribute as it would appear on the method (issue #757) — `[Given("the sum is {int}")]`,
+ * The binding attribute as it would appear on the method — `[Given("the sum is {int}")]`,
  * or `[Given]` for a method-name-style binding with no expression. With no known keyword the
  * expression is shown quoted on its own; with neither, `undefined`. Matches the Visual Studio and
  * Rider step-definition lists.
@@ -49,7 +49,7 @@ export function formatBindingAttribute(item: StepDefinitionItem): string | undef
 
 /**
  * Explains, rather than silently doing nothing, why a binding whose source isn't on this machine
- * can't be opened (issue #540). The server nulls `sourceFile` precisely so callers reach this.
+ * can't be opened. The server nulls `sourceFile` precisely so callers reach this.
  */
 export function warnSourceNotOnThisMachine(item: StepDefinitionItem): void {
   const recorded = item.recordedSourceFile;

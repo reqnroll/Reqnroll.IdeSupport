@@ -4,12 +4,12 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 /**
- * Proves/disproves Q9's leading hypothesis (issue #31): does `files.watcherExclude` suppress
+ * Probes whether `files.watcherExclude` suppresses
  * delivery of events from the exact `vscode.workspace.createFileSystemWatcher(new
  * vscode.RelativePattern(outputDir, '*.dll'))` construction `ProjectManager.watchProjectOutputPath`
  * uses (projectManager.ts:330-332)? Mirrors that construction against a throwaway bin/ directory
  * under the open workspace, toggling the exclude on and off via the *user* (Global) settings scope
- * — that's the scope the issue's "common workspace/user default" concern actually refers to, and
+ * — that's the scope the "common workspace/user default" concern actually refers to, and
  * it writes to the isolated `.vscode-test/user-data` profile rather than the repo's own
  * `.vscode/settings.json`.
  *

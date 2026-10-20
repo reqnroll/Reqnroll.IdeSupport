@@ -80,8 +80,8 @@ suite('language-configuration.json indentationRules', () => {
    * BOTH patterns as mandatory: if either `increaseIndentPattern` or `decreaseIndentPattern` is
    * absent (or fails to compile), it `return`s early and the ENTIRE `indentationRules` block is
    * discarded — the increase pattern never takes effect, so Enter never indents. The key must
-   * therefore always be present. This is the regression guard for #1002: the first attempt at the
-   * fix deleted `decreaseIndentPattern` outright, which silently disabled indentation entirely.
+   * therefore always be present. This is the regression guard for that: deleting `decreaseIndentPattern`
+   * outright silently disables indentation entirely.
    */
   test('indentationRules declares both patterns VS Code requires', () => {
     assert.ok(

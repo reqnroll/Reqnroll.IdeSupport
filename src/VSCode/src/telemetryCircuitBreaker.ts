@@ -1,5 +1,5 @@
 /**
- * Best-effort delivery policy for telemetry (issue #859): after the first definitive failure to
+ * Best-effort delivery policy for telemetry: after the first definitive failure to
  * reach the analytics endpoint the transmitter stops sending for the rest of the session and
  * tells the user exactly once. Same behaviour and wording as VS's `TelemetryCircuitBreaker.cs`
  * and Rider's `TelemetryCircuitBreaker.kt`.

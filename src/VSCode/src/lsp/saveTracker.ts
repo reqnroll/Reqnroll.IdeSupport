@@ -9,7 +9,7 @@ export const SAVE_WINDOW_MS = 10_000;
 
 /**
  * Tracks which documents are in the middle of a save, so a format request that VS Code issues from
- * `editor.formatOnSave` can be told apart from an explicit Format Document (issue #1132).
+ * `editor.formatOnSave` can be told apart from an explicit Format Document.
  *
  * `vscode-languageclient`'s formatting middleware gets no hint about what triggered the request, but
  * the save sequence does: verified empirically in the extension host that `onWillSaveTextDocument`

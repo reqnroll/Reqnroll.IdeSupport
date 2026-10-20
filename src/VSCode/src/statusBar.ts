@@ -8,7 +8,7 @@ import { LanguageClient } from 'vscode-languageclient/node';
  * Clicking the item runs `reqnroll.showOutputChannel` to reveal the server log.
  *
  * When `appLog` is supplied, each state transition is also mirrored there as a one-line entry
- * (issue #661) — the same curated "Reqnroll" channel command outcomes are mirrored to via
+ * — the same curated "Reqnroll" channel command outcomes are mirrored to via
  * `logging/appNotify.ts` — so "is the extension doing something" has a single place to look.
  */
 export class StatusBarManager implements vscode.Disposable {

@@ -10,7 +10,7 @@ import type { LanguageClient } from 'vscode-languageclient/node';
  * `LanguageClient` (10.x `handleConnectionClosed` -> `CloseAction.Restart` -> `start()`), which emits
  * `Running -> Stopped -> Starting -> Running` and re-sends `initialize`/`initialized`, but client-side
  * state built up by our own notifications is not replayed. Anything that pushed state to the old
- * server must push it again from here (issue #997).
+ * server must push it again from here.
  *
  * Safe to subscribe before or after the first start: a client already `Running` at subscription time
  * counts as having had its first run. `listener` fires synchronously inside the state change, before

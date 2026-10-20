@@ -23,7 +23,7 @@ import { MAX_BUFFER_OVERFLOW_CODE } from '../../util/msbuildProcess';
 
 /**
  * Records every `fs.readdirSync` call (still delegating to the real one) until `restore` — the
- * blocking call issue #998 keeps off the extension host's event loop during activation.
+ * blocking call that must stay off the extension host's event loop during activation.
  */
 function recordSyncReaddirs(): { calls: string[]; restore: () => void } {
   const target = nodeFs as unknown as { readdirSync: (...args: unknown[]) => unknown };
@@ -42,7 +42,7 @@ function recordSyncReaddirs(): { calls: string[]; restore: () => void } {
 }
 
 /**
- * Where and when VS Code writes the issue #741 project-local `obj/<Project>.csproj.reqnroll-ide.targets`
+ * Where and when VS Code writes the project-local `obj/<Project>.csproj.reqnroll-ide.targets`
  * stub. What the stub's import does to a build is covered by `SourceInjectionBuildTests` in
  * Reqnroll.IdeSupport.TestReporter.MTP.Tests.
  */
@@ -456,7 +456,7 @@ suite('mtpProjectStubs', () => {
     );
   });
 
-  // ── MSBuild output exceeding the buffer (issue #1008) ───────────────────────────────────────
+  // ── MSBuild output exceeding the buffer ───────────────────────────────────────
 
   suite('evaluateViaMsBuild exceeding the buffer', () => {
     teardown(() => setAppLogChannel(undefined));

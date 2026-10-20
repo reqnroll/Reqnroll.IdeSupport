@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import { parseLspTraceMessage } from '../../lsp/lspInspectorLogger';
 
 /**
- * Cross-language conformance check (issue #628) between this file's `parseLspTraceMessage` and
+ * Cross-language conformance check between this file's `parseLspTraceMessage` and
  * the VS extension's independent reimplementation of the same
  * [lsp-viewer](https://lampepfl.github.io/lsp-viewer/) wire format,
  * `src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/LspInterception/LspInspectorLogger.cs`.
@@ -18,8 +18,8 @@ import { parseLspTraceMessage } from '../../lsp/lspInspectorLogger';
  * shape changes.
  *
  * Deliberately excluded from the comparison: `timestamp` (wall-clock, inherently different per
- * run) and `traceId` (issue #633 found this can't be ported here - see `LspEntry`'s doc comment
- * in `lspInspectorLogger.ts`). `latencyMs` **is** compared below (added in #633): unlike `traceId`,
+ * run) and `traceId` (this can't be ported here - see `LspEntry`'s doc comment
+ * in `lspInspectorLogger.ts`). `latencyMs` **is** compared below: unlike `traceId`,
  * the round-trip time is already present in vscode-languageclient's own response trace text, so
  * this side only needed to start capturing it, not invent new tracking state.
  */

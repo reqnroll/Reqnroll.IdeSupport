@@ -15,7 +15,7 @@ import {
 } from './mtpReporterPath';
 
 /**
- * Project-local MTP reporter stubs — issue #741, the VS Code counterpart of the Visual Studio
+ * Project-local MTP reporter stubs — the VS Code counterpart of the Visual Studio
  * extension's `MtpProjectStubs.cs` and the Rider plugin's `MtpProjectStubs.kt`.
  *
  * For every MTP-capable C# project in the workspace that uses Reqnroll (see {@link detectReqnrollUsage}),
@@ -24,8 +24,8 @@ import {
  * through `$(MSBuildProjectExtensionsPath)$(MSBuildProjectFile).*.targets` (the mechanism NuGet's own
  * `obj/<Project>.csproj.nuget.g.targets` uses), and the imported file compiles the reporter's sources
  * into that project's own test assembly. So it reaches every build of that project — including the
- * `dotnet test` C# Dev Kit spawns — without depending on environment-variable inheritance (the
- * never-live-verified risk #2 of the previous `CustomAfterMicrosoftCommonTargets` design) and without
+ * `dotnet test` C# Dev Kit spawns — without depending on environment-variable inheritance (which a
+ * `CustomAfterMicrosoftCommonTargets` design would depend on) and without
  * touching any other project or any global state.
  */
 
@@ -41,7 +41,7 @@ const MSBUILD_EVAL_TIMEOUT_MS = 30_000;
 
 /**
  * How many projects are synced at once: each can shell out to `dotnet msbuild` (with a 20-30 s
- * timeout), so a large workspace must not spawn one process per project in parallel (issue #998).
+ * timeout), so a large workspace must not spawn one process per project in parallel.
  */
 const MAX_CONCURRENT_PROJECT_SYNCS = 4;
 
@@ -53,7 +53,7 @@ const ASSETS_LIBRARY_KEY = /"([^"/\\]+)\/\d[^"/]*"\s*:/g;
 
 /**
  * Enumerates every `.csproj` under `root`, pruning build-output/VCS/editor/dependency directories.
- * Asynchronous so a large workspace never blocks the extension host's event loop (issue #998).
+ * Asynchronous so a large workspace never blocks the extension host's event loop.
  * Exported for testing.
  */
 export async function enumerateProjectFiles(root: string): Promise<string[]> {
@@ -235,7 +235,7 @@ export type StubSyncResult =
  * Brings one project's stub in line with whether it uses Reqnroll: written or refreshed for an
  * MTP-capable Reqnroll project, removed from a restored project that does not use Reqnroll, untouched
  * while the project has no restore output yet. The cheap Reqnroll check runs first, so `isCapable`
- * (which can shell out to `dotnet msbuild`, issue #722) runs only for Reqnroll projects. Never throws.
+ * (which can shell out to `dotnet msbuild`) runs only for Reqnroll projects. Never throws.
  * Exported for testing.
  */
 export async function syncStub(
@@ -380,7 +380,7 @@ export function projectsForAssetsFile(assetsFile: string): string[] {
  * its Reqnroll use becomes known), or a Reqnroll package is added or removed. When disabled, removes any
  * stub this extension wrote earlier, so turning the feature off leaves no file of ours behind. Never throws.
  * The workspace walk is asynchronous and the msbuild-backed checks are bounded, so activation starts
- * this without awaiting it (issue #998).
+ * this without awaiting it.
  */
 export async function activateMtpProjectStubs(
   context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'subscriptions'>,
@@ -436,7 +436,7 @@ export async function evaluateViaMsBuild(
   );
 
   if (error) {
-    // Warn when a project's evaluation output exceeds the buffer limit (issue #1008) rather than
+    // Warn when a project's evaluation output exceeds the buffer limit rather than
     // letting the caller fall back with no log at all.
     if (isMaxBufferOverflowError(error)) {
       logWarn(

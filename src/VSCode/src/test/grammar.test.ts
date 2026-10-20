@@ -123,9 +123,9 @@ suite('gherkin.tmLanguage.json', () => {
       assert.ok(!re.test('Given something'));
     });
 
-    // Regression test for #1003: the rule used to be the unanchored "#.*$", so once the step
-    // keyword rule consumed only the keyword and the scanner resumed after it, the first #
-    // later on the line was comment-scoped. Real Gherkin comments are line-start only.
+    // Regression guard: the comment rule must be anchored to the line start. An unanchored "#.*$"
+    // would comment-scope the first # later on the line once the step keyword rule consumed only
+    // the keyword and the scanner resumed after it. Real Gherkin comments are line-start only.
     test('#1003: does not match a # that is not at the start of the line', () => {
       const re = new RegExp(p().match);
       assert.ok(!re.test('Given the colour is #FF0000'));
@@ -191,9 +191,9 @@ suite('gherkin.tmLanguage.json', () => {
     });
 
     // Regression test: an @word appearing inside ordinary step text (preceded by whitespace, not
-    // a word character, so it isn't caught by an email-address-style guard either) used to still
-    // be colored as a tag, because the old rule had no notion of "this line is a tag line" -- any
-    // @word anywhere in the document matched. Anchoring to line-start fixes this: the line starts
+    // a word character, so it isn't caught by an email-address-style guard either) must not be
+    // colored as a tag: a rule with no notion of "this line is a tag line" would match any
+    // @word anywhere in the document. Anchoring to line-start prevents this: the line starts
     // with "Given", not "@", so the tags rule never activates on it at all.
     test('does not color an @mention inside step text as a tag', () => {
       const results = tokenizeLines(['Given a message mentioning @channel']);
@@ -220,7 +220,7 @@ suite('gherkin.tmLanguage.json', () => {
       const scopes = results[0].tokens.map((t) => t.scopes).flat();
       assert.ok(!scopes.some((s) => s.includes('entity.name.tag.gherkin')));
     });
-    // #1004: a Gherkin tag is any whitespace-delimited token starting with @, so tags such as
+    // A Gherkin tag is any whitespace-delimited token starting with @, so tags such as
     // @category:smoke, @owner=bob and @Jira:ABC-1 must be scoped in full, not truncated at : . = /.
     test('#1004: scopes the whole of tags containing : = . / characters', () => {
       const results = tokenizeLines(['@category:smoke @owner=bob @Jira:ABC-1 @v1.2/x']);
@@ -232,7 +232,7 @@ suite('gherkin.tmLanguage.json', () => {
       assert.deepStrictEqual(tagTexts, ['@category:smoke', '@owner=bob', '@Jira:ABC-1', '@v1.2/x']);
     });
 
-    // Gherkin discards a trailing "# comment" on a tag line before parsing the tags (see #949), so
+    // Gherkin discards a trailing "# comment" on a tag line before parsing the tags, so
     // it is valid and should be scoped as a comment, with the tags before it unaffected.
     test('#1004: scopes a trailing # comment on a tag line as a comment', () => {
       const line = '@smoke @slow # flaky on CI';
@@ -327,7 +327,7 @@ suite('gherkin.tmLanguage.json', () => {
       assert.strictEqual(p().name, 'string.quoted.other.gherkin');
     });
 
-    // Regression test for #463: syntax highlighting stayed stuck in the doc-string scope after
+    // Regression guard: syntax highlighting must not stay stuck in the doc-string scope after
     // the closing """, because the doc_strings rule embedded the full text.html.markdown grammar
     // and one of its own multi-line constructs could swallow the closing delimiter's line before
     // the outer end pattern was ever re-tested.
@@ -407,7 +407,7 @@ suite('gherkin.tmLanguage.json', () => {
       );
     });
 
-    // #1004: ``` is an alternative doc-string delimiter in Gherkin. A doc string must be closed by
+    // ``` is an alternative doc-string delimiter in Gherkin. A doc string must be closed by
     // the same delimiter that opened it, so a """ inside a ``` block does not close it.
     test('#1004: backtick doc strings are scoped and close only on a backtick delimiter', () => {
       const lines = [

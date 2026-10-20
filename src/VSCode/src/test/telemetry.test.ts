@@ -130,7 +130,7 @@ suite('telemetry', () => {
     });
   });
 
-  // The activated extension owns a module-level reporter (ensureTelemetryReporter, #845); start clean.
+  // The activated extension owns a module-level reporter (ensureTelemetryReporter); start clean.
   setup(() => resetTelemetryReporterForTests());
 
   suite('client identity (#844)', () => {
@@ -407,7 +407,7 @@ suite('telemetry', () => {
   });
 
   // sendTelemetryEvent is the single point every client-originated and server-relayed event
-  // passes through, so its REQNROLL_TELEMETRY_DEBUG_LOG mirror (issue #799) is exercised directly
+  // passes through, so its REQNROLL_TELEMETRY_DEBUG_LOG mirror is exercised directly
   // here rather than through registerTelemetry's notification forwarder.
   suite('sendTelemetryEvent debug log mirror', () => {
     const originalDebugLogEnv = process.env.REQNROLL_TELEMETRY_DEBUG_LOG;
@@ -469,7 +469,7 @@ suite('telemetry', () => {
         assert.strictEqual(records[0].enabled, true);
         assert.strictEqual(records[0].transmitted, true);
         assert.strictEqual(records[0].props?.count, '3');
-        // The mirror shows what is transmitted, identity included (#1199).
+        // The mirror shows what is transmitted, identity included.
         assert.strictEqual(records[0].props?.IdeClient, 'vscode');
         assert.strictEqual(records[0].props?.ClientSessionId, CLIENT_SESSION_ID);
       });

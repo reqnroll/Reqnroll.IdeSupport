@@ -10,16 +10,16 @@ import { TelemetryEvents } from './telemetryEvents';
 import { sanitizeStack } from './stackSanitizer';
 
 /**
- * Client-side exception telemetry (issue #621): reports exceptions thrown in the VS Code
+ * Client-side exception telemetry: reports exceptions thrown in the VS Code
  * extension's *own* code (activation, command handlers, the language client's transport error
  * callback) as the same `UnhandledException` event the LSP server emits for its exceptions
  * (`LspErrorTelemetryService.MonitorError`), so error-rate queries stay uniform. Client-reported
  * events are told apart from server ones by `ExceptionOrigin = "Client"` (absent on server events);
  * `IdeClient` (stamped by `sendTelemetryEvent`) says which IDE.
  *
- * Privacy contract (same bar as the server's `UnhandledException`, issues #620/#843): only the
+ * Privacy contract (same bar as the server's `UnhandledException`): only the
  * exception type name, a scrubbed (quoted text, URLs and paths removed) and 128-character-capped message, a closed `Source`
- * and a sanitized `StackFrames` are sent. `StackFrames` (issue #1199) names only this extension's own functions with
+ * and a sanitized `StackFrames` are sent. `StackFrames` names only this extension's own functions with
  * their bundle line numbers, no paths or file names (see `stackSanitizer.ts`); it rides on each event that is sent, and
  * the dedupe and {@link MAX_EVENTS_PER_SESSION} cap below bound how many distinct stacks that can be.
  * `ClientSessionId` is added to every event by `sendTelemetryEvent` (see `clientSession.ts`).
@@ -271,7 +271,7 @@ export function registerGuardedCommand<A extends unknown[], R>(
  * Wraps the language client's error handler so transport errors (a failed message read/write) are
  * reported, while the decision of whether to continue/shut down stays with `inner` (the client's
  * default handler). `closed()` is left untouched: a closed connection is server-lifecycle, covered
- * by the server-lifecycle events (#845), not a client exception.
+ * by the server-lifecycle events, not a client exception.
  */
 export function wrapErrorHandler(
   inner: ErrorHandler,

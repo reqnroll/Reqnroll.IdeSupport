@@ -20,7 +20,7 @@ function parseRecord(line: string): DebugLogRecord {
   return JSON.parse(line) as DebugLogRecord;
 }
 
-// Mirrors Reqnroll.IdeSupport.Common.Tests.Logging.TelemetryDebugLogTests (issue #799) — same
+// Mirrors Reqnroll.IdeSupport.Common.Tests.Logging.TelemetryDebugLogTests — same
 // resolution rules and record shape, so VS, VS Code and the LSP server produce one consistent
 // reqnroll-telemetry-{date}.jsonl.
 suite('createTelemetryDebugLogFromValue', () => {

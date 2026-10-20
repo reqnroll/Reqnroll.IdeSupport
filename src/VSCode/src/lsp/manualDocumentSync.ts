@@ -15,7 +15,7 @@ export type DocumentPredicate = (document: vscode.TextDocument) => boolean;
 
 /**
  * True when `document` is a real on-disk C# source file: both the `file` URI scheme and the `.cs`
- * extension must match. The scheme check (issue #1006) keeps virtual documents -- `git:` diff/HEAD
+ * extension must match. The scheme check keeps virtual documents -- `git:` diff/HEAD
  * views, `untitled:` scratch buffers, etc. -- out of the sync, since the server keys documents by
  * path alone and a HEAD-version document could otherwise override the working file's live text.
  */
@@ -76,7 +76,7 @@ export class ManualDocumentSync implements vscode.Disposable {
 
     this.subscriptions = [
       // A restarted server starts with no open documents; replay didOpen for every owned document
-      // still open, otherwise it would receive didChange for documents it has never seen (issue #1005).
+      // still open, otherwise it would receive didChange for documents it has never seen.
       onServerRestarted(this.client, () => this.resyncAfterRestart()),
       vscode.workspace.onDidOpenTextDocument((document) => {
         if (this.owns(document) && !this.openUris.has(document.uri.toString())) {

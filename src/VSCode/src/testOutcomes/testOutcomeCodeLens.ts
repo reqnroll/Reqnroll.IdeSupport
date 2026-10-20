@@ -16,14 +16,12 @@ const NOOP_COMMAND = 'reqnroll.testOutcomes.noop';
 
 /**
  * Read-only "✓/✗" CodeLens on each Scenario/Scenario Outline line in `.feature` files, sourced
- * from the LSP server's `TestOutcomeStore` (LSP-server outcome pipeline, #700/#702) — opt-in via
+ * from the LSP server's `TestOutcomeStore` (LSP-server outcome pipeline) — opt-in via
  * `reqnroll.testOutcomes.enabled`, same as `testOutcomesService.ts`.
  *
- * **Deliberately not a Run/Debug affordance.** VS Code's Reqnroll extension tried and reverted two
- * different `.feature`-file UI surfaces for test running already (a CodeLens, then a
- * `vscode.TestController` — issue #504) precisely because C# Dev Kit's own gutter/Test Explorer
- * integration already covers that adequately, and this extension owning a competing `Run`
- * affordance duplicated it for no real benefit. This lens's command is a genuine no-op
+ * **Deliberately not a Run/Debug affordance.** C# Dev Kit's own gutter/Test Explorer integration
+ * already covers running tests adequately, and a competing `Run` affordance (a CodeLens or a
+ * `vscode.TestController`) owned by this extension would duplicate it for no real benefit. This lens's command is a genuine no-op
  * ({@link NOOP_COMMAND}) — present only because an unresolved `vscode.CodeLens` (no command at
  * all) may never render at all (see `vscode.CodeLens`'s own doc comment), not to give it a real
  * action. It never triggers, cancels, or otherwise touches a test run, only reports the last one
@@ -116,10 +114,9 @@ async function computeCodeLenses(
     // The command is a genuine no-op (see NOOP_COMMAND's registration) — this lens is
     // display-only by design (see the module doc comment); it just needs *a* command to stay
     // "resolved" so VS Code actually renders it. `tooltip` is a real `vscode.Command` field (the
-    // lens's own inline hover) — issue #723, the same bug already fixed on the VS side in
-    // 4bdefaf5 (`RunTestCodeLensDataPoint.BuildTooltip`/`HookCodeLensDataPoint.BuildTooltip`):
-    // this went unset here too, so hovering the lens showed nothing at all instead of failure
-    // detail.
+    // lens's own inline hover), mirroring the VS side
+    // (`RunTestCodeLensDataPoint.BuildTooltip`/`HookCodeLensDataPoint.BuildTooltip`): if it is left
+    // unset, hovering the lens shows nothing at all instead of failure detail.
     const codeLens = new vscode.CodeLens(new vscode.Range(range.start, range.start), {
       title: renderTitle(outcome),
       tooltip: buildTooltip(outcome),

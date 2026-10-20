@@ -10,7 +10,7 @@ import * as path from 'path';
  *   Linux   : ~/.local/share/Reqnroll
  * Mirrors the Rider plugin's per-OS branch inside `ReqnrollDebugLogger.logDirectory` and the .NET
  * side's `ReqnrollLogPaths.ResolveApplicationDirectory`. Log files themselves live one level
- * deeper, under `resolveLogDirectory` (issue #726) — use this instead of that when what's being
+ * deeper, under `resolveLogDirectory` — use this instead of that when what's being
  * resolved isn't actually a log.
  */
 export function resolveApplicationDirectory(): string {
@@ -26,13 +26,12 @@ export function resolveApplicationDirectory(): string {
 
 /**
  * Resolves the per-OS Reqnroll `logs` directory, shared by every file-logging sink in this
- * extension (issue #625/#626, issue #726). This is `resolveApplicationDirectory()` plus a `logs`
- * segment — before issue #726, log files were written directly into the application directory
- * alongside unrelated persisted state, making that directory's contents hard to tell apart at a
- * glance. Mirrors the Rider plugin's `ReqnrollDebugLogger.logDirectory` and the .NET side's
+ * extension. This is `resolveApplicationDirectory()` plus a `logs`
+ * segment, so log files stay apart from the unrelated persisted state kept in the application
+ * directory. Mirrors the Rider plugin's `ReqnrollDebugLogger.logDirectory` and the .NET side's
  * `ReqnrollLogPaths.ResolveLogDirectory`, so a support engineer collecting logs from all three
- * IDEs plus the LSP server finds them in one place per OS. Moved here from `lspInspectorLogger.ts`
- * (its original, private home) so `generalFileLog.ts` can share it instead of re-deriving it.
+ * IDEs plus the LSP server finds them in one place per OS. Shared by `lspInspectorLogger.ts` and
+ * `generalFileLog.ts` so neither re-derives it.
  */
 export function resolveLogDirectory(): string {
   return path.join(resolveApplicationDirectory(), 'logs');

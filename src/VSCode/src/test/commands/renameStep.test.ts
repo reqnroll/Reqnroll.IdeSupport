@@ -151,7 +151,7 @@ suite('renameStep', () => {
 
       assert.strictEqual(sentMethod, ReqnrollMethods.selectRenameTarget);
       // The position is what lets the server resolve attributeIndex to a specific binding while
-      // the candidate list it indexes into is still current (issue #671, R5).
+      // the candidate list it indexes into is still current.
       assert.deepStrictEqual(sentParams, {
         uri: 'file:///Steps.cs',
         version: 0,
@@ -161,7 +161,7 @@ suite('renameStep', () => {
     });
   });
 
-  // Issue #456: VS Code's built-in rename widget preserves an active pre-selection by reapplying
+  // VS Code's built-in rename widget preserves an active pre-selection by reapplying
   // its raw character offset onto whatever placeholder text prepareRename returns — correct for a
   // .cs attribute rename (placeholder IS the literal buffer text) but wrong for a .feature step
   // (placeholder is a different, abstract expression), landing the highlight mid-parameter-token
@@ -388,7 +388,7 @@ suite('renameStep', () => {
     });
   });
 
-  // Issue #457: the built-in rename UI can't be reused from a .cs binding attribute (the language
+  // The built-in rename UI can't be reused from a .cs binding attribute (the language
   // client's documentSelector excludes csharp), so renameStepFromCSharp drives
   // reqnroll/renameTargets + textDocument/rename directly, mirroring the Visual Studio extension's
   // RenameStepCommand.
@@ -417,7 +417,7 @@ suite('renameStep', () => {
       assert.ok(shownMessage?.includes('No step definition found'));
     });
 
-    // Issue #506: F2 must still work as an ordinary C# rename everywhere else in a .cs file
+    // F2 must still work as an ordinary C# rename everywhere else in a .cs file
     // (local variables, non-Reqnroll projects), so the F2-bound path opts into falling through to
     // VS Code's native rename instead of showing the Reqnroll-specific message on a miss.
     suite('fallbackToNativeRename', () => {
@@ -554,7 +554,7 @@ suite('renameStep', () => {
       assert.ok(asWorkspaceEditCalledWith, 'the raw rename result should be converted');
       assert.strictEqual(appliedByWorkspace, appliedEdit);
 
-      // issue #671 (R3): the server staged the registry/match-cache updates this edit implies and
+      // The server staged the registry/match-cache updates this edit implies and
       // is waiting to hear whether the client actually applied it.
       const renameApplied = notifications.find((n) => n.method === ReqnrollMethods.renameApplied);
       assert.deepStrictEqual(renameApplied?.params, { uri: 'file:///Steps.cs', applied: true });

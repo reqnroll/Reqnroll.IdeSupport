@@ -34,7 +34,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * Pure port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted` (issue #875):
+ * Pure port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
  * `Extension loaded` on every activation, `Extension installed` on the first ever, `Extension upgraded`
  * when the version increased, and a `"{N} day usage"` heartbeat on the first activation of each new day
  * (not on the install day, like VS).

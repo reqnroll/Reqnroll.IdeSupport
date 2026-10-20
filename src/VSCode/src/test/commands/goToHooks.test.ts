@@ -282,7 +282,7 @@ suite('goToHooks', () => {
       );
     });
 
-    // Issue #861: Source is derived by sourceForArgs from the real command arguments and is
+    // Source is derived by sourceForArgs from the real command arguments and is
     // transmitted as the closed enum shared with VS and Rider.
     const sourceCases: Array<[string, () => unknown[], string]> = [
       ['palette/keybinding (no arguments)', () => [], 'Command'],

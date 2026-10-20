@@ -123,7 +123,7 @@ suite('createTraceChannel logLevel', () => {
   });
 });
 
-// Issue #792: the wire trace has no Output panel any more, so the inspector file is its only
+// The wire trace has no Output panel, so the inspector file is its only
 // artifact — pin that trace() still lands there, in lsp-viewer format, once tracing is enabled.
 suite('createTraceChannel file output', () => {
   const config = vscode.workspace.getConfiguration('reqnroll');

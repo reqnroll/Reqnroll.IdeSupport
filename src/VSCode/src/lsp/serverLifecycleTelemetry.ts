@@ -6,7 +6,7 @@ import { ServerFailureReason, TelemetryEvents } from '../telemetryEvents';
 type Send = (eventName: string, properties: Record<string, string | number>) => void;
 
 /**
- * Reports the client-originated server-lifecycle events (issue #845) from the language client's
+ * Reports the client-originated server-lifecycle events from the language client's
  * state transitions: a dead server cannot report itself, so the extension does.
  *
  * - `ServerStartFailed`: a start attempt ended (`Stopped`) before the client ever reached `Running`,

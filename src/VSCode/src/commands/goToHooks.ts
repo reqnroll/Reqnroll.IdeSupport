@@ -20,7 +20,7 @@ interface FindHookLocation {
 }
 
 /**
- * Classifies the arguments `reqnroll.goToHooks` was invoked with (issue #861): the hook-count
+ * Classifies the arguments `reqnroll.goToHooks` was invoked with: the hook-count
  * CodeLens passes `[uri, line, ...]` (string, number); the editor context menu passes the document
  * `vscode.Uri`; the command palette and keybindings pass nothing (or anything else) -> Command.
  */
@@ -34,14 +34,14 @@ export function sourceForArgs(args: readonly unknown[]): GoToHookSource {
 /**
  * Implements Hook Navigation ("Find Hooks"): queries the server for hooks applicable at
  * `position` (defaulting to the active editor's cursor when omitted — the command-palette/
- * keybinding invocation path). When invoked from the hook-count CodeLens (issue #269) the server
+ * keybinding invocation path). When invoked from the hook-count CodeLens the server
  * passes `[uri, line, char, ownLevelOnly]` as arguments, resolved to `position` by the
  * `reqnroll.goToHooks` command handler, the same way `reqnroll.findStepUsages` already does.
  * `ownLevelOnly` (set only by CodeLens-sourced invocations) asks the server to filter the result
  * to hooks native to the resolved context level, so the picker matches exactly what the lens
  * counted rather than the fuller cumulative list a manual invocation returns.
  *
- * `alwaysShowPicker` (also set only by CodeLens-sourced invocations — issue #372 follow-up) shows
+ * `alwaysShowPicker` (also set only by CodeLens-sourced invocations) shows
  * the `QuickPick` even for a single match, so clicking a lens always lets the user see which hook
  * it refers to rather than jumping straight there; the keybinding/command-palette path keeps the
  * original single-match shortcut.
@@ -69,7 +69,7 @@ export async function doGoToHooks(
 
   // A genuine navigation -- unlike VS's classic CodeLens, VS Code's hook-count CodeLens resolves
   // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
-  // caller and every invocation (palette, keybinding, or a lens click) really is one (issue #698).
+  // caller and every invocation (palette, keybinding, or a lens click) really is one.
   // `source` is mandatory: every caller states how the navigation started (see sourceForArgs).
   sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted, {
     [TelemetryProperties.source]: source,

@@ -157,7 +157,7 @@ export interface ReqnrollExtensionApi {
  */
 export async function activate(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
   setExtensionRoot(context.extensionPath);
-  // Client-side exception telemetry (issue #621): the reporter must exist before anything below can
+  // Client-side exception telemetry: the reporter must exist before anything below can
   // throw, and an exception escaping activation is reported (then rethrown unchanged).
   try {
     ensureTelemetryReporter(context);
@@ -172,13 +172,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
   }
 }
 
-/** Every command is registered through this so a throwing handler is reported (issue #621) and rethrown. */
+/** Every command is registered through this so a throwing handler is reported and rethrown. */
 const registerCommand = <A extends unknown[], R>(
   commandId: string,
   handler: (...args: A) => R,
 ): vscode.Disposable => registerGuardedCommand(vscode.commands.registerCommand, commandId, handler);
 
-// Not `async`: nothing in here is awaited any more (issue #998), so it resolves the API itself.
+// Not `async`: nothing in here is awaited, so it resolves the API itself.
 function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
   const api: ReqnrollExtensionApi = { getClient: () => client };
 
@@ -186,9 +186,9 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
     void showInfo(`Reqnroll: ${label} will be available once the LSP server is ready.`);
   };
 
-  // "Reqnroll LSP" carries vscode-languageclient's own general client diagnostics (and, until
-  // #660 is fixed, OmniSharp's internal framework noise via window/logMessage). "Reqnroll" is the
-  // curated app-status channel (issue #661, mirroring the VS extension's #651/#656 pane): only
+  // "Reqnroll LSP" carries vscode-languageclient's own general client diagnostics (and
+  // OmniSharp's internal framework noise via window/logMessage). "Reqnroll" is the
+  // curated app-status channel (mirroring the Visual Studio extension's app pane): only
   // extension/LSP-client lifecycle lines (below and in statusBar.ts) and one-line command outcomes
   // (mirrored via logging/appNotify.ts) land here, so it's the one users should be pointed to for
   // "is the extension doing something" — hence `reqnroll.showOutputChannel` now reveals this one.
@@ -205,12 +205,12 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
     appLogChannel.warn(`Could not open the Get Started walkthrough: ${String(err)}`),
   );
 
-  // Project-local MTP reporter stubs (issue #741): obj/<Project>.csproj.reqnroll-ide.targets for each
+  // Project-local MTP reporter stubs: obj/<Project>.csproj.reqnroll-ide.targets for each
   // MTP-capable Reqnroll project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
   // compiles the reporter in. Runs early, before any test run could plausibly start, and independent
   // of the LSP client, unlike `activateTestOutcomes` below. Not awaited: its workspace walk and its
-  // MTP-capability scan (which can shell out to `dotnet msbuild`, issue #722) must not hold up command
-  // registration or the client start (issue #998).
+  // MTP-capability scan (which can shell out to `dotnet msbuild`) must not hold up command
+  // registration or the client start.
   void activateMtpProjectStubs(context).catch((err) =>
     appLogChannel.warn(`testOutcomes: setting up the MTP reporter stubs failed: ${String(err)}`),
   );
@@ -277,13 +277,13 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
     }),
 
     // Hook Navigation ("Find Hooks"; invoked from the command palette, editor context menu,
-    // or the hook-count CodeLens — issue #269). When invoked from a CodeLens the server passes
+    // or the hook-count CodeLens). When invoked from a CodeLens the server passes
     // [uri, line, char, ownLevelOnly] as arguments, same convention as reqnroll.findStepUsages
     // plus the extra ownLevelOnly flag so the picker matches exactly what the lens counted.
-    // alwaysShowPicker is set for every CodeLens-sourced call (issue #372 follow-up) so clicking
+    // alwaysShowPicker is set for every CodeLens-sourced call so clicking
     // a lens always shows the picker, even for a single match, rather than jumping straight
     // there — the command-palette/keybinding path (no args) keeps the direct-navigate shortcut.
-    // Follows a clickable tag's link (issue #755); only reached through the links the middleware above
+    // Follows a clickable tag's link; only reached through the links the middleware above
     // re-targets, so it is hidden from the command palette.
     registerCommand(OPEN_TAG_LINK_COMMAND, (url: unknown) => openTagLink(url)),
 
@@ -311,7 +311,7 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
       }
     }),
 
-    // Hook-match-count CodeLens click action (issue #373) -- only ever invoked from a CodeLens
+    // Hook-match-count CodeLens click action -- only ever invoked from a CodeLens
     // click, with the lens's own attribute location as [uri, line, char] arguments. Deliberately
     // absent from package.json's contributes.commands, matching reqnroll.noStepUsages: it has no
     // command-palette/keybinding entry point.
@@ -342,10 +342,10 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
 
     // Step Rename refactoring. For .cs files there is no rename provider registered —
     // documentSelector deliberately excludes csharp (see manualDocumentSync.ts) — so
-    // renameStepFromCSharp drives the reqnroll/renameTargets + textDocument/rename flow directly
-    // (issue #457), mirroring the Visual Studio extension's RenameStepCommand. For .feature files
+    // renameStepFromCSharp drives the reqnroll/renameTargets + textDocument/rename flow directly,
+    // mirroring the Visual Studio extension's RenameStepCommand. For .feature files
     // this delegates to VS Code's native rename; collapseActiveSelectionForFeatureStepRename()
-    // must run BEFORE editor.action.rename starts — see its doc comment (issue #456): mutating
+    // must run BEFORE editor.action.rename starts — see its doc comment: mutating
     // the selection while that command already has an in-flight prepareRename request cancels
     // the rename outright for parameterized steps.
     registerCommand('reqnroll.renameStep', async () => {
@@ -363,7 +363,7 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
       await executeForeignCommand('editor.action.rename');
     }),
 
-    // F2 keybinding target (issue #506). F2 is the default C# rename-symbol shortcut, so unlike
+    // F2 keybinding target. F2 is the default C# rename-symbol shortcut, so unlike
     // the explicit "Rename Step..." command above, a miss at the cursor (not on a binding
     // expression, or a .cs file the Reqnroll server doesn't own at all) must fall through to VS
     // Code's own editor.action.rename rather than showing a Reqnroll-specific message — otherwise
@@ -418,10 +418,10 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
     },
   };
 
-  // Permanent link styling for clickable tags (issue #921); fed by the tag-link middleware below.
+  // Permanent link styling for clickable tags; fed by the tag-link middleware below.
   const tagLinkDecorations = new TagLinkDecorations().register();
   context.subscriptions.push(tagLinkDecorations);
-  // Lets the formatting middleware tell format-on-save from an explicit Format Document (issue #1132).
+  // Lets the formatting middleware tell format-on-save from an explicit Format Document.
   context.subscriptions.push(registerSaveTracking());
 
   const clientOptions: LanguageClientOptions = {
@@ -431,7 +431,7 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
     },
     outputChannel,
     traceOutputChannel: traceChannel,
-    // Transport errors are reported as client exceptions (issue #621); restart/shutdown decisions stay
+    // Transport errors are reported as client exceptions; restart/shutdown decisions stay
     // with the client's default handler.
     errorHandler: createReportingErrorHandler(() => client!.createDefaultErrorHandler()),
     // .cs sync is driven manually (see manualDocumentSync.ts) because
@@ -445,21 +445,21 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
       ...createManualSyncMiddleware(isCSharpDocument),
       ...createRenameMiddleware(() => client),
       // Format Document / Format Selection: a server rejection (-32803) is shown in a modal instead of
-      // the platform's transient error toast (issue #1132).
+      // the platform's transient error toast.
       ...createEditRejectionMiddleware(),
       // 'reqnroll.toggleComment' is registered as a VS Code command above (Ctrl+/ handler);
       // drop the server's redundant dynamic workspace/executeCommand registration for it so
       // vscode-languageclient never attempts a duplicate registerCommand call — see
       // executeCommandDedupe.ts for why that collision matters beyond just this command.
       ...createExecuteCommandDedupeMiddleware(['reqnroll.toggleComment']),
-      // The server declares codeLensProvider statically (issue #471) so a future capable client
+      // The server declares codeLensProvider statically so a future capable client
       // can use the deferred-resolve path, but that wakes up vscode-languageclient's own built-in
       // CodeLens feature alongside the hand-rolled providers below (registerStepCodeLens,
       // registerHookCodeLens), doubling every lens — see codeLensSuppression.ts.
       ...createCodeLensSuppressionMiddleware(),
-      // Clickable tags (issue #755): the built-in documentLink feature renders the server's links;
+      // Clickable tags: the built-in documentLink feature renders the server's links;
       // this re-targets each at 'reqnroll.openTagLink' so a click is observable (telemetry), and
-      // keeps the linked tags permanently underlined (issue #921).
+      // keeps the linked tags permanently underlined.
       ...createTagLinkMiddleware(tagLinkDecorations),
     },
   };
@@ -481,16 +481,16 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   statusBar = new StatusBarManager(client, appLogChannel);
   context.subscriptions.push(statusBar);
 
-  // Issue #845: server start-failure / unexpected-exit / restart telemetry. The reporter must exist
+  // Server start-failure / unexpected-exit / restart telemetry. The reporter must exist
   // before `client.start()` so a server that never comes up can still report; `registerTelemetry`
   // below reuses it. Attached before start so the first `Starting` transition is seen.
   ensureTelemetryReporter(context);
-  // Issue #875: install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
+  // Install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
   void reportExtensionLifecycle(context, sendTelemetryEvent);
   serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent);
   context.subscriptions.push(serverLifecycle);
 
-  // Issue #8 — per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't
+  // Per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't
   // depend on the LSP client, so it starts decorating already-open editors immediately.
   context.subscriptions.push(new TableHighlightService());
 
@@ -501,35 +501,34 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
         projectManager = new ProjectManager(client!);
         // Step usage count CodeLens for C# files (registered after client is running)
         registerStepCodeLens(client!, context);
-        // Hook-match count CodeLens for .feature files (issue #269)
+        // Hook-match count CodeLens for .feature files
         registerHookCodeLens(client!, context);
-        // Clickable tags (issue #755): re-request the links once discovery has made the project's tag
+        // Clickable tags: re-request the links once discovery has made the project's tag
         // patterns available - see registerTagLinkRefresh.
         context.subscriptions.push(
           registerTagLinkRefresh(getCodeLensRefreshEvent(client!, context)),
         );
-        // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
-        // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
-        // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"
-        // action and a later vscode.TestController migration were both tried and reverted here.
+        // No run/test mechanism of our own: C# Dev Kit already provides gutter run/debug and Test
+        // Explorer integration for Reqnroll-generated methods, mapped back to the .feature file via
+        // Reqnroll's own #line pragmas.
         // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
         // above) instead of relying on vscode-languageclient's built-in sync feature.
         context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
         // Forward server-emitted telemetry/event notifications to Application Insights.
         registerTelemetry(client!, context);
-        // LSP-server outcome pipeline (#700/#702), opt-in via reqnroll.testOutcomes.enabled —
+        // LSP-server outcome pipeline, opt-in via reqnroll.testOutcomes.enabled —
         // registers this session with the server and merges the bundled VSTest logger into
         // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
         // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
         // blocks activation, and every failure degrades silently (see the module's own doc comment).
         void activateTestOutcomes(context, client!);
         // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
-        // doc comment for why it carries no real Run/Debug action (issue #504).
+        // doc comment for why it carries no real Run/Debug action.
         registerTestOutcomeCodeLens(client!, projectManager, context);
       },
       // Second argument of then(), not a trailing catch(): only a rejected start() is a server start
       // failure. A throw in the success handler above (CodeLens registration etc.) happens after a
-      // successful start and must not be reported as ServerStartFailed (issue #845).
+      // successful start and must not be reported as ServerStartFailed.
       (err: unknown) => {
         serverLifecycle?.reportStartRejected();
         throw err;
@@ -547,13 +546,13 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
 export function deactivate(): Thenable<void> | undefined {
   projectManager?.dispose();
   setAppLogChannel(undefined);
-  // Deliberate stop: the resulting `Stopped` is not an unexpected server exit (issue #845).
+  // Deliberate stop: the resulting `Stopped` is not an unexpected server exit.
   serverLifecycle?.markIntentionalStop();
   const stopping = client?.stop();
   if (!stopping) return undefined;
   // The server's shutdown-time telemetry (final FeatureUsageSummary, ServerSessionEnded) arrives while
   // stop() is in flight, but VS Code disposes the subscriptions holding the telemetry forwarder and
-  // reporter as soon as this function returns; hold their disposal until stop() has settled (#845).
+  // reporter as soon as this function returns; hold their disposal until stop() has settled.
   deferTelemetryTeardownUntil(stopping);
   return stopping.finally(() => drainTelemetryTeardown());
 }

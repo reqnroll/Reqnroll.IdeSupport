@@ -1,6 +1,6 @@
 /**
- * Reduces a JavaScript `Error.stack` to a privacy-safe, bounded attribution string (issue #1199), the
- * TypeScript counterpart of the server's `ExceptionStackSanitizer` (issue #620) and so the same
+ * Reduces a JavaScript `Error.stack` to a privacy-safe, bounded attribution string, the
+ * TypeScript counterpart of the server's `ExceptionStackSanitizer` and so the same
  * `StackFrames` contract: innermost frame first, one frame per line, at most {@link MAX_FRAMES} entries and
  * {@link MAX_LENGTH} characters, and only the extension's *own* code is named.
  *

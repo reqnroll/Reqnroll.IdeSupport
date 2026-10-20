@@ -7,11 +7,11 @@ import { resolveLogDirectory } from '../logging/logPaths';
  * A file-only sink for the LSP wire trace, shaped as a `vscode.LogOutputChannel` so it can be
  * handed to vscode-languageclient as its `traceOutputChannel`.
  *
- * Why this class exists at all (issue #792 removed the visible "Reqnroll LSP Trace" Output pane,
- * not the trace): `traceOutputChannel` is vscode-languageclient's only hook for receiving the
+ * Why this class exists at all (the wire trace goes to a file; there is no visible
+ * "Reqnroll LSP Trace" Output pane): `traceOutputChannel` is vscode-languageclient's only hook for receiving the
  * per-message trace, and it insists on a `LogOutputChannel` � there is no "write the trace to this
  * file" option. Passing nothing would make the client create its own visible "... Trace" pane
- * (which is what #792 removed), and passing a plain object would not type-check. So this class
+ * (which this extension deliberately does not show), and passing a plain object would not type-check. So this class
  * implements that interface, keeps the one method the client feeds (`trace()`) and the level
  * plumbing it reads (`logLevel`/`onDidChangeLogLevel`), and turns every display-oriented member
  * (`append`, `show`, `info`, ...) into a deliberate no-op. Nothing is ever shown in the Output
@@ -24,9 +24,9 @@ import { resolveLogDirectory } from '../logging/logPaths';
  *   (see refreshTrace in its client.js): logLevel !== Trace collapses straight
  *   to Trace.Off, bypassing the `reqnroll.trace.server` setting entirely;
  *   anything else lets that setting pick Messages/Verbose. logLevel must
- *   therefore mirror the same setting `createTraceChannel` used to decide
+ *   therefore mirror the same setting `createTraceChannel` uses to decide
  *   whether to allocate this channel in the first place — hardcoding it to
- *   Trace (as this class used to) meant vscode-languageclient always sent at
+ *   Trace would make vscode-languageclient always send at
  *   least `trace: "messages"` in InitializeParams and via $/setTrace on
  *   config changes, even when the user had chosen "off".
  *
@@ -130,7 +130,7 @@ interface LspEntry {
   // file's "traceId" field: it reads a top-level "traceparent" property that only Visual Studio's
   // own Language Server Client platform ever stamps onto outgoing requests — nothing in
   // vscode-languageclient or this extension's own code ever writes one, so there is nothing for
-  // this side to extract (issue #633).
+  // this side to extract.
   latencyMs?: number;
 }
 
@@ -181,7 +181,7 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
  * 'method - (id)'.") and optionally a body ("Params: {...}").  vscode-languageclient
  * joins them with \n before calling channel.trace(), so we receive the combined text.
  */
-// Exported for lspInspectorFormatConformance.test.ts (issue #628) - not used outside this module
+// Exported for lspInspectorFormatConformance.test.ts - not used outside this module
 // in production, but the cross-language wire-format check needs direct access to the parsed
 // envelope rather than going through the full FileLspTraceChannel/file-write path.
 export function parseLspTraceMessage(text: string): LspEntry | undefined {
@@ -268,7 +268,7 @@ export function traceServerToLogLevel(): 'Warning' | 'Info' | 'Verbose' {
  * argument, so VS Code users can control OmniSharp's own internal protocol diagnostics
  * (request dispatch, DryIoc, JSON-RPC plumbing) independently of `reqnroll.trace.server`.
  * Mirrors `traceServerToLogLevel()`: `reqnroll.trace.server` drives the server's `--log-level`,
- * and this setting drives the separate `--protocol-log-level` dial (issue #665).
+ * and this setting drives the separate `--protocol-log-level` dial.
  */
 export function protocolLogLevelToArg(): 'Off' | 'Error' | 'Warning' | 'Info' | 'Verbose' {
   const level = vscode.workspace
@@ -294,7 +294,7 @@ export function protocolLogLevelToArg(): 'Off' | 'Error' | 'Warning' | 'Info' | 
  * is persisted in lsp-viewer format.
  *
  * No user-visible Output panel is created — the log file is the only trace
- * artifact.  The "Reqnroll LSP Trace" pane was removed per issue #792.
+ * artifact.
  */
 export function createTraceChannel(): vscode.LogOutputChannel {
   const level = vscode.workspace.getConfiguration('reqnroll').get<string>('trace.server', 'off');

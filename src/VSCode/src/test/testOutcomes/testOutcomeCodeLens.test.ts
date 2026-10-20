@@ -213,7 +213,7 @@ suite('testOutcomeCodeLens', () => {
     });
   });
 
-  // ── buildTooltip (issue #723: lens hover showed nothing — same bug as VS's 4bdefaf5) ─────────
+  // ── buildTooltip (an unset lens hover shows nothing, as on the VS side) ─────────
 
   suite('buildTooltip', () => {
     test('is undefined for a passing, non-stale outcome', () => {

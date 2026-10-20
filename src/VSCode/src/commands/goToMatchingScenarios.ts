@@ -17,11 +17,10 @@ interface MatchingScenarioLocation {
 }
 
 /**
- * Implements the hook-match-count CodeLens's click action (issue #373): queries the server for
+ * Implements the hook-match-count CodeLens's click action: queries the server for
  * every scenario the hook binding at `uri`/`line`/`char` matches and shows a `QuickPick` to
  * navigate to one — always, even for a single match, matching `doFindStepUsages`'s behavior
- * (issue #373 follow-up: an earlier version auto-navigated on exactly one match, which was
- * inconsistent with the step-usages lens).
+ * (consistent with the step-usages lens, rather than auto-navigating on exactly one match).
  *
  * Unlike `doGoToHooks`, this is only ever invoked from a CodeLens click (the lens's own attribute
  * location is round-tripped verbatim as the command's arguments) — there's no command-palette/
@@ -60,7 +59,7 @@ export async function doGoToMatchingScenarios(
   }));
 
   // Singular/plural wording matches the VS and Rider clients' equivalent surfaces verbatim
-  // ("1 matching scenario" / "N matching scenarios") — previously always plural here, which read
+  // ("1 matching scenario" / "N matching scenarios") — always plural would read
   // as "1 matching scenarios" for a single match.
   const count = response.scenarios.length;
   const placeHolder =

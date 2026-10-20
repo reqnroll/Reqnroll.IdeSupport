@@ -70,8 +70,8 @@ suite('goToMatchingScenarios', () => {
     });
 
     test('shows a QuickPick with singular wording for exactly one matching scenario', async () => {
-      // Matches the VS and Rider clients' equivalent surfaces verbatim ("1 matching scenario") —
-      // previously always read "1 matching scenarios" here (issue: wording unification).
+      // Matches the VS and Rider clients' equivalent surfaces verbatim ("1 matching scenario"),
+      // not "1 matching scenarios".
       const client = fakeClient(() =>
         Promise.resolve({
           scenarios: [

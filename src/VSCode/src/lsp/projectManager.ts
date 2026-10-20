@@ -111,32 +111,22 @@ const defaultDeps: ProjectManagerDeps = {
  *     own `workspace/didChangeWorkspaceFolders` LSP notification is already sent automatically
  *     by vscode-languageclient's WorkspaceFoldersFeature; this only covers *our* project
  *     discovery, which the library has no knowledge of).
- * v5 (added, then reverted — see below): forwarded output-assembly (re)build events to the server
- *     as a client-side `RelativePattern(outputDir, '*.dll')` watcher per project, sending a
- *     synthetic `workspace/didChangeWatchedFiles` notification directly. This was added by PR #26
- *     to fix issue #2 (a project registered before its first `dotnet build` — DLL missing —
- *     permanently failed Connector-based binding discovery with no retry), on the assumption that
- *     the server's own standard dynamic registration for `**\/bin/**\/*.dll`
- *     (`WatchedFilesHandler.cs`) wasn't reliably delivered by `vscode-languageclient`'s generic
- *     `FileSystemWatcherFeature` — specifically that VS Code's `files.watcherExclude` (which many
- *     users add for `bin/`/`obj/`) suppresses it.
- *
- *     Issue #31 (Q9) investigated that assumption directly. Two findings: (1) `files.watcherExclude`
- *     covering `bin/` does suppress *any* `createFileSystemWatcher`-based approach, including this
- *     client-side glue — narrowing the glob doesn't route around it, so the glue provided no
- *     resilience against the one confirmed failure mode. (2) Issue #2's original symptom does not
- *     reproduce today: an Extension-Host recreation (a real, unbuilt project registered before its
- *     first build, then built) recovered correctly with this client-side glue *disabled* — the
- *     canonical path (server dynamic registration + `vscode-languageclient`'s own watcher) is
- *     sufficient on its own under default settings. Confirmed again in live manual testing (real
- *     `dotnet build`s against a real multi-project solution, one incremental and one full/clean
- *     rebuild producing 150+ dependency-DLL noise) — both correctly detected and filtered by the
- *     server using canonical registration alone, per the server's own file log
- *     (`HandleOutputAssemblyChange: ... triggering discovery for '<project>'`). This class was
- *     reverted to that canonical path; VS's `VsProjectEventMonitor` doesn't need any of this — it
- *     hooks `DTE.Events.BuildEvents.OnBuildDone` directly.
+ * No client-side output-assembly watcher: a `RelativePattern(outputDir, '*.dll')` watcher per
+ *     project that sent a synthetic `workspace/didChangeWatchedFiles` notification would not make
+ *     binding discovery any more reliable, so output-assembly (re)build events reach the server
+ *     only through its own standard dynamic registration for `**\/bin/**\/*.dll`
+ *     (`WatchedFilesHandler.cs`) and `vscode-languageclient`'s generic `FileSystemWatcherFeature`.
+ *     Two facts support this. (1) `files.watcherExclude` covering `bin/` (which many users add)
+ *     suppresses *any* `createFileSystemWatcher`-based approach, client-side glue included, and
+ *     narrowing the glob does not route around it. (2) A project registered before its first
+ *     `dotnet build` (DLL missing) is still discovered correctly once it is built, with the
+ *     canonical registration alone under default settings; a real multi-project solution with
+ *     incremental and full/clean rebuilds (150+ dependency-DLL changes) was correctly detected and
+ *     filtered by the server (`HandleOutputAssemblyChange: ... triggering discovery for
+ *     '<project>'` in its file log). VS's `VsProjectEventMonitor` needs no equivalent: it hooks
+ *     `DTE.Events.BuildEvents.OnBuildDone` directly.
  * v6: re-registers every project when vscode-languageclient restarts a crashed server on the same
- *     client (issue #997) — the new server starts with no project state; see {@link onServerRestarted}.
+ *     client — the new server starts with no project state; see {@link onServerRestarted}.
  */
 export class ProjectManager {
   private readonly _client: LanguageClient;
@@ -146,7 +136,7 @@ export class ProjectManager {
   private readonly _outputAssemblyPaths = new Map<string, string>();
   private readonly _resendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private _disposables: vscode.Disposable[] = [];
-  /** Bumped on each server restart; work started under an older value must not send (issue #997). */
+  /** Bumped on each server restart; work started under an older value must not send. */
   private _serverGeneration = 0;
   /**
    * Projects whose first registration is in flight, with the generation it runs under. `registerProject`
@@ -168,7 +158,7 @@ export class ProjectManager {
     this._watcher.onDidCreate((uri) => void this.onProjectCreated(uri));
     // Editing a .csproj (TFM, package references, Include/Remove globs, linked files) changes
     // what belongs to the project, so re-evaluate it through the same debounced resend path the
-    // .cs/.feature watcher uses below (issue #1009).
+    // .cs/.feature watcher uses below.
     this._watcher.onDidChange((uri) => this.scheduleResend(uri));
     this._watcher.onDidDelete((uri) => void this.onProjectDeleted(uri));
 
@@ -187,7 +177,7 @@ export class ProjectManager {
       ),
     );
 
-    // A restarted server knows nothing the old one was told; re-prime it (issue #997).
+    // A restarted server knows nothing the old one was told; re-prime it.
     this._disposables.push(onServerRestarted(client, () => this.onServerRestarted()));
 
     // Discover any projects already present in the workspace
@@ -201,7 +191,7 @@ export class ProjectManager {
 
   /**
    * The last MSBuild-evaluated output assembly path for `projectFile` (LSP-server outcome
-   * pipeline, #700/#702) — the same value already sent to the server as
+   * pipeline) — the same value already sent to the server as
    * `reqnroll/projectLoaded`'s `outputAssemblyPath`, cached here so a client-side consumer (the
    * test-outcome CodeLens) doesn't re-run MSBuild evaluation itself. `undefined` before the
    * project's first successful evaluation, or if MSBuild was unavailable for it (v1 compat path).
@@ -287,7 +277,7 @@ export class ProjectManager {
 
   /**
    * Clears any pending debounced membership resend queued for `projectFile`, if one is queued.
-   * Used on unregister (issue #1010) so a timer armed before the project was removed can't fire
+   * Used on unregister so a timer armed before the project was removed can't fire
    * afterwards and re-announce it; also used by {@link scheduleResend} to coalesce a burst.
    */
   private clearResendTimer(projectFile: string): void {
@@ -327,7 +317,7 @@ export class ProjectManager {
     // A debounce timer may fire — or a resend may still be in flight — after the project was
     // unregistered or the manager was disposed. Never re-announce a project that is no longer
     // known: `sendProjectLoaded` sends even when MSBuild evaluation fails, so without this the
-    // removed project would be resurrected on the server's side (issue #1010).
+    // removed project would be resurrected on the server's side.
     if (!this._knownProjects.has(projectFile)) return;
 
     const generation = this._serverGeneration;
@@ -482,7 +472,7 @@ export class ProjectManager {
     if (!this._knownProjects.has(projectFile)) return;
 
     // Cancel any debounced membership resend queued for this project so a timer armed before
-    // the unload can't fire afterwards and re-announce the removed project (issue #1010).
+    // the unload can't fire afterwards and re-announce the removed project.
     this.clearResendTimer(projectFile);
 
     const params = { projectFile };

@@ -8,7 +8,7 @@ const LEVEL_FIELD_WIDTH = 7; // width of "Warning" - the longest level name used
 /**
  * Renders one log line's preamble + message (excluding the trailing newline) — the portable
  * subset of `Reqnroll.IdeSupport.Common.Logging.LogLineFormatter.FormatPreamble` shared with the
- * .NET side and the Rider plugin's `ReqnrollDebugLogger.formatLine` (issue #626): UTC timestamp,
+ * .NET side and the Rider plugin's `ReqnrollDebugLogger.formatLine`: UTC timestamp,
  * a level padded to a fixed width, then the message. No thread id (Node has none worth reporting)
  * and no source/caller segment (VS Code's LogOutputChannel API doesn't hand the call site to a
  * `debug()`/`info()`/`warn()`/`error()` call the way C#'s `[CallerFilePath]` does for free).
@@ -21,10 +21,10 @@ export function formatLine(level: string, message: string): string {
  * A VS Code LogOutputChannel that tees debug/info/warn/error entries to a file in the shared
  * Reqnroll log directory, alongside the Output panel.
  *
- * Closes a real gap (issue #626): VS's SynchronousFileLogger and Rider's ReqnrollDebugLogger both
+ * Closes a real gap: VS's SynchronousFileLogger and Rider's ReqnrollDebugLogger both
  * give client diagnostics a durable, general-purpose log file, but VS Code's own general
- * "Reqnroll LSP" output channel previously only reached the Output panel — gone the moment the
- * window closed, unlike its two sibling IDEs.
+ * "Reqnroll LSP" output channel otherwise only reaches the Output panel — gone the moment the
+ * window closes, unlike its two sibling IDEs.
  *
  * trace() is deliberately NOT teed here — that's the LSP wire-message stream, already captured
  * separately by `lspInspectorLogger.ts`'s own file tee in lsp-viewer format.
@@ -98,7 +98,7 @@ export class GeneralFileLogChannel implements vscode.LogOutputChannel {
   show(preserveFocus?: boolean): void;
   show(column?: vscode.ViewColumn, preserveFocus?: boolean): void;
   show(colOrFocus?: vscode.ViewColumn | boolean, focus?: boolean): void {
-    // Forward the caller's intent instead of unconditionally focusing (issue #1000): a bare
+    // Forward the caller's intent instead of unconditionally focusing: a bare
     // show() (the `reqnroll.showOutputChannel` command) focuses, while show(true) — used for
     // auto-reveal on warn/error — reveals the panel without stealing focus.
     if (typeof colOrFocus === 'boolean') {
@@ -119,7 +119,7 @@ export class GeneralFileLogChannel implements vscode.LogOutputChannel {
   }
 
   /**
-   * Reveals the panel on the *first* warn/error of the session, then stays quiet (issue #1000) —
+   * Reveals the panel on the *first* warn/error of the session, then stays quiet —
    * matching the documented behaviour and the VS side's `VsOutputPaneLogger.ShouldActivate`. Uses
    * show(true) so the reveal preserves the editor focus the user is typing in.
    */
@@ -143,9 +143,9 @@ export interface GeneralLogChannelOptions {
   /** Distinguishes this channel's log file from other `createGeneralLogChannel` channels — see the file-path doc below. Defaults to `'ext'`. */
   filePrefix?: string;
   /**
-   * Auto-reveals the Output panel on this channel's first warn()/error() call in a session
-   * (issue #661), mirroring `VsOutputPaneLogger.ShouldActivate` on the VS side (PR #656/#651).
-   * The reveal preserves focus (issue #1000) so it never interrupts typing.
+   * Auto-reveals the Output panel on this channel's first warn()/error() call in a session,
+   * mirroring `VsOutputPaneLogger.ShouldActivate` on the VS side.
+   * The reveal preserves focus so it never interrupts typing.
    */
   autoShowOnWarnOrError?: boolean;
 }

@@ -364,7 +364,7 @@ suite('ProjectManager', () => {
               countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) === 1,
           );
 
-          // The bug (issue #1009): no onDidChange handler is wired for project/solution files,
+          // The bug: no onDidChange handler is wired for project/solution files,
           // so editing the .csproj sends nothing and the server's membership/binding data for
           // this project stays stale until some other event or a window reload.
           fireChange(uri);
@@ -417,7 +417,7 @@ suite('ProjectManager', () => {
     });
   });
 
-  // Issue #997: vscode-languageclient restarts a crashed server on the same LanguageClient
+  // vscode-languageclient restarts a crashed server on the same LanguageClient
   // (Running -> Stopped -> Starting -> Running), so the new server must be re-sent project state.
   suite('server restart (issue #997)', () => {
     const managers: ProjectManager[] = [];
@@ -603,7 +603,7 @@ suite('ProjectManager', () => {
 });
 
 /**
- * Regression tests for issue #1010: a debounced membership resend — or a resend that is already
+ * Regression tests: a debounced membership resend — or a resend that is already
  * in flight — must never re-announce a project after it has been unregistered, and a pending
  * timer must not fire after the manager has been disposed. `resendProjectFiles` calls
  * `sendProjectLoaded`, which sends even when MSBuild evaluation fails, so without a guard the
@@ -622,7 +622,7 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
 
   function makeManager(sent: SentNotification[]): ProjectManager {
     // The manager only calls `sendNotification` plus the `state`/`onDidChangeState` pair that
-    // `onServerRestarted` reads on construction (issue #997), so a minimal stub is enough.
+    // `onServerRestarted` reads on construction, so a minimal stub is enough.
     const client = {
       state: State.Running,
       onDidChangeState: () => ({ dispose: () => undefined }),

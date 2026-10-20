@@ -30,7 +30,7 @@ interface RenameTargetsResponse {
  * older server that doesn't implement it) — in either case the caller falls back to the normal
  * `prepareRename` flow.
  *
- * `requireAttributeLine` (issue #506): pass `true` for the F2-bound dispatcher, which must not
+ * `requireAttributeLine`: pass `true` for the F2-bound dispatcher, which must not
  * steal an ordinary C# rename-symbol away from a method or local identifier. Without it, the
  * server also matches a cursor anywhere on the bound method's declaration line (not just within
  * the binding attribute itself) — the correct, deliberately loose behavior for the explicit
@@ -97,7 +97,7 @@ export function selectRenameTarget(
     attributeIndex,
     // The position the picker was invoked at, so the server can resolve `attributeIndex` to the
     // binding it denotes while that candidate list is still current, rather than carrying a bare
-    // index across the rename prompt and re-applying it to a list rebuilt later (issue #671, R5).
+    // index across the rename prompt and re-applying it to a list rebuilt later.
     position: { line: position.line, character: position.character },
   });
 }
@@ -105,11 +105,11 @@ export function selectRenameTarget(
 /**
  * Reports whether this client applied the `WorkspaceEdit` returned from `textDocument/rename`, so
  * the server can commit — or drop — the binding-registry and match-cache updates it staged for that
- * rename (issue #671, R3; see `RenamePostApplyCoordinator`).
+ * rename (see `RenamePostApplyCoordinator`).
  *
- * The server used to commit those updates unconditionally for every non-Visual-Studio client, on
- * the assumption the client would apply what it was handed. Rider disproved that (issue #670), and
- * the same exposure exists here now that edits are version-stamped (R2) and VS Code rejects ones
+ * The server must not commit those updates unconditionally for non-Visual-Studio clients: a client
+ * may not apply what it was handed (Rider does not always), and
+ * the same exposure exists here now that edits are version-stamped and VS Code rejects ones
  * computed against a superseded document version.
  *
  * Failures are swallowed deliberately: a dropped confirmation costs a stale registry entry that the
@@ -128,7 +128,7 @@ export function reportRenameApplied(
 
 /**
  * Collapses the active editor's text selection to a plain cursor before a `.feature` step rename
- * is invoked (issue #456). Must run BEFORE `editor.action.rename` starts — see the call site in
+ * is invoked. Must run BEFORE `editor.action.rename` starts — see the call site in
  * `extension.ts`'s `reqnroll.renameStep` command, not inside the `prepareRename` middleware below.
  *
  * For a `.feature`-triggered rename, `StepRenameHandler.HandlePrepareRenameAsync` seeds the
@@ -148,8 +148,8 @@ export function reportRenameApplied(
  * live, that case already selects the whole placeholder, the correct/intended default.
  *
  * Rather than changing what `Placeholder` contains (which would fix the highlight at the cost of
- * exposing raw parameter values in the common, already-correct no-selection case — see the design
- * discussion on issue #456), collapse the pre-existing selection to the cursor right before
+ * exposing raw parameter values in the common, already-correct no-selection case), collapse the
+ * pre-existing selection to the cursor right before
  * `editor.action.rename` runs, so VS Code takes its own safe "no selection" path for a `.feature`
  * step specifically. A no-op for `.cs` files (and when there's no active selection), where the
  * preserved-selection behavior is already correct.
@@ -215,18 +215,19 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
       return next(document, position, token);
     },
 
-    // Confirms the staged server-side cache updates for a `.feature` rename (issue #671, R3).
+    // Confirms the staged server-side cache updates for a `.feature` rename.
     // Unlike `renameStepFromCSharp`, this path hands the edit back to VS Code, which applies it
     // itself — there is no `applyEdit` boolean to report back.
     //
-    // Now that edits carry real document versions (R2), VS Code rejects one computed against a
+    // Edits carry real document versions, so VS Code rejects one computed against a
     // superseded version, so "we produced an edit" is no longer the same as "it was applied".
     // `TextDocument.version` is the very counter `vscode-languageclient` reports to the server as
     // the LSP document version, so comparing it across the request reproduces the decision VS Code
-    // is about to make. Reporting `true` regardless would reintroduce #670 on this path.
+    // is about to make. Reporting `true` regardless would let the server commit registry updates for an edit that was
+    // never applied.
     //
     // Covers the invoked document only — the one whose version the user can plausibly move during
-    // the round trip. That matches the guard Rider applies (R4) and the window it protects: the
+    // the round trip. That matches the guard Rider applies and the window it protects: the
     // server computes the edit inside a Serial-dispatched request, so any edit made while the
     // rename UI was open is already reflected in the offsets.
     provideRenameEdits: async (document, position, newName, token, next) => {
@@ -237,7 +238,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
         edit = await next(document, position, newName, token);
       } catch (err) {
         // A server rejection (-32803) is shown in a modal and resolves to "no edit" so VS Code does
-        // not also show its own error toast; anything else is rethrown (issue #1132).
+        // not also show its own error toast; anything else is rethrown.
         return rejectedOrRethrow<vscode.WorkspaceEdit>(err);
       }
 
@@ -257,7 +258,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
 /**
  * Splits a `reqnroll/renameTargets` label of the form `"Given step text"` at the first space,
  * returning everything after the keyword prefix — the fallback source text for the rename input
- * box when `RenameTargetItem.expression` is empty (method-name-style bindings, issue #344).
+ * box when `RenameTargetItem.expression` is empty (method-name-style bindings).
  * Mirrors `RenameStepLabelParser.ExtractStepTextFromLabel` in the Visual Studio extension.
  */
 export function extractStepTextFromLabel(label: string): string {
@@ -267,7 +268,7 @@ export function extractStepTextFromLabel(label: string): string {
 }
 
 /**
- * Runs the Step Rename refactoring from a `.cs` binding attribute (issue #457).
+ * Runs the Step Rename refactoring from a `.cs` binding attribute.
  *
  * VS Code's built-in rename UI can't be reused here the way it is for `.feature` files: the
  * language client's `documentSelector` deliberately excludes `csharp` (its `.cs` sync is driven
@@ -279,7 +280,7 @@ export function extractStepTextFromLabel(label: string): string {
  * step text with a plain input box pre-filled with the current expression, then send
  * `textDocument/rename` directly and apply the resulting `WorkspaceEdit` ourselves.
  *
- * `fallbackToNativeRename` (issue #506): when set, a miss at the cursor — not on a binding
+ * `fallbackToNativeRename`: when set, a miss at the cursor — not on a binding
  * expression, or not even a Reqnroll-owned file — delegates to VS Code's own `editor.action.rename`
  * instead of showing "No step definition found". This is what the F2 keybinding needs: F2 has to
  * work as an ordinary C# rename everywhere else in a `.cs` file (locals, methods, non-Reqnroll
@@ -329,10 +330,10 @@ export async function renameStepFromCSharp(
     });
   } catch (err) {
     // The server rejects an invalid/unmatchable rename with a real JSON-RPC error response
-    // (issue #650) instead of a null result — sendRequest rejects the promise with a ResponseError
+    // instead of a null result — sendRequest rejects the promise with a ResponseError
     // in that case (confirmed in vscode-jsonrpc's connection.js) rather than resolving to null.
     // A user-correctable rejection (-32803) carries a reason meant to be shown verbatim, in a
-    // modal (issue #1132); any other failure is unexpected, so log it and show only a generic message.
+    // modal; any other failure is unexpected, so log it and show only a generic message.
     const rejection = asEditRejection(err);
     if (rejection !== undefined) {
       void showEditRejected(rejection);

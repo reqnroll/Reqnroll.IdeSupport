@@ -4,7 +4,7 @@ import { getCodeLensRefreshEvent } from './codeLensRefresh';
 import { REQNROLL_LANGUAGE_ID } from '../languageIds';
 
 /**
- * Registers the hook-match-count CodeLens provider for `.feature` files (issue #269), querying
+ * Registers the hook-match-count CodeLens provider for `.feature` files, querying
  * the server via `textDocument/codeLens` (the same request `registerStepCodeLens` uses for `.cs`
  * files — the server tells the two apart by URI extension and returns lenses for whichever one
  * applies) and refreshing lenses via the shared `workspace/codeLens/refresh` listener (see
