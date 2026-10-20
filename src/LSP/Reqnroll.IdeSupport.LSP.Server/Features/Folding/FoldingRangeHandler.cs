@@ -55,7 +55,7 @@ public sealed class FoldingRangeHandler
 
         _logger.LogInfo($"Code Folding textDocument/foldingRange: {request.TextDocument.Uri}");
 
-        // foldingRange has no LSP refresh capability (issue #471) -- unlike codeLens/semanticTokens/
+        // foldingRange has no LSP refresh capability -- unlike codeLens/semanticTokens/
         // inlayHint, a stale/empty answer here can never be corrected by the server later, so this
         // must wait for any parse the sync handler handed off to IParseCoordinator instead
         // of reading buffer.Tags out from under it.

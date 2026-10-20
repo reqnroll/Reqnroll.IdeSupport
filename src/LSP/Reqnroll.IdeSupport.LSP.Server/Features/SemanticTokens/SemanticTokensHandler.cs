@@ -47,7 +47,7 @@ public class SemanticTokensHandler
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): close the gap between the asserted 100ms synthetic
-        // target and real-world field data — this operation had none before issue #113.
+        // target and real-world field data.
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentSemanticTokensFull, uri);
 
         if (!IsFeatureFile(uri)) return EmptyTokens;

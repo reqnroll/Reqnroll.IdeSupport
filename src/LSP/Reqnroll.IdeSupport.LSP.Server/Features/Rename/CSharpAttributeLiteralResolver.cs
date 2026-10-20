@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Locates and rewrites a step-definition binding's C# attribute string literal via Roslyn.
-/// Extracted from <see cref="RenameHandler"/> (issue #139) as a self-contained module —
+/// A self-contained module used by <see cref="RenameHandler"/> —
 /// "given a binding, find or rewrite its attribute literal" — with no feature-file concerns.
 /// </summary>
 internal sealed class CSharpAttributeLiteralResolver
@@ -94,11 +94,11 @@ internal sealed class CSharpAttributeLiteralResolver
         var startPos = lineSpan.StartLinePosition;
         var endPos   = lineSpan.EndLinePosition;
 
-        // Re-emit the literal in the form it was written in (issue #935): a verbatim literal
+        // Re-emit the literal in the form it was written in: a verbatim literal
         // keeps its @" prefix (and quotes inside are doubled), a regular literal re-escapes
         // backslashes and quotes. Emitting a bare "..." over the token's full span (which
-        // includes the @ prefix) dropped the prefix - turning @"^I have (\\d+) cukes$" into an
-        // invalid-escape compile error - and emitted escaped quotes unescaped, corrupting
+        // includes the @ prefix) would drop the prefix - turning @"^I have (\\d+) cukes$" into an
+        // invalid-escape compile error - and emit escaped quotes unescaped, corrupting
         // literals like "click \"OK\"". The replaced span is the whole token, so the emitted
         // text must include the @ prefix itself.
         var isVerbatim = literalArgument.Token.Text.StartsWith("@\"", StringComparison.Ordinal);
@@ -130,11 +130,11 @@ internal sealed class CSharpAttributeLiteralResolver
     /// formula <see cref="Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp.StepDefinitionFileParser"/>
     /// used to populate it), that line is matched exactly first — unambiguous even when a method
     /// carries several same-type attributes, which a "nearest method" search alone cannot
-    /// distinguish (the same bug class fixed for the rename-targets picker in
-    /// <see cref="RenameBindingResolver.FindBindingsAtCSharpMethod"/>, #170). Only when no exact
+    /// distinguish (the same problem the rename-targets picker solves in
+    /// <see cref="RenameBindingResolver.FindBindingsAtCSharpMethod"/>). Only when no exact
     /// match is found (a stale build's recorded line has drifted from the live buffer, or the
     /// binding is connector-discovered and never carried an attribute line at all) does this fall
-    /// back to the previous "nearest candidate method" tolerance.
+    /// back to a "nearest candidate method" tolerance.
     /// </remarks>
     public async Task<LiteralExpressionSyntax?> FindAttributeLiteralAsync(
         DocumentUri uri,
@@ -144,7 +144,7 @@ internal sealed class CSharpAttributeLiteralResolver
     /// <summary>
     /// The outcome of <see cref="ResolveAttributeLiteralAsync"/>: the attribute literal to rewrite,
     /// or <see langword="null"/>. <see cref="IsAmbiguous"/> distinguishes "the method carries
-    /// several matching attributes and none can be identified as this binding's" (issue #940) —
+    /// several matching attributes and none can be identified as this binding's" —
     /// which a rename must refuse rather than guess at — from "no literal found".
     /// </summary>
     public readonly record struct AttributeLiteralResolution(LiteralExpressionSyntax? Literal, bool IsAmbiguous)
@@ -157,7 +157,7 @@ internal sealed class CSharpAttributeLiteralResolver
 
     /// <summary>
     /// Same as <see cref="FindAttributeLiteralAsync"/>, but reports when the literal could not be
-    /// chosen among several same-type attributes on the binding's method (issue #940), so the
+    /// chosen among several same-type attributes on the binding's method, so the
     /// rename can fail with an explanation instead of rewriting an attribute that may not be this
     /// binding's.
     /// </summary>
@@ -165,7 +165,7 @@ internal sealed class CSharpAttributeLiteralResolver
         DocumentUri uri,
         ProjectStepDefinitionBinding binding)
     {
-        // A method-name-style binding (issue #344) has no string-literal attribute argument
+        // A method-name-style binding has no string-literal attribute argument
         // anywhere, by definition — [Given] with no expression. Without this early exit,
         // FindAttributeLiteral's "nearest candidate method" fallback below has nothing of this
         // binding's own to find and silently snaps to a geometrically nearby *unrelated* method
@@ -192,9 +192,9 @@ internal sealed class CSharpAttributeLiteralResolver
             return AttributeLiteralResolution.NotFound;
         }
 
-        // Cached across calls within the same rename operation (issue #491): a method carrying
-        // several step-definition attributes resolves each one through this same call, which used
-        // to re-parse the file from scratch every time. GetOrParse's text-equality check keeps
+        // Cached across calls within the same rename operation: a method carrying
+        // several step-definition attributes resolves each one through this same call, and
+        // re-parsing the file from scratch every time is wasteful. GetOrParse's text-equality check keeps
         // this correct against a concurrent edit to the same file.
         var rootNode = _syntaxTreeCache.GetOrParse(csPath, fileText);
         var tree = rootNode.SyntaxTree;
@@ -278,12 +278,12 @@ internal sealed class CSharpAttributeLiteralResolver
     /// Finds the literal to rewrite within an already-parsed tree: an exact
     /// <see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/> match first (unambiguous
     /// even when a method carries several same-type attributes, which a "nearest method" search
-    /// alone cannot distinguish — the same bug class fixed for the rename-targets picker in
-    /// <see cref="RenameBindingResolver.FindBindingsAtCSharpMethod"/>, #170), falling back to the
+    /// alone cannot distinguish — the same problem the rename-targets picker solves in
+    /// <see cref="RenameBindingResolver.FindBindingsAtCSharpMethod"/>), falling back to the
     /// nearest candidate method when no exact match is found (a stale build's recorded line has
     /// drifted from the live buffer, or the binding is connector-discovered and never carried an
     /// attribute line at all). Either way, the method's attribute literals are then narrowed by
-    /// <see cref="SelectAmongMethodLiterals"/> (issue #940).
+    /// <see cref="SelectAmongMethodLiterals"/>.
     /// </summary>
     private AttributeLiteralResolution FindAttributeLiteral(
         SyntaxTree tree, SyntaxNode rootNode, ProjectStepDefinitionBinding binding)
@@ -329,8 +329,8 @@ internal sealed class CSharpAttributeLiteralResolver
     /// <summary>
     /// Picks which of one method's same-type attribute literals belongs to <paramref name="binding"/>,
     /// refusing (<see cref="AttributeLiteralResolution.Ambiguous"/>) rather than guessing when the
-    /// evidence does not single one out (issue #940). It used to fall back to the method's first
-    /// literal, which rewrote the wrong attribute whenever the registry expression did not equal the
+    /// evidence does not single one out. Falling back to the method's first
+    /// literal would rewrite the wrong attribute whenever the registry expression does not equal the
     /// binding's own literal.
     /// </summary>
     /// <remarks>
@@ -340,9 +340,9 @@ internal sealed class CSharpAttributeLiteralResolver
     /// <item>A literal whose text equals the registry expression identifies the binding. When
     /// <paramref name="lineMatch"/> (the literal on the binding's
     /// <see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/>) is not among those, the text
-    /// wins: a binding whose attribute line was backfilled from an older registry (the backfill used to
-    /// give every binding on a method the FIRST matching attribute's line) cannot be told apart by that
-    /// line. <c>BindingImporter.TryGetAttributeSourceLine</c> now picks the attribute by the binding's
+    /// wins: a binding whose attribute line was backfilled from an older registry (which gave
+    /// every binding on a method the FIRST matching attribute's line) cannot be told apart by that
+    /// line. <c>BindingImporter.TryGetAttributeSourceLine</c> picks the attribute by the binding's
     /// expression and leaves the line null when it cannot, but the text still outranks a line that
     /// disagrees with it.</item>
     /// <item>Otherwise the registry expression may be a projection of the source (a Cucumber

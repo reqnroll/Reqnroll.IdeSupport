@@ -66,13 +66,13 @@ public sealed class StepCodeLensHandler
             return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[]>(Array.Empty<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>());
         }
 
-        // Cache size at call time (issue #471 investigation): FindUsages below is an unindexed
+        // Cache size at call time: FindUsages below is an unindexed
         // scan over the whole match-set cache, once per binding in this file, so this operation's
         // cost is expected to track cacheSteps (and this file's binding count) — logging it here
         // lets a climbing-duration pattern be confirmed/quantified from the PERF log directly.
         //
-        // Measured only past the file-type guard (issue #941): each lens handler measures its own
-        // work, so a .feature request is no longer counted here, and a .cs file yields one
+        // Measured only past the file-type guard: each lens handler measures its own
+        // work, so a .feature request is not counted here, and a .cs file yields one
         // measurement per lens kind that serves it (this one plus HookMatchCountCodeLensHandler).
         var (cacheDocs, cacheSteps) = _matchService.GetCacheStats();
         using var _perf = _recorder.Measure(
@@ -90,8 +90,8 @@ public sealed class StepCodeLensHandler
         }
 
         // Restrict usage search to the projects that own this .cs file, widened to any other
-        // project whose own registry independently reports one of this file's bindings (issue
-        // #548) -- see IProjectBindingRegistryLookup.ResolveUsageSearchScope's remarks. Shared
+        // project whose own registry independently reports one of this file's bindings
+        // -- see IProjectBindingRegistryLookup.ResolveUsageSearchScope's remarks. Shared
         // with FindStepUsagesHandler so the click-to-navigate command sees the same scope this
         // lens's count does.
         var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
@@ -99,20 +99,19 @@ public sealed class StepCodeLensHandler
         var lenses = new List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
         // Deduplicate by anchor location: every attribute on a method shares the identical
         // (SourceFileLine, SourceFileColumn) -- the method identifier's own position, per the
-        // anchor fix below -- so this also catches the case the dedup originally targeted (the
-        // same physical attribute reported redundantly by multiple registries for linked files;
-        // same file+line+col there too). One lens per location, not per attribute (issue #552):
+        // anchor choice below -- so this also catches the same physical attribute reported
+        // redundantly by multiple registries for linked files (same file+line+col there too). One lens per location, not per attribute:
         // its usage count must come from the location-based FindUsages overload below, which
         // aggregates every binding anchored at that location, the same aggregate Find Step Usages
-        // (FAR) already returns -- looking usages up per-attribute BindingId instead (the #552
-        // bug) undercounted a multi-attribute method to just one attribute's own usages.
+        // (FAR) already returns -- looking usages up per-attribute BindingId instead
+        // undercounts a multi-attribute method to just one attribute's own usages.
         var seen = new HashSet<(int line, int col)>();
 
         // Defer the per-binding FindUsages scan to codeLens/resolve ONLY for clients on the
         // opt-in allowlist in IdeBehavioursResolver (IdeBehaviours.SupportsCodeLensResolve) — that set is empty
         // today, so every shipped client (VS Code, Rider, Visual Studio) takes the eager path
         // below. None of them issue codeLens/resolve, and a deferred lens simply never renders
-        // for them (issue #471; see the allowlist note for the evidence).
+        // for them (see the allowlist note for the evidence).
         var deferToResolve = _clientIde.Behaviours.SupportsCodeLensResolve;
 
         foreach (var binding in registry.StepDefinitions)
@@ -126,15 +125,15 @@ public sealed class StepCodeLensHandler
             // Anchor on the method identifier's own line (SourceLocation.SourceFileLine), matching
             // the conventional CodeLens-anchor position every client (VS Code, VS, Rider) expects
             // for a "N references"-style lens: rendered directly above the declaration line, the
-            // same line the built-in C# references CodeLens targets. This used to be imprecise for
-            // connector-discovered bindings specifically -- SourceFileLine came from a raw PDB
+            // same line the built-in C# references CodeLens targets. For
+            // connector-discovered bindings SourceFileLine would come from a raw PDB
             // sequence point, which can land a line or more into the method body rather than on
-            // the declaration itself -- but ConnectorDiscoveryService now backfills the exact
-            // AST-based method-identifier location the same way Roslyn discovery always has
-            // (issue #471 follow-up), so this is precise for both discovery paths again. (An
-            // earlier fix here anchored on the *attribute's* own line instead, which rendered
-            // correctly in Visual Studio but one line too high in VS Code, whose CodeLens always
-            // renders as a floating row above its anchor line rather than overlaid on it.)
+            // the declaration itself -- so ConnectorDiscoveryService backfills the exact
+            // AST-based method-identifier location the same way Roslyn discovery does,
+            // making this precise for both discovery paths. (Do not anchor on the *attribute's* own
+            // line instead: that renders correctly in Visual Studio but one line too high in VS Code,
+            // whose CodeLens always renders as a floating row above its anchor line rather than
+            // overlaid on it.)
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
@@ -162,7 +161,7 @@ public sealed class StepCodeLensHandler
             }
 
             // Location-based lookup, not the surviving binding's own BindingId: this location may
-            // anchor several attributes (issue #552), and FindUsages(SourceLocation, ...) resolves
+            // anchor several attributes, and FindUsages(SourceLocation, ...) resolves
             // every BindingId whose range covers it, aggregating their usages into one count -- the
             // same aggregate query Find Step Usages (FAR) already uses for this location.
             var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
@@ -178,7 +177,7 @@ public sealed class StepCodeLensHandler
     /// <summary>
     /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
     /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/>) into its final <c>Command</c> —
-    /// backs <c>codeLens/resolve</c> (issue #471). Falls back to the non-actionable "0 step
+    /// backs <c>codeLens/resolve</c>. Falls back to the non-actionable "0 step
     /// usages" shape if the binding can no longer be located (e.g. the file changed between the
     /// initial <c>textDocument/codeLens</c> call and this resolve).
     /// </summary>
@@ -200,11 +199,11 @@ public sealed class StepCodeLensHandler
         if (registry == ProjectBindingRegistry.Invalid)
             return Task.FromResult(WithZeroUsages(lens));
 
-        // See HandleAsync's remarks (issue #548): the same widened scope applies here regardless
+        // See HandleAsync's remarks: the same widened scope applies here regardless
         // of which branch below resolves the binding.
         var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
-        // Prefer the BindingId stashed at lens-creation time (issue #471): a direct O(1)
+        // Prefer the BindingId stashed at lens-creation time: a direct O(1)
         // reverse-index lookup, no location math. Fall back to the SourceLocation-based path only
         // for a payload that predates this field (e.g. a stale client-cached lens).
         IReadOnlyList<StepBindingMatch> usages;
@@ -226,15 +225,15 @@ public sealed class StepCodeLensHandler
     }
 
     /// <summary>
-    /// Issue #554 guard: a step-usage count is inflated when the same feature step (same document
+    /// Guard: a step-usage count is inflated when the same feature step (same document
     /// URI + same line) comes back more than once from the reverse index. That can only happen
     /// when one feature document's match set is indexed twice — an orphaned set left behind by a
     /// concurrent <c>Store</c>, or two live cache entries for the same document — neither of
     /// which is visible in the count alone. <c>BindingMatchService</c> now serialises its writes
     /// so this should never fire; if it ever does, the log says which of the two it is, via
     /// <see cref="IBindingMatchService.AuditIndexConsistency"/>.
-    /// Detection is one pass with an early exit and no allocation beyond the seen-set (issue #491:
-    /// this runs per binding on the <c>textDocument/codeLens</c> sweep); the expensive grouping and
+    /// Detection is one pass with an early exit and no allocation beyond the seen-set
+    /// (this runs per binding on the <c>textDocument/codeLens</c> sweep); the expensive grouping and
     /// the audit only run once a duplicate is actually present.
     /// </summary>
     private void LogDuplicateUsageDiagnostics(

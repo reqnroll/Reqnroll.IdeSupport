@@ -11,8 +11,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Handles <c>reqnroll/renameTargets</c> — enumerates all binding attributes at the cursor
-/// position for the Step Rename feature's multi-attribute picker flow. Extracted from
-/// <see cref="RenameHandler"/> (issue #139): a distinct LSP custom method with no session
+/// position for the Step Rename feature's multi-attribute picker flow. Separate from
+/// <see cref="RenameHandler"/>: a distinct LSP custom method with no session
 /// state of its own, sharing only the read-only binding-resolution primitives in
 /// <see cref="RenameBindingResolver"/>.
 /// </summary>
@@ -66,7 +66,7 @@ public sealed class RenameTargetsHandler
             return null;
         }
 
-        // Telemetry (issue #581 finding 5): the only signal into how often the multi-target
+        // Telemetry: the only signal into how often the multi-target
         // picker UI is actually triggered (TargetCount > 1) versus a rename resolving
         // unambiguously (TargetCount <= 1) -- independent of whether the eventual rename itself
         // (see RenameHandler.SendRenameTelemetry) succeeds.
@@ -103,7 +103,7 @@ public sealed class RenameTargetsHandler
         {
             // Prefer the live source expression (preserves Cucumber parameter types); falls back
             // to null (not b.Expression's raw auto-generated regex) for method-name-style bindings
-            // (issue #344) — the Label below omits the expression entirely in that case rather
+            // — the Label below omits the expression entirely in that case rather
             // than show a placeholder, since all entries here are attributes on the same method.
             var sourceLiteral = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, b);
             var expression = sourceLiteral?.Token.ValueText ?? b.DisplayExpression;
@@ -148,7 +148,7 @@ public sealed class RenameTargetsHandler
             // labels diverge, so only the last two dot-segments are kept.
             var method = ShortenMethodQualifier(b.Implementation?.Method);
             var methodSuffix = !string.IsNullOrEmpty(method) ? $" — {method}" : "";
-            // b.DisplayExpression is null for method-name-style bindings (issue #344) — omit the
+            // b.DisplayExpression is null for method-name-style bindings — omit the
             // expression from the Label entirely rather than show a placeholder; methodSuffix
             // (always present here) is what actually identifies the binding in that case.
             var expressionPart = b.DisplayExpression is null ? "" : $" {b.DisplayExpression}";

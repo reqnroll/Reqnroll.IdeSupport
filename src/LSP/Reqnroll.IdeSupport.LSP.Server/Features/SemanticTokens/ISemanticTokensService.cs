@@ -25,8 +25,8 @@ public interface ISemanticTokensService
     /// current tags on every call (not cached — a range result is a subset of the full-document
     /// cache entry <see cref="GetSemanticTokensAsync"/> maintains, and caching every distinct
     /// viewport range would bloat that cache for no benefit).
-    /// Backs <c>textDocument/semanticTokens/range</c> — issue #471: this used to compute and
-    /// discard the entire document.
+    /// Backs <c>textDocument/semanticTokens/range</c>. Only the requested range is processed, not
+    /// the entire document.
     /// <para>
     /// Scoping is applied as early as the tag list allows: out-of-range tags are dropped up front,
     /// so sorting, overlap resolution and delta encoding all scale with the range's tag count

@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 
 /// <summary>
-/// Classifies what a Run lens lookup was for (the <c>Kind</c> telemetry property, issue #849) from the
+/// Classifies what a Run lens lookup was for (the <c>Kind</c> telemetry property) from the
 /// document's own tags, mirroring how <c>ScenarioTestTargetResolver</c> picks its scenario/row — so the
 /// event says what the user clicked, not how many methods the generated code-behind happened to have.
 /// </summary>

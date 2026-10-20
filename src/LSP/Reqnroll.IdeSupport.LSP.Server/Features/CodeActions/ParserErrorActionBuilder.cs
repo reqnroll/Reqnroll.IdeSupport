@@ -14,8 +14,8 @@ using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 
 /// <summary>
-/// Builds "Insert '&lt;keyword&gt;'" quick fixes for a Gherkin <c>reqnroll.parser</c> diagnostic
-/// (issue #563). Reuses <see cref="ICompletionService.GetKeywordCompletions"/> — the same
+/// Builds "Insert '&lt;keyword&gt;'" quick fixes for a Gherkin <c>reqnroll.parser</c> diagnostic.
+/// Reuses <see cref="ICompletionService.GetKeywordCompletions"/> — the same
 /// expected-token/dialect resolution keyword completion already performs — since the parser
 /// error's <c>expected: #TagLine, #RuleLine, ...</c> message names exactly the token types that
 /// would have been legal at that position.
@@ -62,9 +62,9 @@ internal sealed class ParserErrorActionBuilder
         // Replace the diagnostic's whole flagged span (the same range the squiggle covers) rather
         // than inserting at its start — matching how keyword *completion* already replaces the
         // partial word being typed (CompletionHandler.HandleKeyword's kwRange). Splicing the fix
-        // in before the bad text instead — the original behaviour — left the bad text in place:
+        // in before the bad text instead would leave the bad text in place:
         // e.g. a "Th" typo squiggle offering "Insert '\"\"\"'" produced the malformed `"""Th`
-        // rather than replacing "Th" outright (confirmed live in VS, issue #563 follow-up).
+        // rather than replacing "Th" outright (seen in VS).
         var replaceRange = errorTag.Range.ToLspRange();
 
         // Mark the entry closest to what the user actually typed as preferred, so VS (which
@@ -82,7 +82,7 @@ internal sealed class ParserErrorActionBuilder
             Diagnostics = diagnostics,
             IsPreferred = index == preferredIndex,
             // Clients run this command after applying the edit; the server handler reports the
-            // trigger (issue #877), the only acceptance signal since the edit is applied client-side.
+            // trigger, the only acceptance signal since the edit is applied client-side.
             Command = new Command
             {
                 Title = "Insert keyword",

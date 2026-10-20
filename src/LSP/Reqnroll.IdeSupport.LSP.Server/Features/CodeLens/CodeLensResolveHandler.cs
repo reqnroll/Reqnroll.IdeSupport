@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
 /// <summary>
 /// Dispatches a <c>codeLens/resolve</c> request to whichever handler produced the lens, based on
-/// the <c>"kind"</c> discriminator each handler embeds in <c>CodeLens.Data</c> (issue #471). Both
+/// the <c>"kind"</c> discriminator each handler embeds in <c>CodeLens.Data</c>. Both
 /// <see cref="StepCodeLensHandler"/> and <see cref="HookMatchCountCodeLensHandler"/> only ever
 /// emit a lens with <c>Data</c> set when they've deferred its <c>Command</c> to resolve (non-VS
 /// clients only, see their own remarks) — <see cref="HookCodeLensHandler"/>'s <c>.feature</c>-file

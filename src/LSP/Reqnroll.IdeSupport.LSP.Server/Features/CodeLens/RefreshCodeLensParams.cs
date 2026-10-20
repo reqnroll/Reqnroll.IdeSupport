@@ -23,8 +23,8 @@ public sealed class RefreshCodeLensParams
     /// </summary>
     /// <remarks>
     /// The VS client uses this to decide whether to call the VS SDK's <c>CodeLens.Invalidate()</c>
-    /// (see <c>CodeLensRefreshInterceptor</c>'s remarks and issue #156/#318): that call was root-caused
-    /// as the trigger for VS.Extensibility reactivating <c>ReqnrollLanguageClient</c> and forcing a
+    /// (see <c>CodeLensRefreshInterceptor</c>'s remarks): that call is
+    /// the trigger for VS.Extensibility reactivating <c>ReqnrollLanguageClient</c> and forcing a
     /// second <c>CreateServerConnectionAsync</c>. It's only safe/worthwhile to eat that churn on a full
     /// replacement, which is comparatively rare; incremental refreshes are frequent (every settled
     /// edit) and would otherwise reproduce the same reconnect on a much tighter cadence.

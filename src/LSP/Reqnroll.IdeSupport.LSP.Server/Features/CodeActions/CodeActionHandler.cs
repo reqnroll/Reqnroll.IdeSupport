@@ -27,10 +27,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
 /// <remarks>
-/// Reduced to guards, orchestration, and telemetry (issue #588, extended for #563): resolving
+/// Kept to guards, orchestration, and telemetry: resolving
 /// <em>where</em> generated code should go is <see cref="StepDefinitionTargetResolver"/>, and
 /// building the actions for a given target/step-subset is <see cref="DefineStepsActionBuilder"/>.
-/// The parser-error fix added for issue #563 follows the same split:
+/// The parser-error fix follows the same split:
 /// <see cref="ParserErrorActionBuilder"/>. Both builders are plain internal collaborators
 /// constructed here, not DI-registered services — they have no other consumer and no reason to
 /// be swapped independently of this handler.
@@ -106,7 +106,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
             return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
         }
 
-        // Honour context.only (issue #563): every action this handler produces is a QuickFix, so
+        // Honour context.only: every action this handler produces is a QuickFix, so
         // a request scoped to some other kind (e.g. Refactor) gets nothing from us.
         if (!QuickFixRequested(request.Context?.Only))
         {
@@ -138,7 +138,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // unrelated undefined step elsewhere in the file, which is misleading — that step has
         // nothing to do with what's under the cursor. Without the second, a bare keyword with no
         // step text (e.g. a lone "Given") would offer to generate a meaningless empty-expression
-        // binding, since there is no text to build one from (issue #622).
+        // binding, since there is no text to build one from.
         if (stepAtCursor is { IsUndefined: true } && !string.IsNullOrWhiteSpace(GetStepText(stepAtCursor)))
         {
             var defineActions = BuildDefineStepActions(uri, primaryOwner, matchSet, stepAtCursor);
@@ -161,7 +161,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
             }
         }
 
-        // Honour context.diagnostics (issue #563): when the client scopes the request to specific
+        // Honour context.diagnostics: when the client scopes the request to specific
         // diagnostics (e.g. "fix this squiggle"), only return actions attributed to one of them.
         actions = FilterByContextDiagnostics(actions, request.Context?.Diagnostics);
 

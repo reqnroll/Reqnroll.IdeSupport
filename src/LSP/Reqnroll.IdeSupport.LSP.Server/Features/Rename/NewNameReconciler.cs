@@ -10,8 +10,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Reconciles a <c>textDocument/rename</c> request's <c>newName</c> against a binding's abstract
-/// source expression when the two carry different parameter-slot counts. Extracted from
-/// <see cref="RenameHandler.HandleRenameAsync"/> (issue #139) as a self-contained algorithm.
+/// source expression when the two carry different parameter-slot counts. Used by
+/// <see cref="RenameHandler.HandleRenameAsync"/>; a self-contained algorithm.
 /// </summary>
 internal sealed class NewNameReconciler
 {

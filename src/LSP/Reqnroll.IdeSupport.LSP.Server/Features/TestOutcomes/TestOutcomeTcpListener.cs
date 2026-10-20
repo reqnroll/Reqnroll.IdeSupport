@@ -108,7 +108,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
     /// The first non-empty workspace-folder path the client reported at <c>initialize</c> time — a
     /// best-effort single root for the breadcrumb's <c>workspaceRoot</c> field. A multi-folder
     /// workspace has more than one candidate; picking the right one for a given test project is a
-    /// reporter-side matching concern (issue #715 plan §7 risk #3: deepest-match-wins), not this
+    /// reporter-side matching concern (the deepest matching root wins), not this
     /// listener's — it only needs to publish something a reporter can use as a starting point.
     /// </summary>
     /// <remarks>
@@ -131,7 +131,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
     /// <summary>
     /// Logs an exception and, when a telemetry service was supplied, forwards it via the
     /// telemetry-reporting overload — every fault site in this listener routes through here so none
-    /// are silently local-log-only (issue #722).
+    /// are silently local-log-only.
     /// </summary>
     private void LogException(Exception ex, string message)
     {
@@ -246,9 +246,8 @@ public sealed class TestOutcomeTcpListener : IDisposable
             connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
             var protocol = hello.Value<int?>("protocol") ?? 0;
             targetFramework = hello.Value<string>("targetFramework") ?? string.Empty;
-            // Reporter kind: prefer the explicit "reporterKind" field both loggers now send (issue #722
-            // suggested fix (c), made explicit). Fall back to the old presence-of-"targetFramework"
-            // inference for hello lines from older loggers that predate the field — the VSTest logger
+            // Reporter kind: prefer the explicit "reporterKind" field both loggers send. Fall back to the
+            // presence-of-"targetFramework" inference for hello lines from older loggers that predate the field — the VSTest logger
             // always carried a (possibly empty) "targetFramework" key, the MTP reporter never did.
             reporterKind = hello.Value<string>("reporterKind")
                 ?? (hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP");
@@ -256,7 +255,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
             if (protocol != 1)
                 _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
 
-            // Perf instrumentation (issue #722): the NDJSON ingestion hot path, timed from the
+            // Perf instrumentation: the NDJSON ingestion hot path, timed from the
             // connection's hello to its runComplete — not covered by the two thin RPC handlers'
             // Measure() calls, which only time registerRun/getOutcome themselves.
             runStopwatch = Stopwatch.StartNew();
@@ -306,7 +305,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
                         var executed = message.Value<int?>("executed") ?? 0;
                         _recorder.Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, runStopwatch.Elapsed.TotalMilliseconds,
                             detail: $"results={results} reporterKind={reporterKind}");
-                        // Product telemetry (issue #722 fix (b)/(c)): counts/flags only — no paths, no
+                        // Product telemetry: counts/flags only — no paths, no
                         // test names, no content — plus which reporter sent the run, so MTP ephemeral
                         // injection's real-world adoption is visible in aggregate without a dedicated
                         // client→server telemetry channel for it.
@@ -335,7 +334,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
                 {
                     _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
                     // The most interesting runs (killed test host, crashed MTP process) never send
-                    // runComplete; count them too so aborted runs aren't undercounted (issue #848).
+                    // runComplete; count them too so aborted runs aren't undercounted.
                     // ExecutedCount is what we saw (no runComplete to read it from).
                     runStopwatch?.Stop();
                     SendRunCompletedTelemetry(results, passed, failed, skipped, executed: results, aborted: true, canceled: false,
@@ -359,7 +358,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
     }
 
     /// <summary>
-    /// Product telemetry (issues #722, #848): counts, flags, a duration and the target framework moniker
+    /// Product telemetry: counts, flags, a duration and the target framework moniker
     /// only — no paths, no test names, no content. Run mode / scope (Run vs Debug, Scenario vs Feature)
     /// are not sent: <c>reqnroll/registerTestRun</c> takes no parameters and is called once per client
     /// session (VS Code), not per Run click, so the server never learns them.

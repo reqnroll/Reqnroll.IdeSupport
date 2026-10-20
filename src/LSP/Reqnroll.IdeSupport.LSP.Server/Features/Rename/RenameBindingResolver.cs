@@ -13,9 +13,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Resolves the step-definition binding(s) at a cursor position for the rename feature.
-/// Extracted from <see cref="RenameHandler"/> (issue #139) — "resolve binding at cursor" was
-/// duplicated in spirit across <c>HandlePrepareRenameAsync</c>, <c>HandleRenameAsync</c>, and the
-/// <c>reqnroll/renameTargets</c> handlers; this centralises the shared primitives.
+/// Centralises the primitives shared by <see cref="RenameHandler"/>'s <c>HandlePrepareRenameAsync</c>
+/// and <c>HandleRenameAsync</c> and the <c>reqnroll/renameTargets</c> handler ("resolve binding at cursor").
 /// </summary>
 internal sealed class RenameBindingResolver
 {
@@ -80,10 +79,9 @@ internal sealed class RenameBindingResolver
                     continue;
 
                 // Tolerate a cursor anywhere on the step's line(s), not just within the exact
-                // step-text span (e.g. on the keyword or leading indentation) — this used to
-                // compare position.Character directly against step.Range's own start/end
-                // character, the same narrow exact-text-span bug fixed for Go to Definition,
-                // just re-derived independently here rather than shared.
+                // step-text span (e.g. on the keyword or leading indentation) — comparing
+                // position.Character directly against step.Range's own start/end character
+                // would be too narrow (the same applies to Go to Definition).
                 var snapshot  = step.Range.Snapshot;
                 var startLine = snapshot.GetLineFromLineNumber(step.Range.StartLinePosition.Line);
                 var endLine   = snapshot.GetLineFromLineNumber(step.Range.EndLinePosition.Line);
@@ -112,7 +110,7 @@ internal sealed class RenameBindingResolver
     /// </summary>
     /// <remarks>
     /// A naive "within N lines of any binding" window incorrectly merges two *different*,
-    /// closely-spaced methods into one false-ambiguous picker (#170 regression: two step methods
+    /// closely-spaced methods into one false-ambiguous picker (e.g. two step methods
     /// 6 lines apart, cursor on the second one's attribute, both fell within a 5-line window of
     /// the first). Instead this mirrors <see cref="ProjectBindingRegistry"/>'s own
     /// <c>CoversQuery</c> exact-match logic: first find the single binding the cursor actually
@@ -124,7 +122,7 @@ internal sealed class RenameBindingResolver
     /// happens to sit in the file.
     /// </remarks>
     /// <param name="requireAttributeLine">
-    /// When <see langword="true"/> (issue #506 — VS Code's F2 dispatcher), only the binding's own
+    /// When <see langword="true"/> (VS Code's F2 dispatcher), only the binding's own
     /// attribute line counts as a match: the method-identifier-line fallback and the
     /// connector-discovered heuristic window are both disabled, so a cursor on the method name or
     /// its body no longer counts as "on the binding" and F2 falls through to the native C# rename
@@ -187,7 +185,7 @@ internal sealed class RenameBindingResolver
     /// disambiguation session named a binding which no longer exists at this position.
     /// </summary>
     /// <remarks>
-    /// That case must not fall through to position-based resolution (issue #671, R5). The fallback
+    /// That case must not fall through to position-based resolution. The fallback
     /// picks the first candidate, so silently taking it would rename an arbitrary binding —
     /// precisely the wrong-binding outcome a stale session causes. Callers are expected to reject
     /// the rename and tell the user to retry.
@@ -236,7 +234,7 @@ internal sealed class RenameBindingResolver
             else if (session.AttributeIndex >= 0 && session.AttributeIndex < bindingsAtLocation.Count)
             {
                 // No identity — an older client that sent no position with its selection, so the
-                // index is all there is. Same exposure as before R5.
+                // index is all there is. That index can denote a different binding if the list changed since it was chosen.
                 binding = bindingsAtLocation[session.AttributeIndex];
                 _logger.LogVerbose($"RenameBindingResolver: resolved binding via session index: '{binding?.Expression}'");
             }

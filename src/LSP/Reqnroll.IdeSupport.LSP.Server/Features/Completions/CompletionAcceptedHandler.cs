@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 /// <summary>
 /// Handles <c>workspace/executeCommand</c> for <see cref="CommandName"/>, the
 /// <see cref="CompletionItem.Command"/> attached to step completion items, so the server learns a
-/// step completion was accepted (issue #883 spike prototype). Increments
+/// step completion was accepted. Increments
 /// <see cref="FeatureUsageCatalog.StepCompletionAcceptedKey"/>; sends no event and carries no
 /// arguments, so no user data can reach the counter.
 /// </summary>

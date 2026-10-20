@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// <summary>
 /// One step-definition binding, as reported by <c>reqnroll/findUnusedStepDefinitions</c> (a binding
 /// with zero matching steps across the workspace) and <c>reqnroll/findStepDefinitions</c> (a binding
-/// matching the step at the caret, issue #757).
+/// matching the step at the caret).
 /// </summary>
 public sealed class StepDefinitionItem
 {
@@ -43,7 +43,7 @@ public sealed class StepDefinitionItem
     /// <remarks>
     /// <see langword="false"/> means the assembly was built elsewhere — a container, a CI agent,
     /// another machine, or an external binding package — and the source path it recorded could not
-    /// be mapped onto anything here (issue #540). The entry is still reported, because "this step
+    /// be mapped onto anything here. The entry is still reported, because "this step
     /// definition is unused" remains true and useful; what changes is that a client must not offer
     /// to navigate to it, and should say why instead of appearing to ignore the click.
     /// </remarks>
@@ -68,7 +68,7 @@ public sealed class StepDefinitionItem
     /// The binding's step keyword — <c>"Given"</c>, <c>"When"</c> or <c>"Then"</c> — so a client can
     /// show the attribute (e.g. <c>[Given("the sum is {int}")]</c>); <see langword="null"/> when
     /// unknown. A <c>[StepDefinition]</c> attribute is registered as one binding per keyword, so it
-    /// reports whichever of the three this binding is (issue #757).
+    /// reports whichever of the three this binding is.
     /// </summary>
     [JsonProperty("stepDefinitionType")]
     public string? StepDefinitionType { get; set; }

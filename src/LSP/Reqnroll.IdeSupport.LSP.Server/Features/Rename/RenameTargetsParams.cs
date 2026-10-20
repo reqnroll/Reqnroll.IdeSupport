@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Parameters for <c>reqnroll/renameTargets</c>. Extends the standard
-/// <see cref="TextDocumentPositionParams"/> shape with an optional strictness flag (issue #506).
+/// <see cref="TextDocumentPositionParams"/> shape with an optional strictness flag.
 /// </summary>
 /// <remarks>
 /// <see cref="RequireAttributeLine"/> is set by VS Code's F2 dispatcher, which must not steal an

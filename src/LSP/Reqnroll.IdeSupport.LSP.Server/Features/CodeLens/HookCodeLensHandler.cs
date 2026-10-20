@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
 /// <summary>
 /// Handles the standard <c>textDocument/codeLens</c> request for <c>.feature</c> files
-/// (hook-match count CodeLens — issue #269). Returns one lens per <c>Feature:</c>/<c>Scenario:</c>
+/// (hook-match count CodeLens). Returns one lens per <c>Feature:</c>/<c>Scenario:</c>
 /// line that has at least one hook native to that level (Feature-only / Scenario-only), plus a
 /// second lens on the <c>Scenario:</c> line for the step-level hooks shared by every step in that
 /// scenario — steps never get their own lens, since <see cref="HookMatching"/> resolves the same
@@ -72,7 +72,7 @@ public sealed class HookCodeLensHandler
             return Task.FromResult(Empty);
         }
 
-        // Measured only past the file-type guard (issue #941): a request for a file this handler
+        // Measured only past the file-type guard: a request for a file this handler
         // does not serve is not work it did. Each lens handler measures its own work; a .cs file
         // legitimately yields one measurement per lens kind that serves it.
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);

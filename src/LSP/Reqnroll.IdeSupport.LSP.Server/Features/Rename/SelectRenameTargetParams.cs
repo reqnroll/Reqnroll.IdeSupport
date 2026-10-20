@@ -33,12 +33,12 @@ public sealed class SelectRenameTargetParams
     /// The position the disambiguation was invoked at — the same one passed to
     /// <c>reqnroll/renameTargets</c> — so the server can re-derive that candidate list now and
     /// record <i>which</i> binding <see cref="AttributeIndex"/> denoted, rather than storing a bare
-    /// index whose meaning depends on a list rebuilt later (issue #671, R5; see
+    /// index whose meaning depends on a list rebuilt later (see
     /// <c>RenameBindingIdentity</c>).
     /// </summary>
     /// <remarks>
-    /// Optional: a client that omits it leaves the server with only the index, which is the
-    /// pre-R5 behaviour rather than a failure.
+    /// Optional: a client that omits it leaves the server with only the index and falls back to
+    /// resolving by index alone rather than failing.
     /// </remarks>
     [JsonProperty("position")]
     public Position? Position { get; set; }

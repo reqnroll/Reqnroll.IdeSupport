@@ -10,8 +10,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
 /// <summary>
 /// Handles the custom <c>reqnroll/testOutcomes/registerRun</c> request: the IDE's runsettings-injection
-/// service calls this once per Test Explorer execution request, in place of what used to be an in-proc
-/// call to a VS-only <c>TestOutcomeListener</c>.
+/// service calls this once per Test Explorer execution request, so every IDE registers a run the same way
+/// rather than through a VS-only in-proc call.
 /// </summary>
 public sealed class RegisterTestRunHandler
 {

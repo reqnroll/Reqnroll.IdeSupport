@@ -95,7 +95,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         {
             _logger.LogInfo($"C# document opened: {uri} (version {version})");
             _csharpFileTextCache.Update(uri, text);
-            // Off the shared Serial dispatch lane (issue #471) -- the Roslyn parse this drives
+            // Off the shared Serial dispatch lane -- the Roslyn parse this drives
             // (ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync's ReplaceBindings call)
             // is real, non-trivial cost on a large step-definition file, and per-URI chaining in
             // the coordinator still guarantees this file's own edits apply in order. The PERF
@@ -112,7 +112,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _logger.LogInfo($"Document opened: {uri} (version {version})");
         _documentBufferService.Update(uri, version, text);
 
-        // Off the shared Serial dispatch lane (issue #471): the buffer update above is
+        // Off the shared Serial dispatch lane: the buffer update above is
         // synchronous and immediate, but the parse + MatchCacheChangedNotification publish is
         // handed to the coordinator instead of awaited inline, so this handler returns without
         // holding up other files' didOpen/didChange or newly-arriving Parallel requests.
@@ -141,7 +141,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         {
             _logger.LogInfo($"C# document changed: {uri} (version {version})");
             _csharpFileTextCache.Update(uri, text);
-            // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
+            // Off the shared Serial dispatch lane -- see the matching didOpen comment.
             _parseCoordinator.Schedule(uri, ct =>
             {
                 using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDidChange, uri);
@@ -153,7 +153,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _logger.LogInfo($"Document changed: {uri} (version {version})");
         _documentBufferService.Update(uri, version, text);
 
-        // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
+        // Off the shared Serial dispatch lane -- see the matching didOpen comment.
         _parseCoordinator.Schedule(uri, async ct =>
         {
             using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDidChange, uri);
@@ -187,7 +187,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         {
             _csharpFileTextCache.Remove(uri);
 
-            // Clear any squiggles pushed for this file (issue #514) — same clear-on-close
+            // Clear any squiggles pushed for this file — same clear-on-close
             // convention as the .feature path below.
             _languageServer.SendNotification(
                 LspStandardMethodNames.TextDocumentPublishDiagnostics,

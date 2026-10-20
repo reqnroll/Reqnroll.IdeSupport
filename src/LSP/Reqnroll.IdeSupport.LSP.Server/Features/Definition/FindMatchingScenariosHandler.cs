@@ -15,7 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/findMatchingScenarios</c> request (issue #373's hook-match-count
+/// Handles the custom <c>reqnroll/findMatchingScenarios</c> request (the hook-match-count
 /// CodeLens click action).
 /// <para>
 /// Given a position in a <c>.cs</c> file pointing at a hook-binding method (the exact attribute

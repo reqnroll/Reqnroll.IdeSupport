@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 
 /// <summary>
 /// Feeds tag completion with the tags currently in use across the project(s) that own a
-/// document (issue #828). Per project it keeps a per-file cache of tag-usage counts: open
+/// document. Per project it keeps a per-file cache of tag-usage counts: open
 /// documents are counted from the buffer's already-parsed tags on every request (best-effort: a
 /// tag typed while the background parse is still pending is offered a moment later), closed documents are parsed from disk
 /// once and reused while their write time is unchanged, and the per-project file set is
@@ -77,8 +77,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
         // ownership per (project file, TFM), so a multi-targeted project contributes one owner
         // per target framework even though they all resolve back to the single
         // LspReqnrollProject for that .csproj. Merge each project file once, otherwise its
-        // feature files' usage counts are multiplied by the number of target frameworks
-        // (issue #943).
+        // feature files' usage counts are multiplied by the number of target frameworks.
         var mergedProjectFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var owner in owners)
         {

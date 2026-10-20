@@ -6,7 +6,7 @@ using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 
-/// <summary>Request params for the custom <c>reqnroll/resolveContainerTestTargets</c> request (issue #744).</summary>
+/// <summary>Request params for the custom <c>reqnroll/resolveContainerTestTargets</c> request.</summary>
 public sealed record ResolveContainerTestTargetsParams
 {
     /// <summary>The <c>.feature</c> document to resolve test targets in.</summary>

@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
-/// <summary>Response DTO for the custom <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
+/// <summary>Response DTO for the custom <c>reqnroll/findStepDefinitions</c> request.</summary>
 public sealed class FindStepDefinitionsResponse
 {
     /// <summary>The bindings matching the step at the requested position, in match order; empty when there is no step or no binding.</summary>
