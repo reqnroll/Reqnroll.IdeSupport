@@ -16,8 +16,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// <see cref="ILspTelemetryService"/> as an <c>UnhandledException</c> <c>telemetry/event</c>, so exceptions raised
 /// inside LSP.Core (e.g. <c>IdeSupportGherkinParser</c>/<c>IdeSupportTagParser</c> via
 /// <c>IdeSupportLoggerExtensions.LogException</c>) actually reach telemetry instead of being
-/// silently dropped. Previously the server was wired with <see cref="NullLspTelemetryService"/> for
-/// every <see cref="ITelemetryService"/> consumer, including these (issue #255).
+/// silently dropped, as they would be if every <see cref="ITelemetryService"/> consumer were wired to
+/// <see cref="NullLspTelemetryService"/>.
 /// <para>
 /// This class still implements the full <see cref="ITelemetryService"/> (not just
 /// <see cref="IErrorTelemetryService"/>) purely because <see cref="Workspace.LspIdeScope.TelemetryService"/>
@@ -26,12 +26,12 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// telemetry, so it can't be narrowed without touching VS-side code that has nothing to do with the
 /// LSP server. <c>LSP.Core</c>'s own classes (<c>IdeSupportGherkinParser</c>, <c>IdeSupportTagParser</c>,
 /// <c>CompletionContextResolver</c>) depend on the narrow <see cref="IErrorTelemetryService"/>
-/// directly instead — DI resolves both interfaces to this same singleton (issue #255/#259).
+/// directly instead — DI resolves both interfaces to this same singleton.
 /// </para>
 /// </summary>
 public sealed class LspErrorTelemetryService : ITelemetryService
 {
-    /// <summary>Most distinct stacks per server session that get <c>StackFrames</c> attached (volume bound, issue #620).</summary>
+    /// <summary>Most distinct stacks per server session that get <c>StackFrames</c> attached (volume bound).</summary>
     internal const int DefaultMaxDistinctStacksPerSession = 25;
 
     private readonly ILspTelemetryService _lspTelemetryService;
@@ -136,7 +136,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     /// <summary>
     /// The simple name of the class (no namespace, no stack trace) that contains the topmost frame of
     /// <paramref name="exception"/>'s stack in a <c>Reqnroll.IdeSupport</c> assembly, so an error can be
-    /// attributed to a component without transmitting the stack (issue #849, #620). Compiler-generated
+    /// attributed to a component without transmitting the stack. Compiler-generated
     /// async/lambda types are folded into the class that declares them. <see langword="null"/> when the
     /// exception was never thrown or no frame belongs to this product.
     /// </summary>

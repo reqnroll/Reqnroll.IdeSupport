@@ -9,12 +9,12 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// <summary>
 /// <see cref="Mediator"/> whose notification fan-out isolates handler faults: every
 /// <see cref="INotificationHandler{TNotification}"/> is invoked inside its own <c>try</c>/<c>catch</c>,
-/// so one throwing handler no longer suppresses every handler after it.
+/// so one throwing handler does not suppress the handlers after it.
 /// </summary>
 /// <remarks>
 /// <para>
 /// MediatR's stock <see cref="Mediator.PublishCore"/> is a sequential <c>foreach</c> that awaits each
-/// handler in turn with no exception handling (issue #575). The first handler to throw therefore
+/// handler in turn with no exception handling. The first handler to throw therefore
 /// aborts the whole fan-out, and which handlers are lost depends on the order the DI container
 /// returns them — i.e. on assembly-scan order, not on any deliberate decision.
 /// </para>
@@ -33,7 +33,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// sequentially, in the same order, on the same thread. Callers that background the publish
 /// themselves (<c>BindingRegistryProviderRouter.OnProviderChanged</c>,
 /// <c>MembershipIndex.HandleProjectFilesAsync</c>) still need to, for the reasons documented at
-/// those call sites (issue #477).
+/// those call sites.
 /// </para>
 /// </remarks>
 public sealed class ResilientMediator : Mediator

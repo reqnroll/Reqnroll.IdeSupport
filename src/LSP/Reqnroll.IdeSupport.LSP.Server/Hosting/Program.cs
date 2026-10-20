@@ -25,7 +25,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
 /// <remarks>
 /// <para>
-/// <b>Logging split (issue #84):</b> app-level code in this server (handlers, discovery,
+/// <b>Logging split:</b> app-level code in this server (handlers, discovery,
 /// workspace/document services, etc.) logs exclusively through the DI-registered
 /// <see cref="IIdeSupportLogger"/> singleton (<see cref="Logging.LspIdeSupportLogger"/>), consumed via
 /// the <c>LogInfo</c>/<c>LogWarning</c>/<c>LogError</c>/... extension methods in
@@ -43,7 +43,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// <see cref="IIdeSupportLogger"/> "server" log. <b>Do not re-register <c>ILoggerFactory</c>/<c>ILogger&lt;&gt;</c>
 /// anywhere else in this DI container</b> (e.g. in
 /// <see cref="ServiceCollectionExtensions.AddReqnrollLspCoreServices"/>) — a later registration wins
-/// the last-registration-wins resolution and silently replaces this one, which previously caused
+/// the last-registration-wins resolution and silently replaces this one, which would cause
 /// every OmniSharp-internal message to leak into the app-level "server" log at whatever
 /// <c>--log-level</c> happened to be, instead of its own file gated by <c>--protocol-log-level</c>.
 /// </para>
@@ -58,12 +58,12 @@ public class Program
     public static async Task Main(string[] args)
     {
         // Each IDE's glue component passes --ide <identifier> when spawning the server.
-        // The semantic token legend no longer varies by IDE, but the identifier is retained for
+        // The semantic token legend does not vary by IDE, but the identifier is retained for
         // features that may need to vary their behaviour per IDE (e.g. future static-vs-dynamic
         // capability registration decisions).
         var ideId = ParseArg(args, "--ide");
 
-        // Each client also passes --client-session-id <guid>: its own per-IDE-session id (issue #1199), stamped
+        // Each client also passes --client-session-id <guid>: its own per-IDE-session id, stamped
         // as ClientSessionId on every server event so client-originated exceptions join to ServerSessionStarted.
         var clientSessionId = ClientIdeContext.NormalizeClientSessionId(ParseArg(args, "--client-session-id"));
 
@@ -108,7 +108,7 @@ public class Program
             var logger = server.Services.GetRequiredService<IIdeSupportLogger>();
             var preloadTask = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
 
-            // Issue #582: periodic feature-usage flush, running for the whole server lifetime
+            // Periodic feature-usage flush, running for the whole server lifetime
             // alongside the request-handling pipeline (a no-op loop when its env var is unset —
             // see FeatureUsageFlushService.RunAsync). Started here, not lazily on first use, so a
             // session with a long-idle start still gets a correctly-timed first window.
@@ -121,7 +121,7 @@ public class Program
             // which would drop the telemetry/event notification.
             using var usageFlushOnShutdown = FeatureUsageFlushService.FlushOnShutdown(usageFlushService, server.Shutdown);
 
-            // Issue #845: ServerSessionEnded, subscribed after the flush above so the final
+            // ServerSessionEnded, subscribed after the flush above so the final
             // FeatureUsageSummary precedes it. Once-only, so the post-exit fallback below cannot double-send.
             var sessionTelemetry = server.Services.GetRequiredService<ServerSessionTelemetry>();
             using var sessionEndedOnShutdown = sessionTelemetry.EndOnShutdown(server.Shutdown);
@@ -155,7 +155,7 @@ public class Program
             try
             {
                 // Reuses SynchronousFileLogger itself (role "crash") rather than one-off
-                // directory/filename/formatting code (issue #628): same
+                // directory/filename/formatting code: same
                 // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
                 // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
                 // with no PID and a raw ex.ToString() dump.
@@ -181,7 +181,7 @@ public class Program
     /// <see cref="ClientIdeContext"/> singleton that every per-IDE branch reads, and is therefore
     /// the server's primary identity source.  It is not the only one: when it is absent,
     /// <c>OnInitialized</c> falls back to the <c>InitializeParams.ClientInfo</c> the client
-    /// self-reports over the wire (issue #709) — see <see cref="ApplyClientInfo"/>.
+    /// self-reports over the wire — see <see cref="ApplyClientInfo"/>.
     /// <see cref="ApplySemanticTokensCapability"/> resolves VS-ness through that context rather than
     /// from this argument directly, so the advertised capability and the handler that later pushes
     /// tokens can never disagree about which client is connected.
@@ -213,7 +213,7 @@ public class Program
     /// client's Output panel is never inspected). Independent of <paramref name="logLevel"/> —
     /// see that parameter's remarks.
     /// </param>
-    /// <param name="clientSessionId">The client's own per-IDE-session id from <c>--client-session-id</c> (issue #1199), or <see langword="null"/>.</param>
+    /// <param name="clientSessionId">The client's own per-IDE-session id from <c>--client-session-id</c>, or <see langword="null"/>.</param>
     internal static void ConfigureServer(LanguageServerOptions options, string? clientIde = null,
         TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off,
         TraceLevel protocolLogLevel = TraceLevel.Warning, string? clientSessionId = null)
@@ -224,7 +224,7 @@ public class Program
             logging.AddLanguageProtocolLogging();
             logging.AddProvider(new ProtocolLoggerProvider(clientIde, protocolLogLevel));
 
-            // Issue #660: OmniSharp's own LanguageServerLoggingManager (registered internally for
+            // OmniSharp's own LanguageServerLoggingManager (registered internally for
             // every LanguageServer, regardless of anything configured here) is an
             // IPostConfigureOptions<LoggerFilterOptions> that unconditionally overwrites
             // LoggerFilterOptions.MinLevel from the current $/setTrace level (Off/Messages/Verbose).
@@ -264,7 +264,7 @@ public class Program
             // Replaces the IMediator registration AddMediatR just made (last registration wins)
             // with one whose notification fan-out isolates handler faults -- stock MediatR awaits
             // each handler in a bare foreach, so the first to throw suppresses every handler after
-            // it, with the casualties decided by assembly-scan order (issue #575). Must stay
+            // it, with the casualties decided by assembly-scan order. Must stay
             // AFTER AddMediatR; registered before it, AddMediatR's own registration would win.
             .AddTransient<IMediator, ResilientMediator>()
             .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace, clientSessionId)
@@ -278,7 +278,7 @@ public class Program
         // Initialize workspace scopes and custom protocol routing
         options.InitializeCustomProtocolRouting();
 
-        // Issue #845: ServerSessionStarted once the LSP handshake has completed (OnStarted runs
+        // ServerSessionStarted once the LSP handshake has completed (OnStarted runs
         // after `initialized`, so ClientIdeContext already carries the client's self-reported version).
         options.OnStarted((languageServer, _) =>
         {
@@ -316,7 +316,7 @@ public class Program
                 traceService.Level = ResolveInitialTrace(traceService.Level, request.Trace);
             }
 
-            // Issue #709: record the identity the client self-reports over the wire, and let it fill
+            // Record the identity the client self-reports over the wire, and let it fill
             // in the IDE when --ide was absent. ClientInfo is the only identity signal that travels
             // in the protocol itself; it arrives here, long after the DI container (and the
             // ClientIdeContext that --ide seeded) was built, which is why ClientIdeContext has to be
@@ -365,8 +365,8 @@ public class Program
                 // reads it out of this same initialize response -- omitting the whole capability
                 // for VS would silently break token decoding for the push path too.
                 //
-                // Resolved through ClientIdeContext rather than the raw clientIde argument (issue
-                // #709) so this agrees with every other per-IDE branch in the server: the push
+                // Resolved through ClientIdeContext rather than the raw clientIde argument
+                // so this agrees with every other per-IDE branch in the server: the push
                 // handler, CodeActionHandler, CompletionHandler, RenameHandler and
                 // CodeLensRefreshRequester all read ClientIdeContext, and it is the only one of the
                 // two that knows the identity resolved from ClientInfo when --ide was absent.
@@ -382,7 +382,7 @@ public class Program
                     Full = !requiresPushedSemanticTokens,
                     // VS Code's and Rider's built-in LSP clients both support range requests (used as a
                     // large-file/viewport optimization); advertise it since SemanticTokensHandler already
-                    // implements textDocument/semanticTokens/range (issue #123). Withheld for VS along
+                    // implements textDocument/semanticTokens/range. Withheld for VS along
                     // with Full above, per the note at the top of this method.
                     Range = !requiresPushedSemanticTokens
                 };
@@ -408,7 +408,7 @@ public class Program
             // foldingRangeProvider: declared statically for the same reason as
             // ApplyStaticInlayHintCapability's inlayHintProvider — vscode-languageclient's dynamic
             // client/registerCapability negotiation races VS Code's restore of previously-open
-            // .feature tabs on window load, and Rider hit an analogous startup race (#162) where
+            // .feature tabs on window load, and Rider hits an analogous startup race where
             // folding stayed empty until the first post-load edit.
             void ApplyStaticFoldingCapability()
             {
@@ -429,7 +429,7 @@ public class Program
             // dynamic-registration-race reason as inlayHintProvider/foldingRangeProvider above.
             // textDocument/codeLens itself is already always-on for this server (no capability
             // gating needed for the base request); this only advertises that the server CAN
-            // service codeLens/resolve — CodeLensResolveHandler does (issue #471).
+            // service codeLens/resolve — CodeLensResolveHandler does.
             //
             // No shipped client currently uses it: neither VS Code nor Rider nor Visual Studio
             // issues codeLens/resolve today, so every lens is still returned fully computed. The
@@ -452,11 +452,11 @@ public class Program
             // - vscode-languageclient v10 (VS Code, Rider) does not wire its
             //   DidChangeTextDocumentFeature when textDocumentSync is absent from the static
             //   capabilities: a dynamic-only registration is silently ignored.
-            // - Visual Studio (issue #800) handles dynamic registration, but only for documents it
+            // - Visual Studio handles dynamic registration, but only for documents it
             //   attaches after the client/registerCapability arrives (~100 ms after `initialized`).
             //   A document it attached before that (a restored tab, or the open file after a
-            //   solution switch) never got didOpen or didChange for the whole session. VS used to
-            //   be excluded here on the assumption that dynamic-only was enough.
+            //   solution switch) never got didOpen or didChange for the whole session. VS must
+            //   therefore not be excluded here: dynamic-only is not enough for it.
             // Fine-grained selector filtering (*.feature + *.cs) still comes from OmniSharp's
             // dynamic registration once the feature infrastructure is activated.
             void ApplyTextDocumentSyncCapability()

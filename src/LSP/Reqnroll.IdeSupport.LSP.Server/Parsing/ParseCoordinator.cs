@@ -11,7 +11,7 @@ public sealed class ParseCoordinator : IParseCoordinator
     // Keyed by uri.ToString() (case-insensitive), matching IDocumentBufferService's own keying
     // convention rather than DocumentUri directly.
     //
-    // A plain Dictionary under _gate, not a ConcurrentDictionary (issue #554): the previous
+    // A plain Dictionary under _gate, not a ConcurrentDictionary: an
     // AddOrUpdate version could start the same URI's work twice. ConcurrentDictionary invokes its
     // add/update factories OUTSIDE the bucket lock, so two threads scheduling the same,
     // not-yet-pending URI both ran the add factory -- and that factory started the work rather
@@ -46,7 +46,7 @@ public sealed class ParseCoordinator : IParseCoordinator
             // Deciding and publishing under one lock is what makes that guarantee hold when the two
             // Schedule calls are themselves concurrent -- e.g. a didChange on the Serial dispatch
             // lane arriving while a BindingRegistryChanged reparse for the same file runs on a pool
-            // thread, the shape that produced #554's overlapping parses.
+            // thread, the shape that produces overlapping parses.
             if (_pending.TryGetValue(key, out var previous))
             {
                 scheduled = previous.ContinueWith(

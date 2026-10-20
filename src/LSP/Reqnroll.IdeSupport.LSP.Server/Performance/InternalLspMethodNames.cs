@@ -12,9 +12,9 @@ public static class InternalLspMethodNames
     public const string InternalFeatureRescan = "internal/featureRescan";
     /// <summary>
     /// Internal perf-recorder label for a rename's post-response apply: the Visual Studio
-    /// <c>workspace/applyEdit</c> round trip plus the cache commit it confirms. This work used to
-    /// sit inside the measured <c>textDocument/rename</c> request; since issue #671 (R1) it runs
-    /// after that response, so without its own label its cost would not appear anywhere.
+    /// <c>workspace/applyEdit</c> round trip plus the cache commit it confirms. This work runs after
+    /// the <c>textDocument/rename</c> response is sent, outside the measured request, so without
+    /// its own label its cost would not appear anywhere.
     /// </summary>
     public const string InternalRenamePostResponseApply = "internal/renamePostResponseApply";
 }

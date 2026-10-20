@@ -34,7 +34,7 @@ public class DocumentBufferService : IDocumentBufferService
     /// <inheritdoc/>
     public bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
     {
-        // Update-only (issue #938): a parse can finish after didClose has removed the buffer, and
+        // Update-only: a parse can finish after didClose has removed the buffer, and
         // re-creating it here would leave a ghost "open" document. TryUpdate only swaps in the
         // tagged copy if the entry is still the one just read; retry if a concurrent
         // Update/UpdateTags replaced it, and give up once Remove has taken it away.

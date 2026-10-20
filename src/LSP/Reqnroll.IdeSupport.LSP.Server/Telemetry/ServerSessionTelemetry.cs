@@ -7,14 +7,14 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
-/// Emits the IDE-agnostic server lifecycle events (issue #845): <c>ServerSessionStarted</c> once the
+/// Emits the IDE-agnostic server lifecycle events: <c>ServerSessionStarted</c> once the
 /// LSP handshake has completed, and a best-effort <c>ServerSessionEnded</c> at graceful shutdown.
 /// Because the server sends them, VS, VS Code and Rider report identical events with no per-IDE port.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Identity (<c>IdeClient</c>, <c>ServerVersion</c>, <c>SessionId</c>) is stamped by the
-/// <see cref="ILspTelemetryService"/> this service is given (the outermost identity decorator, #844).
+/// <see cref="ILspTelemetryService"/> this service is given (the outermost identity decorator).
 /// </para>
 /// <para>
 /// Only closed vocabularies, numbers and version strings are sent: OS family, CPU architecture,

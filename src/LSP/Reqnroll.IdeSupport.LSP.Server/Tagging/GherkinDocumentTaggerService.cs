@@ -77,7 +77,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
 
         // Store the new tags first so semantic-token encoding (which re-reads them) and the
         // match set below both observe the same tag collection.
-        // The buffer may have been removed by didClose while the parse ran (issue #938): the close
+        // The buffer may have been removed by didClose while the parse ran: the close
         // path has already invalidated and rescanned this document from disk, so drop the result
         // rather than overwrite that closed-file match set with one for a document no longer open.
         if (!_documentBufferService.UpdateTags(uri, tags))

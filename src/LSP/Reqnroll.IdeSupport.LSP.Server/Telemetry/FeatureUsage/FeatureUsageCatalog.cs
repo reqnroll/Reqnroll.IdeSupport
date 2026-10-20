@@ -16,8 +16,8 @@ public enum FeatureUsageKind
 public readonly record struct FeatureUsageEntry(string Key, FeatureUsageKind Kind);
 
 /// <summary>
-/// The closed, code-defined catalogue of volume signals counted by <see cref="IFeatureUsageCounters"/>
-/// (issue #582): lookups and passive editor-driven requests that are too frequent to send as one
+/// The closed, code-defined catalogue of volume signals counted by <see cref="IFeatureUsageCounters"/>:
+/// lookups and passive editor-driven requests that are too frequent to send as one
 /// telemetry event each. Maps an <see cref="IOperationDurationRecorder"/> operation label to a
 /// feature-level counter key.
 /// </summary>
@@ -25,12 +25,12 @@ public readonly record struct FeatureUsageEntry(string Key, FeatureUsageKind Kin
 /// <para>
 /// Discrete user commands are deliberately <b>not</b> here: Go to Step Definition, Find Usages,
 /// Rename, Find Unused, Comment/Uncomment, Format, Run lens lookups, Find Hooks and Go to Matching
-/// Scenarios all already send a per-call event carrying characteristic properties (#849), and
+/// Scenarios all already send a per-call event carrying characteristic properties, and
 /// counting them as well would double-count every command. Their invocation counts come from those
 /// events. A guard test pins that no catalogue operation is also a per-call command.
 /// </para>
 /// <para>
-/// Membership is a strawman pending the scope decision in issue #583 / coverage gaps in #850.
+/// Membership is a strawman pending a decision on which operations count as feature use and on coverage gaps.
 /// Continuous plumbing (document sync, semantic tokens, diagnostics publication, workspace refresh
 /// notifications, internal reconciliation) says nothing about feature use and is excluded.
 /// </para>
@@ -67,7 +67,7 @@ public static class FeatureUsageCatalog
     };
 
     /// <summary>
-    /// Counter key for an accepted step completion (issue #883 prototype). Not tied to an operation
+    /// Counter key for an accepted step completion (prototype). Not tied to an operation
     /// label: it is incremented by the completion-accepted command handler, not the duration recorder.
     /// </summary>
     public const string StepCompletionAcceptedKey = "Completion.Step.Accepted";

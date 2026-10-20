@@ -103,7 +103,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
             // happened for the *project*, not that *this file* was actually covered by that
             // reconciliation pass -- a didOpen arriving after RediscoverCsFilesAsync took its
             // snapshot (e.g. while the IDE is still restoring tabs) would otherwise never get
-            // Roslyn-parsed until the user's first edit (issue #517). Checking HasAnyBindingFor
+            // Roslyn-parsed until the user's first edit. Checking HasAnyBindingFor
             // closes that gap while still skipping the redundant parse for a file that genuinely
             // was already reconciled.
             if (isOpen && HasSuccessfulConnectorRun(project, out var provider) &&
@@ -132,7 +132,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
             ["ProjectCount"] = owners.Count,
             ["ProjectTargetFramework"] = owners.FirstOrDefault()?.TargetFrameworkMonikers,
         };
-        // Issue #845: binding counts so every discovery variant carries them. Taken from the first
+        // Binding counts so every discovery variant carries them. Taken from the first
         // owner's registry after the patch, matching how ProjectTargetFramework is chosen above.
         if (owners.FirstOrDefault() is { } firstOwner
             && firstOwner.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var ownerProvider)
@@ -179,7 +179,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
         }
     }
 
-    /// <summary>True when <paramref name="project"/> has a connector provider that has already completed a successful discovery run. See <see cref="ConnectorBindingRegistryProvider.HasSuccessfulConnectorRun"/>'s remarks (issue #471). When true, <paramref name="provider"/> is the provider found, so callers can inspect its current registry (issue #517).</summary>
+    /// <summary>True when <paramref name="project"/> has a connector provider that has already completed a successful discovery run. See <see cref="ConnectorBindingRegistryProvider.HasSuccessfulConnectorRun"/>'s remarks. When true, <paramref name="provider"/> is the provider found, so callers can inspect its current registry.</summary>
     private static bool HasSuccessfulConnectorRun(LspReqnrollProject project, out ConnectorBindingRegistryProvider? provider)
     {
         if (project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)

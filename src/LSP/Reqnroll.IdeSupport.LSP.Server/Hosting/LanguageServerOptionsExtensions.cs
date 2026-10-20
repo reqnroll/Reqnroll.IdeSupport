@@ -46,7 +46,7 @@ public static class LanguageServerOptionsExtensions
     /// <see cref="RangeOrPlaceholderRange"/>'s union-type discrimination outright: its converter
     /// looks for the exact lowercase keys <c>"range"</c>/<c>"placeholder"</c>/
     /// <c>"defaultBehavior"</c> to tell which variant is present, and silently produces neither
-    /// on the read side when the write side used PascalCase (issue #33 follow-up).
+    /// on the read side when the write side used PascalCase.
     /// </summary>
     private static readonly JsonSerializer CamelCaseSerializer = JsonSerializer.Create(
         new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
@@ -137,7 +137,7 @@ public static class LanguageServerOptionsExtensions
             (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectFilesAsync(p, ct),
             serialOptions);
 
-        // #85: VS-side tab-activation backstop — forces a fresh binding-match recompute and
+        // VS-side tab-activation backstop — forces a fresh binding-match recompute and
         // diagnostics/semantic-tokens republish for a document the client has just detected
         // becoming the active tab, independent of whatever normally triggers that.
         options.OnNotification<DocumentActivatedParams>(
@@ -171,8 +171,8 @@ public static class LanguageServerOptionsExtensions
             CustomLspMethodNames.ReqnrollFindStepUsages,
             (request, ct) => resolver!.Get<FindStepUsagesHandler>().HandleAsync(request, ct));
 
-        // Always-hierarchical documentSymbol for the VS extension's own Navigation Bar (Issue #5
-        // / Navigation Bar symbol source design, Option B) — distinct from
+        // Always-hierarchical documentSymbol for the VS extension's own Navigation Bar (Navigation Bar symbol
+        // source design, Option B) — distinct from
         // textDocument/documentSymbol, whose shape depends on the
         // real client's declared hierarchicalDocumentSymbolSupport capability. See remarks on
         // DocumentSymbolHandler.HandleHierarchicalAsync.
@@ -184,8 +184,8 @@ public static class LanguageServerOptionsExtensions
             CustomLspMethodNames.ReqnrollFindHooks,
             (request, ct) => resolver!.Get<FindHooksHandler>().HandleAsync(request, ct));
 
-        // Go to Step Definition with per-binding detail for the VS extension's results list (issue
-        // #757) — textDocument/definition only carries Locations. Same bindings as DefinitionHandler.
+        // Go to Step Definition with per-binding detail for the VS extension's results list:
+        // textDocument/definition only carries Locations. Same bindings as DefinitionHandler.
         options.OnRequest<TextDocumentPositionParams, FindStepDefinitionsResponse>(
             CustomLspMethodNames.ReqnrollFindStepDefinitions,
             (request, ct) => resolver!.Get<FindStepDefinitionsHandler>().HandleAsync(request, ct));
@@ -203,8 +203,7 @@ public static class LanguageServerOptionsExtensions
             (request, ct) => resolver!.Get<ResolveContainerTestTargetsHandler>().HandleAsync(request, ct));
 
         // LSP-server outcome pipeline (VSTest logger → server → every connected IDE): the run
-        // registration and outcome lookup that used to be an in-proc, VS-only pair
-        // (TestOutcomeListener/RunTestCodeLensCallbackListener) are now custom requests any IDE's
+        // registration and outcome lookup are custom requests any IDE's
         // glue component can call the same way.
         options.OnRequest<RegisterTestRunParams, RegisterTestRunResponse>(
             CustomLspMethodNames.ReqnrollRegisterTestRun,
@@ -215,8 +214,8 @@ public static class LanguageServerOptionsExtensions
             (request, ct) => resolver!.Get<GetTestOutcomeHandler>().HandleAsync(request, ct));
 
         // A single manual registration handles textDocument/codeLens for every lens kind:
-        // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches,
-        // issue #269), and HookMatchCountCodeLensHandler (.cs hook-match counts, issue #373).
+        // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches),
+        // and HookMatchCountCodeLensHandler (.cs hook-match counts).
         // Each handler returns an empty array for content it doesn't own -- StepCodeLensHandler
         // and HookMatchCountCodeLensHandler both target .cs but filter to disjoint registry
         // collections (StepDefinitions vs Hooks), since a single [Binding] class routinely mixes
@@ -238,7 +237,7 @@ public static class LanguageServerOptionsExtensions
             });
 
         // codeLens/resolve: dispatches to whichever handler produced the lens, based on the
-        // "kind" discriminator embedded in CodeLens.Data (issue #471, non-VS deferred-resolve path).
+        // "kind" discriminator embedded in CodeLens.Data (non-VS deferred-resolve path).
         options.OnRequest<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens, global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>(
             LspStandardMethodNames.CodeLensResolve,
             (lens, ct) => resolver!.Get<CodeLensResolveHandler>().ResolveAsync(lens, ct));
@@ -266,7 +265,7 @@ public static class LanguageServerOptionsExtensions
         // prepareRename null → null: per the LSP spec, a null prepareRename result means
         // "rename not supported at the given position", and vscode-languageclient handles that
         // quietly. Throwing here instead surfaces the raw exception text as a visible error
-        // popup — confusing UX for what should be a silent no-op (see issue #47).
+        // popup — confusing UX for what should be a silent no-op.
         // rename null → empty WorkspaceEdit: VS Code treats a JSON-RPC error from rename as
         // "Internal Error" (confusing UX); returning an empty edit is a silent no-op fallback.
         // renameTargets null → empty response.
@@ -286,7 +285,7 @@ public static class LanguageServerOptionsExtensions
                 return result != null ? (JToken)JObject.FromObject(result, CamelCaseSerializer) : JValue.CreateNull();
             });
 
-        // Serial (issue #671, R8) — not the OmniSharp default of Parallel for a manually-routed
+        // Serial — not the OmniSharp default of Parallel for a manually-routed
         // OnRequest. A rename computes one edit spanning several documents at once: it reads the
         // binding registry, the C# live-text cache, and the match caches of every feature file
         // containing a usage. A didChange landing partway through that read yields an edit built
@@ -297,10 +296,10 @@ public static class LanguageServerOptionsExtensions
         // rare, unlike the per-keystroke handlers this codebase deliberately keeps off that lane.
         //
         // This also makes the request immune to OmniSharp's global Parallel→Serial ContentModified
-        // cancellation (issue #654) — but that is a secondary benefit, not the reason: R1 already
-        // removes the self-inflicted didOpen that triggered it, by moving the workspace/applyEdit
-        // push out of the request. Note R1 is a *prerequisite* for this line, not merely a
-        // companion: holding this shared lane across a client round-trip would block every other
+        // cancellation — but that is a secondary benefit, not the reason: the rename
+        // handler already removes the self-inflicted didOpen that triggered it, by moving the
+        // workspace/applyEdit push out of the request. Note that move is a *prerequisite* for this
+        // line, not merely a companion: holding this shared lane across a client round-trip would block every other
         // didOpen/didChange and the start of all newly-arriving Parallel requests for its duration.
         options.OnRequest<RenameParams, WorkspaceEdit>(
             LspStandardMethodNames.TextDocumentRename,

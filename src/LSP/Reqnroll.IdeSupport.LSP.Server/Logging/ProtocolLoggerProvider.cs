@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Logging;
 /// time we're asked to look at a bug report. Writes to a separate <c>reqnroll-*-protocol-*.log</c>
 /// file (not the main server log) so two independent writers never append to the same file
 /// concurrently, and gated by its own <c>--protocol-log-level</c> rather than the main
-/// <c>--log-level</c> — the two are deliberately decoupled (F41 follow-up): a user turning up file
+/// <c>--log-level</c> — the two are deliberately decoupled: a user turning up file
 /// logging for our own app-level diagnosis shouldn't also flood their editor's Output panel with
 /// library internals, and vice versa.
 /// </remarks>

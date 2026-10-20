@@ -3,7 +3,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 /// <summary>Default <see cref="IFeatureUsageCounters"/>, backed by a <see cref="ConcurrentDictionary{TKey,TValue}"/>.</summary>
 /// <remarks>
 /// <see cref="ConcurrentDictionary{TKey,TValue}.AddOrUpdate(TKey,TValue,Func{TKey,TValue,TValue})"/>'s
-/// update factory runs outside the bucket lock (the #554 lesson recorded in
+/// update factory runs outside the bucket lock (see
 /// <c>Pipeline/ParseCoordinator.cs</c>), so it must be pure — a plain <c>count + 1</c> is. Draining
 /// claims each key individually via <c>TryRemove</c> on a key snapshot, the same pattern
 /// <c>Pipeline/RefreshDebouncer.Dispose</c> and <c>Pipeline/FeatureRescanDebouncer.Dispose</c> use

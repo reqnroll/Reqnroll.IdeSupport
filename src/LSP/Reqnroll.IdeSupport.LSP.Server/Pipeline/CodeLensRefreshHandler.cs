@@ -23,8 +23,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// <see cref="SemanticTokensRefreshHandler"/>/<see cref="InlayHintRefreshHandler"/>: debounces bursts
 /// of match-cache notifications into a single refresh via the shared <see cref="IRefreshDebouncer"/>
 /// singleton — not an instance field, since MediatR constructs a new handler instance per
-/// notification (see <see cref="IRefreshDebouncer"/>'s remarks), which previously meant every
-/// notification scheduled its own independent refresh instead of debouncing (issue #156).
+/// notification (see <see cref="IRefreshDebouncer"/>'s remarks), which would mean every
+/// notification scheduled its own independent refresh instead of debouncing.
 /// </remarks>
 public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
 {

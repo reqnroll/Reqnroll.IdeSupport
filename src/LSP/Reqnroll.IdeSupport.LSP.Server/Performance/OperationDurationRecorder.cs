@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 /// <remarks>
 /// Privacy: the log line may carry the document URI for local diagnosis, but the telemetry
 /// event must not — it carries only the operation label, the duration, a coarse bucket (the
-/// client identity is stamped by the telemetry pipeline, #844), never a path or file content.
+/// client identity is stamped by the telemetry pipeline), never a path or file content.
 /// </remarks>
 public sealed class OperationDurationRecorder : IOperationDurationRecorder
 {
@@ -52,8 +52,8 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         // Primary sink: the existing log file. Verbose so it is off in normal runs and on when
         // diagnostics are enabled. The "PERF " prefix makes it greppable for offline analysis.
         // thread=<managed thread id> lets an offline analysis tell genuinely concurrent operations
-        // apart from ones serialized onto the same thread (issue #471 investigation — see
-        // ConcurrencyProbeTests for the empirical finding this was added to help confirm/quantify).
+        // apart from ones serialized onto the same thread (see
+        // ConcurrencyProbeTests for the empirical finding this helps confirm/quantify).
         _logger.LogVerbose(() =>
         {
             var line = $"PERF op={operation} ms={DurationFormatter.RoundMilliseconds(elapsedMs)} thread={Environment.CurrentManagedThreadId}";
@@ -80,7 +80,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
             });
         }
 
-        // Tertiary sink (issue #582): unsampled, in-memory, no wire traffic here -- counted
+        // Tertiary sink: unsampled, in-memory, no wire traffic here -- counted
         // exactly and flushed periodically by IFeatureUsageFlushService as one aggregated event.
         // Deliberately NOT gated by _sampler above: usage counting needs exact counts, not a
         // rate -- see FeatureUsageCatalog's remarks on why the two mechanisms stay separate.

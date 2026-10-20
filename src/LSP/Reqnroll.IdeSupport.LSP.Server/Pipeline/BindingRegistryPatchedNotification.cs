@@ -11,9 +11,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// </summary>
 /// <remarks>
 /// <para>
-/// One of three events that previously shared a single <c>BindingRegistryChangedNotification</c>
-/// type (issue #577) — see <see cref="BindingRegistryReplacedNotification"/>'s remarks for why
-/// they were split.
+/// One of three registry-change events — see
+/// <see cref="BindingRegistryReplacedNotification"/>'s remarks for why they are separate.
 /// </para>
 /// <para>
 /// Re-parsing only the currently open feature files owned by <see cref="Project"/> is sufficient
@@ -23,7 +22,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// didn't (e.g. a method-body edit) never reaches here, since there is nothing to re-parse.
 /// </para>
 /// <para>
-/// <b>Consumers must be idempotent (issue #578):</b> handling the same notification twice for the
+/// <b>Consumers must be idempotent:</b> handling the same notification twice for the
 /// same <see cref="Project"/> must leave the same observable end state as handling it once.
 /// </para>
 /// </remarks>

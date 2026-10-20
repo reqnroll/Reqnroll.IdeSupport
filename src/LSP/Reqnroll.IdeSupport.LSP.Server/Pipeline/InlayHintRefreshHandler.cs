@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// notifications into a single <c>workspace/inlayHint/refresh</c> request via the shared
 /// <see cref="IRefreshDebouncer"/> singleton (not an instance field — see that type's remarks for
 /// why), and only sends it when the client advertised <c>workspace.inlayHint.refreshSupport</c>.
-/// <see cref="SendRefreshAsync"/> passes the debouncer's own token into the request (issue #471),
+/// <see cref="SendRefreshAsync"/> passes the debouncer's own token into the request,
 /// so a superseding notification cancels a refresh already in flight, not just one still waiting
 /// out the debounce delay.
 /// </remarks>

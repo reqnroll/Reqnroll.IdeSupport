@@ -109,7 +109,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
         // Gate the connector on the project actually being a Reqnroll *test* project -- one that
         // uses Reqnroll and owns at least one feature file, the same gate the legacy VS
-        // extension's DiscoveryInvoker applied (issue #731).
+        // extension's DiscoveryInvoker applied.
         // No client filters what it sends -- VS and VS Code report every project in the
         // solution/workspace, Rider every runnable project -- so without this check every ordinary
         // library in the solution got a connector process that loaded its assembly and dependency
@@ -164,7 +164,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         }
         sw.Stop();
 
-        // Issue #846: keep only the whitelisted, path-free subset of the connector's telemetry.
+        // Keep only the whitelisted, path-free subset of the connector's telemetry.
         LastRunTelemetry = ConnectorRunTelemetry.FromConnectorProperties(result.TelemetryProperties);
 
         ct.ThrowIfCancellationRequested();
@@ -190,7 +190,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     private ProjectBindingRegistry BuildRegistry(IProjectScope scope, DiscoveryResult result)
     {
         // A project-scoped resolver, so a source path recorded on the build machine can be remapped
-        // onto this one instead of stored as-is (issue #540). scope.ProjectFolder is the re-rooting
+        // onto this one instead of stored as-is. scope.ProjectFolder is the re-rooting
         // target; without it the resolver degrades to a plain existence check.
         var importer = new BindingImporter(result.SourceFiles, result.TypeNames, _logger, _fileSystem,
             new ProjectSourceFileResolver(scope.ProjectFolder, _fileSystem));
@@ -199,13 +199,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // single binding class typically contributes many step definitions from the same file.
         var parsedFiles = new Dictionary<string, SyntaxNode>();
 
-        // Issue #930: a compiled binding is only as current as the assembly. After a branch switch
+        // A compiled binding is only as current as the assembly. After a branch switch
         // with no rebuild, the assembly still describes files the working tree no longer has, and
         // the Roslyn reconcile cannot revisit a file that is gone. A binding whose recorded source
         // path is inside this project's folder and did not resolve is therefore stale and is left
         // out. Paths outside the project folder (a NuGet package, a project reference, a container
         // or CI build) never had local source to begin with, so they are not stale and are kept.
-        // Issue #933: a shared project's files sit beside the project folder, not in it, so the
+        // A shared project's files sit beside the project folder, not in it, so the
         // workspace folder containing the project is owned too (see GetOwnedSourceRoots).
         var ownedRoots = GetOwnedSourceRoots(scope);
         var staleSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -226,7 +226,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // The runtime registers one binding per [Scope], so an attribute with several scopes arrives as
         // several DTOs. They are imported as one binding per attribute, their scopes reduced together
         // by ScopeNormalizer -- the same reduction Roslyn discovery applies -- so both paths give the
-        // consumers the same shape (issues #953, #1133).
+        // consumers the same shape.
         var stepDefinitions = BindingImporter.GroupByAttribute(result.StepDefinitions ?? [])
             .Where(group => !IsStale(group.Binding.SourceLocation))
             .Select(group => {
@@ -239,14 +239,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 // replaces the connector's own PDB sequence-point location (which can land a line
                 // or more into the method body) with the precise position Roslyn discovery
                 // already uses, so CodeLens and other consumers anchor consistently regardless of
-                // which discovery path populated the registry (issue #471 follow-up).
+                // which discovery path populated the registry.
                 //
                 // sd.Method is the connector's wire-format reference --
                 // "{DeclaringTypeName}.{MethodName}({ParamTypeNames})", e.g. "Steps.SetFirstNumber(Int32)"
                 // -- not a bare method name, so it must be stripped down to the bare identifier before
-                // comparing against MethodDeclarationSyntax.Identifier.Text below (issue #484 follow-up:
-                // passing sd.Method straight through made both backfills silently miss on every real
-                // connector-discovered binding, matching only in unit tests whose fixtures used an
+                // comparing against MethodDeclarationSyntax.Identifier.Text below (passing sd.Method
+                // straight through makes both backfills silently miss on every real
+                // connector-discovered binding, matching only in unit tests whose fixtures use an
                 // already-bare name that never occurs in production).
                 var root = TryGetParsedRoot(importer, sd.SourceLocation, sd.Method, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
@@ -259,7 +259,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 // CodeLens anchor and other consumers need never gets backfilled, and
                 // ImportStepDefinition silently falls back to the connector's raw PDB-derived
                 // location -- which SourceLocationProvider documents as the first *executable
-                // statement* in the method body, not the declaration line (issue #484's symptom:
+                // statement* in the method body, not the declaration line (symptom:
                 // "N step usages" rendering below the method instead of above it). Root causes seen
                 // in practice: the file changed since the last build, a partial class split across
                 // files, or an overload sharing the same method name.
@@ -278,10 +278,10 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             .Where(sd => sd is not null)
             .ToList();
 
-        // Hooks get the same method-identifier backfill as step definitions above. They used to get
-        // none, which left them on the raw PDB sequence point -- inside the method body rather than
-        // on its declaration -- and skipped the source-file resolution the backfill performs on the
-        // way (issue #540 F2). Hooks carry no attribute line (ProjectHookBinding does not model one),
+        // Hooks get the same method-identifier backfill as step definitions above. Without it they
+        // would stay on the raw PDB sequence point -- inside the method body rather than on its
+        // declaration -- and skip the source-file resolution the backfill performs on the way.
+        // Hooks carry no attribute line (ProjectHookBinding does not model one),
         // so only the identifier location is backfilled here.
         var hooks = BindingImporter.GroupByAttribute(result.Hooks ?? [])
             .Where(group => !IsStale(group.Binding.SourceLocation))
@@ -366,8 +366,8 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
     /// <summary>
     /// Returns the folders whose missing source files mark a compiled binding as stale: the project
-    /// folder (issue #930) and, when it contains the project folder, the workspace folder the client
-    /// reported the project under (issue #933).
+    /// folder and, when it contains the project folder, the workspace folder the client
+    /// reported the project under.
     /// </summary>
     /// <remarks>
     /// The workspace folder is what covers a shared project (<c>.projitems</c>) beside the project
@@ -400,7 +400,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
     /// <summary>
     /// Reports, once per discovery run, the compiled bindings left out because their source file
-    /// under an owned folder no longer exists (issues #930, #933).
+    /// under an owned folder no longer exists.
     /// </summary>
     private void ReportStaleBindings(
         IProjectScope scope, IReadOnlyList<string> ownedRoots, int staleBindingCount, ISet<string> staleSourcePaths)
@@ -426,7 +426,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// Reports, once per discovery run, the source paths this run could not place on this machine.
     /// </summary>
     /// <remarks>
-    /// This is the "fail loudly" half of the issue #540 decision. Everything downstream now omits a
+    /// This is the "fail loudly" half of the unresolvable-source-path policy. Everything downstream now omits a
     /// navigation target it cannot resolve rather than emitting a dead one, which fixes the wrong
     /// behaviour but is still invisible on its own — a user whose Go To Definition does nothing
     /// needs to be able to find out why. One warning per run naming the count, the example path and
@@ -458,7 +458,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// <summary>
     /// Renders " (connector pid=&lt;n&gt;)" when the connector process's PID is known, so a reader of
     /// this log can go straight to the matching <c>reqnroll-*-connector-*-{pid}.log</c> file if one
-    /// exists (issue #637) — the Connector only writes one when it hit an error or file logging was
+    /// exists — the Connector only writes one when it hit an error or file logging was
     /// explicitly requested (<c>--debug</c>), not for every routine successful run.
     /// </summary>
     private static string ConnectorPidSuffix(DiscoveryResult result) =>

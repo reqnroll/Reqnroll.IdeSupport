@@ -48,7 +48,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     // per-file patch (ApplyRoslynFileUpdateAsync), e.g. from textDocument/didOpen on an unbuilt
     // project. This tracks specifically whether the out-of-process connector has ever
     // successfully loaded real bindings from a compiled DLL (RunDiscoveryAsync's non-hash-match
-    // path) -- see HasSuccessfulConnectorRun's remarks (issue #471).
+    // path) -- see HasSuccessfulConnectorRun's remarks.
     private volatile bool _hasSuccessfulConnectorRun;
 
     // Serialises the read-modify-write on _current so two concurrent ApplyRoslynFileUpdateAsync
@@ -79,8 +79,8 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     }
 
     // featureFileLookup reaches the Reqnroll-test-project gate in ConnectorDiscoveryService: it is
-    // how a *linked* feature file, owned by the project but living outside its folder, still counts
-    // (issue #731). Null degrades the gate to the project-folder walk, which is what a caller that
+    // how a *linked* feature file, owned by the project but living outside its folder, still counts.
+    // Null degrades the gate to the project-folder walk, which is what a caller that
     // has no membership index (tests) gets.
     private static IConnectorDiscoveryService CreateDefaultDiscoveryService(
         IIdeSupportLogger logger, IFileSystemForIDE? fileSystem, IProjectFeatureFileLookup? featureFileLookup) =>
@@ -134,7 +134,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// Used by <see cref="Discovery.CSharpBindingDiscoveryService.UpdateFromSourceAsync"/> to skip
     /// a redundant source-level parse on <c>textDocument/didOpen</c> once the connector has already
     /// covered the project — confirmed live to otherwise re-parse the exact same unedited file
-    /// twice within seconds (issue #471). VS Code specifically relies on the un-gated path staying
+    /// twice within seconds. VS Code specifically relies on the un-gated path staying
     /// available before this becomes true: its extension only ever runs a design-time MSBuild
     /// evaluation, never an actual build, so a freshly cloned, not-yet-built project can go its
     /// entire first session with this property false.
@@ -190,7 +190,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// something. Pass <see langword="false"/> when the caller is itself a sub-step of a larger,
     /// already-coordinated flow that will reparse and notify unconditionally once it's done --
     /// e.g. <c>BindingRegistryChangedHandler.RediscoverCsFilesAsync</c>'s post-connector-run
-    /// overlay (issue #471). Reconciling Roslyn-parsed source on top of the connector's
+    /// overlay. Reconciling Roslyn-parsed source on top of the connector's
     /// reflection-based extraction of the same, unedited file routinely trips
     /// <see cref="ProjectBindingRegistry.HasExpressionChanges"/> below even with zero real edits
     /// (the two extraction methods aren't guaranteed byte-identical), so notifying there fired a
@@ -230,14 +230,13 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         // Skip the notification entirely when no binding's matched expression/scope/validity
         // actually changed (e.g. a method-body or comment edit). Publishing here drives
         // feature-file reparsing downstream (BindingRegistryChangedHandler) and .cs
-        // binding-validation diagnostics (CSharpDiagnosticsRegistryChangedHandler, issue #514),
+        // binding-validation diagnostics (CSharpDiagnosticsRegistryChangedHandler),
         // both of which can only produce a different result when a step definition's expression,
         // a hook's scope/order, or any binding's Error was added, removed, or edited -- so
         // there's nothing for either pipeline to do otherwise, and running them anyway would just
         // burn CPU on every keystroke. Both checks are needed: a hook-only edit (e.g. adding
         // [BeforeScenario]) doesn't touch any step definition, so relying on HasExpressionChanges
-        // alone left the hook-count CodeLens stale until the next full rebuild (issue #372
-        // follow-up). Error is included in both checks' own comparison (see their remarks) rather
+        // alone leaves the hook-count CodeLens stale until the next full rebuild. Error is included in both checks' own comparison (see their remarks) rather
         // than added as a third check here, since a binding can carry an Error independent of
         // whether it's a step definition or a hook.
         if (!ProjectBindingRegistry.HasExpressionChanges(previous, updated, file.FullName)
@@ -285,7 +284,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
             ct.ThrowIfCancellationRequested();
 
-            // Issue #939: every non-Discovered status hands back the unchanged last-good registry and
+            // Every non-Discovered status hands back the unchanged last-good registry and
             // hash, so the hash cannot tell these apart -- the status does. None of them swaps the
             // registry or advances _lastHash, so the next trigger retries exactly as before.
             switch (outcome.Status)
@@ -298,7 +297,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 case ConnectorDiscoveryStatus.Failed:
                     // The connector threw or reported failure (already logged by the service). Same
                     // shape as the unexpected-exception event below, minus the raw error text: the
-                    // connector's own error is deliberately not forwarded (issue #846), only its
+                    // connector's own error is deliberately not forwarded, only its
                     // whitelisted telemetry. _isFirstRun is kept for the same reason as there.
                     var failureProperties = new Dictionary<string, object?>
                     {
@@ -368,7 +367,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
                 ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
             };
-            // Issue #846: project profile (Reqnroll version, legacy SpecFlow, connector type, exit
+            // Project profile (Reqnroll version, legacy SpecFlow, connector type, exit
             // code) from the connector run, whitelisted by ConnectorRunTelemetry -- never the
             // connector's command line or raw error text.
             _discoveryService.LastRunTelemetry?.AddTo(properties);
@@ -376,7 +375,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
             _bindingRegistryChanged?.Invoke(this, true);
 
-            // Issue #845 (from #258): the project snapshot, a separate event so the discovery
+            // The project snapshot, a separate event so the discovery
             // event's schema stays stable. Same trigger point, so it re-sends on every build that
             // changed the bindings; the hash-noop path above sends none because nothing changed.
             // Sent after the registry-changed notification so telemetry can never delay consumers

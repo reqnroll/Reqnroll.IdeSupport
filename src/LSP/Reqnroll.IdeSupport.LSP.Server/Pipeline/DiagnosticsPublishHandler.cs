@@ -127,7 +127,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
     /// (internal, not private) with <see cref="Features.CodeActions.CodeActionHandler"/> so a
     /// <c>CodeAction</c> can reference the exact diagnostic shape this handler publishes — the two
     /// must produce identical <c>Diagnostic</c> values for a client to associate the two by
-    /// range/source (issue #563).
+    /// range/source.
     /// </summary>
     internal static Diagnostic ToLspDiagnostic(GherkinDiagnostic d)
         => new()

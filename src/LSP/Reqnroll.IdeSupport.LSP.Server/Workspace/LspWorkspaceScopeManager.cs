@@ -90,7 +90,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         // innermost one containing its own files it would then win ResolvePrimaryOwner for them --
         // resolving those files to an empty registry instead of the referencing test project's
         // populated one, which shows up as every step in a shared .feature file being reported
-        // undefined (issue #735). Its content still reaches the server: each project that imports
+        // undefined. Its content still reaches the server: each project that imports
         // the .projitems compiles those files, and lists them in its own membership baseline.
         if (ProjectFileTypes.IsSharedProject(parameters.ProjectFile))
         {
@@ -121,7 +121,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // refresh is needed here for a brand-new project.
             ProjectDiscovered?.Invoke(project);
 
-            // Telemetry (issue #581 finding 2): the design doc's OpenProject event had no
+            // Telemetry: the design doc's OpenProject event had no
             // caller anywhere in the LSP-era architecture -- its only implementation,
             // ProjectSettingsProvider, is legacy infrastructure never instantiated under
             // src/LSP. Firing it here, server-side, covers VS/VS Code/Rider from one place
@@ -135,7 +135,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
                 ["FeatureFileCount"] = HasBaselineForProject(project)
                     ? GetIndexedFeatureFiles(project).Count
                     : (int?)null,
-                // Issue #846: the cross-IDE project profile (previously VS-only). Reqnroll
+                // The cross-IDE project profile. Reqnroll
                 // version arrives on the first ReqnrollDiscoveryExecuted event,
                 // where the connector reports them authoritatively.
                 ["ProjectTargetFramework"] = project.TargetFrameworkMonikers,
@@ -156,7 +156,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // a plain rebuild — same output path, same TFM — would otherwise trigger nothing at
             // all. The assembly-hash guard in ConnectorDiscoveryService.ComputeHash already makes
             // a redundant trigger a cheap no-op, so being unconditional here costs nothing when
-            // the output path/TFM didn't change and the assembly is actually unchanged (issue #542).
+            // the output path/TFM didn't change and the assembly is actually unchanged.
             TriggerBindingDiscovery(project);
         }
 
@@ -164,12 +164,12 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         // this registration — that full re-scan was deferred since no project existed yet to
         // attribute it to. Fire it now: any .cs buffers synced during the race window were
         // evaluated with zero known owners and would otherwise never be re-evaluated, silently
-        // gating live Roslyn re-discovery for them until the next full build (issue #48).
+        // gating live Roslyn re-discovery for them until the next full build.
         if (_membershipIndex.TryConsumePendingFullRescan(project))
         {
             _logger.LogInfo(
                 $"[Membership] Firing deferred full re-scan for '{project.ProjectName}' now that the project has loaded.");
-            // See BindingRegistryProviderRouter.OnProviderChanged (issue #477): discarding
+            // See BindingRegistryProviderRouter.OnProviderChanged: discarding
             // the Publish Task would not actually defer it off this call stack. CancellationToken.None,
             // not the incoming `cancellationToken`: that token is scoped to this notification's
             // own request lifetime, which the background continuation deliberately outlives --
@@ -265,8 +265,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         // PathUtils.IsSamePath rather than a raw string compare: the watcher reports the path the
         // client observed, which need not be byte-identical to the OutputAssemblyPath MSBuild gave
         // us for the same DLL (separators, a "bin\Debug\..\Debug" segment, casing). A miss here
-        // silently drops the rebuild trigger -- see issue #542, where this is the second, latent
-        // break in that chain (issue #540 F4).
+        // silently drops the rebuild trigger.
         return _scopes.Values
             .SelectMany(s => s.Projects)
             .FirstOrDefault(p => PathUtils.IsSamePath(p.OutputAssemblyPath, assemblyPath));
@@ -292,7 +291,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         ReqnrollProjectFilesParams parameters,
         CancellationToken cancellationToken)
     {
-        // Same reasoning as HandleProjectLoadedAsync (issue #735): indexing a shared project's
+        // Same reasoning as HandleProjectLoadedAsync: indexing a shared project's
         // baseline would attribute its files to a project that is deliberately never registered,
         // so they would resolve to no owner at all rather than to the importing project.
         if (ProjectFileTypes.IsSharedProject(parameters.ProjectFile))

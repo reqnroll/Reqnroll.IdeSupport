@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// asks the client to refresh semantic tokens, and the (future) diagnostics aggregator pushes
 /// <c>textDocument/publishDiagnostics</c>.
 /// <para>
-/// <b>Consumers must be idempotent (issue #578):</b> handling the same notification twice must
+/// <b>Consumers must be idempotent:</b> handling the same notification twice must
 /// leave the same observable end state as handling it once — every current handler re-reads
 /// current state and pushes a full result rather than an incremental delta, so this holds today,
 /// but it is an invariant a new handler must preserve, not merely an accident of how the

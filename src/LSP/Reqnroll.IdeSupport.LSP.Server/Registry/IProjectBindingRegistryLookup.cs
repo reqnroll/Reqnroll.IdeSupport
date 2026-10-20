@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Registry;
 /// <para>
 /// Registry-change notifications flow through MediatR as
 /// <see cref="Pipeline.BindingRegistryReplacedNotification"/> /
-/// <see cref="Pipeline.BindingRegistryPatchedNotification"/> (issue #577) rather than through a
+/// <see cref="Pipeline.BindingRegistryPatchedNotification"/> rather than through a
 /// C# event on this interface, so that all cross-cutting LSP concerns follow the same
 /// established notification pattern.
 /// </para>
@@ -59,7 +59,7 @@ public interface IProjectBindingRegistryLookup
     /// <remarks>
     /// Starts from the project(s) that directly own <paramref name="csUri"/> (folder-prefix
     /// ownership, resolved internally) and widens that set to include any other project whose own
-    /// registry independently reports one of this file's bindings (issue #548): a project that
+    /// registry independently reports one of this file's bindings: a project that
     /// references another Reqnroll-bearing project (a class library, say) discovers that library's
     /// bindings too via its own connector run, and its feature files are legitimate usage sites for
     /// them even though it doesn't "own" the .cs file that declares them. Direct ownership alone
@@ -72,10 +72,10 @@ public interface IProjectBindingRegistryLookup
     /// registry's entry to resolve to the exact same physical <c>SourceLocation.SourceFile</c> —
     /// content-only matching would also widen to a project with its own unrelated but
     /// identical-looking binding (e.g. a parallel multi-targeted sibling project with its own copy
-    /// of the same source), which doubled usage counts before this constraint (issue #552).
+    /// of the same source), which would double usage counts.
     /// </para>
     /// Returns <see langword="null"/> (unrestricted search) when <paramref name="csUri"/> has no
-    /// direct owner at all, preserving prior behaviour for an unowned file.
+    /// direct owner at all.
     /// </remarks>
     IReadOnlyCollection<ProjectOwner>? ResolveUsageSearchScope(DocumentUri csUri);
 }

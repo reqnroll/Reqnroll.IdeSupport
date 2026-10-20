@@ -3,7 +3,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 /// <summary>
 /// Periodically drains <see cref="IFeatureUsageCounters"/> and emits the result as one
 /// <c>FeatureUsageSummary</c> telemetry event, instead of a <c>telemetry/event</c> notification
-/// per invocation (issue #582).
+/// per invocation.
 /// </summary>
 public interface IFeatureUsageFlushService
 {

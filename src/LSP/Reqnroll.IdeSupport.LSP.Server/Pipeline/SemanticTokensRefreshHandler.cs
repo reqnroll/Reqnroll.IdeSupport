@@ -28,7 +28,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// (not <see cref="CancellationToken.None"/>) into the actual <c>SendRequest</c> call, so a
 /// superseding notification cancels a refresh that is already in flight, not just one still
 /// waiting out the debounce delay — see <see cref="RefreshDebouncer"/>'s remarks for why the
-/// distinction matters (issue #471).
+/// distinction matters.
 /// </para>
 /// </remarks>
 public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
