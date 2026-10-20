@@ -64,9 +64,10 @@ redirect to your own resource.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
-`RiderTelemetryTransmitter.transmit`, VS Code in its transmitter). VS Code *additionally* honors
-`telemetry.telemetryLevel`; Visual Studio and Rider do not currently consult their IDE's own
-telemetry settings (tracked as a follow-up). Debugging: `REQNROLL_TELEMETRY_DEBUG_LOG` mirrors every
+`RiderTelemetryTransmitter.transmit`, VS Code in its transmitter). **Rider is opt-in** (issue
+#1239): it sends only when `REQNROLL_TELEMETRY_ENABLED=1` (JetBrains Marketplace guideline 2.2(d)
+requires explicit permission). VS Code *additionally* honors `telemetry.telemetryLevel`; Visual
+Studio does not currently consult its IDE's own telemetry settings (tracked as a follow-up). Debugging: `REQNROLL_TELEMETRY_DEBUG_LOG` mirrors every
 event (server- and host-side) to a local JSONL file — see the archived
 `docs/Archive/build-plan-telemetry-capture.md` §8.
 

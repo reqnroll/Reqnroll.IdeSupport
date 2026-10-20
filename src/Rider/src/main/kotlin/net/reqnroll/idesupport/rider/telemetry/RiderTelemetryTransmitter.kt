@@ -79,9 +79,9 @@ object RiderTelemetryTransmitter {
         resolveConnection(System.getenv(CONNECTION_STRING_ENV_VAR)) { ReqnrollDebugLogger.info(it) }
     }
 
-    // Same env-var opt-out contract as Reqnroll.IdeSupport.Common.Telemetry.EnableTelemetryChecker
-    // (used by VS's transmitter) — kept identical rather than inventing a Rider-specific setting,
-    // since REQNROLL_TELEMETRY_ENABLED is meant to be a single cross-IDE kill switch.
+    // Unlike VS and VS Code, Rider telemetry is opt-IN (issue #1239): the JetBrains Marketplace
+    // Approval Guidelines (section 2.2(d)) require explicit user permission, and Rider exposes no
+    // IDE-level setting we are obliged to honour. It is therefore off unless this env var is "1".
     internal const val TELEMETRY_ENV_VAR = "REQNROLL_TELEMETRY_ENABLED"
 
     /**
@@ -317,10 +317,11 @@ object RiderTelemetryTransmitter {
     private fun extensionVersion(): String = PluginManagerCore.getPlugin(PLUGIN_ID)?.version ?: "unknown"
 
     /**
-     * Pure/parameterized so the opt-out check is testable without mutating real environment state
-     * — mirrors [net.reqnroll.idesupport.rider.lsp.ReqnrollServerPathResolver]'s rid/isWindows rationale.
+     * Opt-in check (issue #1239): telemetry is on only when the env var is exactly "1"; unset or any
+     * other value is off. Pure/parameterized so it is testable without mutating real environment
+     * state — mirrors [net.reqnroll.idesupport.rider.lsp.ReqnrollServerPathResolver]'s rid/isWindows rationale.
      */
-    internal fun isEnabled(envValue: String?): Boolean = envValue == null || envValue == "1"
+    internal fun isEnabled(envValue: String?): Boolean = envValue == "1"
 
     /**
      * Pure/parameterized Application Insights `TrackEvent` envelope builder — see
