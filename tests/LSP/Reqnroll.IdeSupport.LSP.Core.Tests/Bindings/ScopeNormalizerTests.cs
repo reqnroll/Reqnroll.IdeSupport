@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 /// <summary>
 /// <see cref="ScopeNormalizer"/> reduces the scopes Reqnroll registers for one binding attribute
 /// (alternatives, OR) to a canonical form using only rewrites that cannot change which scenarios
-/// match (issues #953, #1133).
+/// match.
 /// </summary>
 public class ScopeNormalizerTests
 {

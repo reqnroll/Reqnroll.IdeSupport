@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Discovery;
 
 /// <summary>
 /// Covers the gate that keeps the out-of-process connector away from projects that cannot
-/// contain bindings (issue #731).
+/// contain bindings.
 /// </summary>
 public class ReqnrollProjectDetectorTests : IDisposable
 {
@@ -110,7 +110,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
     public void Recognises_the_runtime_assembly_next_to_the_output_assembly()
     {
         // Clients that report no package references at all still have to work: Rider sends an
-        // empty list for every project, and VS can send one transiently while NuGet loads (#690).
+        // empty list for every project, and VS can send one transiently while NuGet loads.
         File.WriteAllText(Path.Combine(_outputFolder, "Reqnroll.dll"), "not a real assembly");
 
         CreateSut().IsReqnrollTestProject(MakeScope()).Should().BeTrue();

@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.TestOutcomes;
 
 /// <summary>
-/// Phase 1 of the MTP test-outcome plan (issue #715): the breadcrumb a future MTP reporter discovers
+/// The MTP test-outcome session breadcrumb: the breadcrumb a future MTP reporter discovers
 /// the LSP server's listener endpoint through, since MTP has no per-run config injection channel the
 /// way VSTest's runsettings does. Covers write/delete shape and stale-entry pruning directly, without
 /// spawning real processes — <see cref="TestOutcomeTcpListenerBreadcrumbTests"/> (LSP.Server.Tests)

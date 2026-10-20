@@ -4,7 +4,7 @@ using IoPath = System.IO.Path;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 
 /// <summary>
-/// Covers the issue #540 resolution ladder: a source path recorded by discovery on the machine that
+/// Covers the source-path resolution ladder: a source path recorded by discovery on the machine that
 /// built the assembly, mapped (or not) onto a path that exists here.
 /// </summary>
 public class ProjectSourceFileResolverTests : IDisposable

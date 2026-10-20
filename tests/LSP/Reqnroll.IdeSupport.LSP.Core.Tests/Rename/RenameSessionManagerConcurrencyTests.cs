@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Rename;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Rename;
 
 /// <summary>
-/// Issue #568: <see cref="RenameSessionManager"/> backs its sessions with a
+/// <see cref="RenameSessionManager"/> backs its sessions with a
 /// <see cref="ConcurrentDictionary{TKey,TValue}"/>, and <c>Cleanup()</c> enumerates it while
 /// <c>SetSession</c>/<c>TryConsume</c> from other threads can be adding or removing entries at the
 /// same instant (the rename picker flow and a same-file rename retry are not otherwise

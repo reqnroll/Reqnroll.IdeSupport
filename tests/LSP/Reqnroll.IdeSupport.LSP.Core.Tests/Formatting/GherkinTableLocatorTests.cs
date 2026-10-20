@@ -166,7 +166,7 @@ public class GherkinTableLocatorTests
     public void FindTableAtLine_returns_Examples_table_when_only_header_row_remains()
     {
         // Deleting the body rows of an Examples table (as in the bug report) leaves a
-        // header-only block; locating its header row must not throw (issue #827).
+        // header-only block; locating its header row must not throw.
         var lines = new[]
         {
             "Feature: foo",

@@ -17,7 +17,7 @@ public class ConnectorOptionsTests
     [Fact]
     public void Parse_strips_the_file_log_flag_and_still_resolves_the_assembly_path()
     {
-        // issue #637: --file-log must not be misread as the assembly path.
+        // Regression guard: --file-log must not be misread as the assembly path.
         var options = ConnectorOptions.Parse(["discovery", "--file-log", "/some/Assembly.dll"]);
 
         var discovery = options.Should().BeOfType<DiscoveryOptions>().Subject;

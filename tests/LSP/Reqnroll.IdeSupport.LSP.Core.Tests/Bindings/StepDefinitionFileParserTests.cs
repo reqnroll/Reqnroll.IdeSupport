@@ -147,7 +147,7 @@ namespace TestProject
     [Fact]
     public async Task Parameterless_attribute_derives_regex_from_method_name()
     {
-        // Issue #268: an attribute with no expression is a method-name-style binding at
+        // An attribute with no expression is a method-name-style binding at
         // runtime (Reqnroll.Bindings.StepDefinitionRegexCalculator), not an invalid one.
         var stepDefinitions = await ParseStepDefinitions(
             @"[When]
@@ -282,11 +282,11 @@ namespace TestProject
     [Fact]
     public async Task Method_name_binding_with_a_verbatim_identifier_parameter_is_discovered()
     {
-        // Issue #952: a parameter written as a verbatim identifier (e.g. @class) keeps the
-        // leading '@' in Identifier.Text, which was spliced straight into the named regex
-        // group ((?<@class>...)) -- an invalid group name that threw ArgumentException out of
-        // ParseBindings and dropped EVERY binding in the file. Identifier.ValueText returns
-        // the identifier's semantic name without the '@', so the group name is valid again.
+        // A parameter written as a verbatim identifier (e.g. @class) keeps the
+        // leading '@' in Identifier.Text; splicing that into the named regex
+        // group ((?<@class>...)) gives an invalid group name that throws ArgumentException out of
+        // ParseBindings and drops EVERY binding in the file. Identifier.ValueText returns
+        // the identifier's semantic name without the '@', so the group name stays valid.
         var stepDefinitions = await ParseStepDefinitions(
             @"[Given]
               public void The_Value_Is_P0(string @class) { }");
@@ -515,8 +515,8 @@ namespace TestProject
         // keywords -- {short} resolves solely via the CLR type name Int16
         // (RuntimeBindingType.Name => Type.Name), so it's undefined in a real Reqnroll project.
         // Recognizing "short" here would falsely validate it via Roslyn discovery while the
-        // connector-discovered path leaves it undefined -- the same class of divergence #476
-        // exists to fix, just for a different name.
+        // connector-discovered path leaves it undefined -- the same class of divergence between
+        // the two discovery paths, just for a different name.
         var stepDefinitions = await ParseStepDefinitions(
             @"[Given(""the count is {short}"")]
               public void Method(short n) { }");
@@ -535,7 +535,7 @@ namespace TestProject
     public async Task Alternative_text_matches_either_alternative_not_the_literal_slash(
         string expression, string stepText, bool shouldMatch)
     {
-        // Reproduces issue #476: a Cucumber Expression using '/' alternative text (e.g.
+        // Regression guard: a Cucumber Expression using '/' alternative text (e.g.
         // "cat/dog") must match either alternative, the same as the connector-discovered
         // regex computed by Reqnroll's runtime cucumber-expressions library. Since there's
         // no {param} placeholder here, plant one so the expression is still recognized as a
@@ -555,7 +555,7 @@ namespace TestProject
     public async Task Optional_text_makes_the_parenthesized_text_optional_not_literal_parens(
         string expression, string stepText, bool shouldMatch)
     {
-        // Reproduces issue #476: a Cucumber Expression using '(text)' optional text must make
+        // Regression guard: a Cucumber Expression using '(text)' optional text must make
         // the parenthesized text optional, not match the literal parentheses.
         var stepDefinitions = await ParseStepDefinitions(
             $@"[Given(""{expression} and {{int}}"")]
@@ -593,7 +593,7 @@ namespace TestProject
     [Fact]
     public async Task Source_location_spans_the_full_method_identifier()
     {
-        // Issue #514: the range must span the whole identifier (not be zero-width) so consumers
+        // The range must span the whole identifier (not be zero-width) so consumers
         // like .cs diagnostics squiggles don't need to re-derive the span via a live-buffer text
         // search. ToLspLocation() (used for textDocument/definition) still discards the end
         // position and renders zero-width, so this doesn't change Go to Definition's behavior.
@@ -628,7 +628,7 @@ namespace TestProject
         location.SourceFileEndColumn.Should().Be(13 + "TargetMethod".Length);
     }
 
-    // ── Structural validation (issue #514) ────────────────────────────────────────
+    // ── Structural validation ────────────────────────────────────────
     // Ports Reqnroll.Bindings.Discovery.BindingSourceProcessor.ValidateType/ValidateMethod/
     // ValidateHook. A binding with a structural error is excluded from matching (IsValid is
     // false whenever Error is set — see ProjectBinding.IsValid) exactly like a connector-reported
@@ -870,7 +870,7 @@ namespace TestProject
     [Fact]
     public async Task Treats_class_level_and_method_level_scope_as_alternatives()
     {
-        // Class scope @ui OR method scope @smoke (Reqnroll concatenates type and method scopes, #1133):
+        // Class scope @ui OR method scope @smoke (Reqnroll concatenates type and method scopes):
         // matches when either tag is present.
         var content = @"
 namespace TestProject
@@ -1101,7 +1101,7 @@ namespace S
             .Which.Regex!.ToString().Should().Be("^the firs number is (.*)$");
     }
 
-    // ── Expression / scope validation (issue #514 follow-up) ───────────────────────
+    // ── Expression / scope validation ───────────────────────
     // Both the Cucumber Expression grammar (step-definition text) and the Cucumber tag-expression
     // grammar (Scope's Tag) already run today via the real libraries; this only confirms their
     // failures now reach ProjectBinding.Error instead of being silently discarded.
@@ -1118,7 +1118,7 @@ namespace S
         binding.Regex.Should().BeNull();
         binding.Error.Should().Contain("({int})");
         binding.IsValid.Should().BeFalse();
-        // Issue #514 follow-up: anchored at the [Given(...)] attribute (one line above the
+        // Anchored at the [Given(...)] attribute (one line above the
         // method, in this template), not the method identifier.
         binding.ErrorLocation.Should().NotBeNull();
         binding.ErrorLocation!.SourceFileLine.Should().Be(binding.Implementation.SourceLocation!.SourceFileLine - 1);
@@ -1242,7 +1242,7 @@ namespace TestProject
     [Fact]
     public async Task ReplaceBindings_removes_a_stale_binding_by_identity_even_when_the_source_path_disagrees()
     {
-        // Issues #469/#503/#515: the reflection connector and Roslyn can disagree on a binding's
+        // Regression guard: the reflection connector and Roslyn can disagree on a binding's
         // source-file path for the very same file -- a PDB path baked in from a devcontainer/CI
         // build vs. the live workspace path, a stale/unreadable PDB location resolving to null, or
         // a stale IDE-side cache. When path comparison alone can't recognize the stale binding as
@@ -1282,8 +1282,7 @@ namespace TestProject
     [Fact]
     public async Task ReplaceBindings_diagnostics_callback_fires_when_a_same_named_stale_binding_is_superseded()
     {
-        // Recon for a suspected #469/#503/#515 recurrence (step-usage counts doubling in VS,
-        // 2026-08-30): this diagnostic hook only needs to prove the identity-based eviction above
+        // Diagnostic hook for duplicate step-usage counts (counts doubling in VS): it only needs to prove the identity-based eviction above
         // actually ran for a same-filename/different-path binding, so it should stay silent unless
         // that exact shape is present.
         var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
@@ -1343,8 +1342,7 @@ namespace TestProject
     [Fact]
     public async Task ReplaceBindings_removes_a_stale_binding_when_only_its_parameter_type_spelling_differs()
     {
-        // Follow-up to issues #469/#503/#515, confirmed live against the Quickstart sample: the
-        // identity check above only fixed parameterless methods. The connector reports a
+        // The identity check above must also cover parameterized methods. The connector reports a
         // parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable" --
         // from reflection's Type.FullName), while Roslyn reports the literal source-code type text
         // (e.g. "int", "DataTable" -- ParameterSyntax.Type.ToString()). Without normalizing both to
@@ -1379,7 +1377,7 @@ namespace TestProject
     }
 
     // Real wire values captured by running the actual reqnroll-ide-connector's discovery command
-    // against a probe assembly (issue #515 follow-up) -- these are exactly what
+    // against a probe assembly -- these are exactly what
     // ProjectBindingImplementation.ParameterTypes holds for a connector-discovered binding.
     [Theory]
     [InlineData("System.Collections.Generic.List<String>", "using System.Collections.Generic;",
@@ -1462,7 +1460,7 @@ namespace TestProject
     [Fact]
     public void HasExpressionChanges_returns_true_when_only_validity_changes()
     {
-        // Issue #514: a binding transitioning valid<->invalid (e.g. losing/gaining a required
+        // A binding transitioning valid<->invalid (e.g. losing/gaining a required
         // `static` modifier) changes matching even though its expression text is untouched --
         // ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync relies on this method (and
         // HasHookChanges) to decide whether to notify at all, so a validity-only edit must be
@@ -1570,10 +1568,10 @@ namespace TestProject
     [Fact]
     public void HasExpressionChanges_does_not_throw_when_a_method_has_two_attributes_of_the_same_type_and_parameters()
     {
-        // Regression test for issue #56: a method with two [When(...)] attributes producing
+        // Regression guard: a method with two [When(...)] attributes producing
         // different expressions but identical (StepDefinitionType, Method, ParameterTypes) keys
-        // used to crash HasExpressionChanges with a duplicate-key ArgumentException from
-        // ToDictionary, instead of tolerating the collision.
+        // must not crash HasExpressionChanges with a duplicate-key ArgumentException from
+        // ToDictionary; the collision is tolerated.
         var before = new ProjectBindingRegistry(
             new[]
             {
@@ -1646,7 +1644,7 @@ namespace TestProject
     [Fact]
     public void HasHookChanges_returns_true_when_only_validity_changes()
     {
-        // Issue #514: mirrors HasExpressionChanges_returns_true_when_only_validity_changes for
+        // Mirrors HasExpressionChanges_returns_true_when_only_validity_changes for
         // hooks -- e.g. a [BeforeTestRun] method losing its required `static` modifier changes
         // whether the hook fires, with no scope/order text touched at all.
         var before = new ProjectBindingRegistry(

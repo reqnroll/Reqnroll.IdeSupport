@@ -212,17 +212,17 @@ public class StepDefinitionFileBuilderAppendTests
 
         result.Should().Be(existing);
     }
-    // ── Roslyn-based class-body location (issue #586) ────────────────────────────
-    // The first case below is the one the previous hand-rolled scan genuinely got wrong.
-    // The rest are characterization tests: the old scan handled them correctly too (its
-    // quote-pairing happened to mask the offending braces), and they are pinned here so a
+    // ── Roslyn-based class-body location ────────────────────────────
+    // The first case below is the one a naive hand-rolled brace/quote scan gets wrong.
+    // The rest are characterization tests: such a scan handles them correctly too (its
+    // quote-pairing happens to mask the offending braces), and they are pinned here so a
     // future change to the locator cannot quietly regress them.
 
     [Fact]
     public void Appends_when_a_raw_string_literal_contains_a_quote_run()
     {
-        // The previously-failing case. A four-quote raw string whose body contains a literal
-        // `"""` defeats naive quote pairing: the old scan mis-tracked where the literal ended,
+        // The hardest case. A four-quote raw string whose body contains a literal
+        // `"""` defeats naive quote pairing: a naive scan mis-tracks where the literal ended,
         // saw the unbalanced `{` inside it as real code, failed to balance the class braces, and
         // returned null — silently downgrading "Define missing step" to "create new file".
         // Built by concatenation rather than a raw string, since the fixture itself contains

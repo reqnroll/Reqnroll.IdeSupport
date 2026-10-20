@@ -245,7 +245,7 @@ public class IdeSupportTagParserTests
 
     // The parser hands back the *unescaped* cell value, so an escaped cell is longer in the
     // document than its value: sizing the classification span from the value left the cell's last
-    // character uncoloured (issue #1014).
+    // character uncoloured.
     [Fact]
     public void DataTable_header_cell_spans_cover_escaped_pipes_and_backslashes()
     {
@@ -541,8 +541,8 @@ public class IdeSupportTagParserTests
         tags.Should().BeEmpty();
     }
 
-    // Issue #955: an unsupported configured default feature language used to make the parser's
-    // recovery path throw, which Parse swallowed, so no ParserError tag was produced.
+    // Regression guard: an unsupported configured default feature language must not make the parser's
+    // recovery path throw (Parse would swallow it and produce no ParserError tag).
     [Fact]
     public void Unsupported_configured_default_language_produces_ParserError_tag()
     {

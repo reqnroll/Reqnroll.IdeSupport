@@ -41,7 +41,7 @@ public class FindUnusedStepDefinitionsServiceTests
     /// Both <see cref="ProjectStepDefinitionBinding"/> objects reference the same
     /// <see cref="ProjectBindingImplementation"/> instance, so they share
     /// <see cref="SourceLocation"/>, class name, and method name — but each still gets its own
-    /// <see cref="BindingId"/> (identity includes <c>Expression</c>, issue #471).
+    /// <see cref="BindingId"/> (identity includes <c>Expression</c>).
     /// </summary>
     private static (ProjectStepDefinitionBinding First, ProjectStepDefinitionBinding Second)
         MakeTwoExpressionsOnSameMethod(
@@ -199,7 +199,7 @@ public class FindUnusedStepDefinitionsServiceTests
     [Fact]
     public void Reports_each_bindings_step_definition_type()
     {
-        // Issue #757: the client shows the attribute, e.g. [When("second expression")], so two
+        // The client shows the attribute, e.g. [When("second expression")], so two
         // unused attributes on one method are told apart by keyword as well as expression.
         var (first, second) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs");
 
@@ -261,7 +261,7 @@ public class FindUnusedStepDefinitionsServiceTests
         result.Should().HaveCount(2);
     }
 
-    // ── Cross-project attribution (issue #547) ─────────────────────────────────
+    // ── Cross-project attribution ─────────────────────────────────
     //
     // A project that references another Reqnroll-bearing project (a class library) has that
     // library's bindings show up in its own discovery run too, alongside the library's own
@@ -323,7 +323,7 @@ public class FindUnusedStepDefinitionsServiceTests
     [Fact]
     public void Duplicate_binding_dedupes_and_attributes_correctly_even_when_discovery_paths_spell_the_method_differently()
     {
-        // End-to-end regression for issue #547/#548: the referencing project's copy comes from
+        // End-to-end regression guard: the referencing project's copy comes from
         // the connector (reflection-derived "DeclaringType.MethodName(...)"), while MyLibrary's
         // own copy of the very same method has been Roslyn-reconciled (an open buffer, or edited
         // since the last build), which spells it "Namespace.DeclaringType.MethodName" instead.
@@ -416,7 +416,7 @@ public class FindUnusedStepDefinitionsServiceTests
     //
     // The connector produces one ProjectStepDefinitionBinding per attribute, sharing the SAME
     // ProjectBindingImplementation (same source file and line) but each with its own BindingId
-    // (identity includes StepDefinitionType + Expression, issue #471) — so each expression gets
+    // (identity includes StepDefinitionType + Expression) — so each expression gets
     // its own precise FindUsages lookup, with no need for a per-location cache or a post-hoc
     // "does this usage's Expression match?" filter.
 
@@ -439,7 +439,7 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Method_with_two_expressions_calls_FindUsages_once_per_expression()
     {
         // Two distinct expressions on one method → two distinct BindingIds → two lookups, each
-        // an O(1) reverse-index hit (issue #471) rather than one location scan reused twice.
+        // an O(1) reverse-index hit rather than one location scan reused twice.
         var (b1, b2) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs", line: 10);
 
         CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", b1, b2) });
@@ -504,7 +504,7 @@ public class FindUnusedStepDefinitionsServiceTests
                   new[] { "unused expr A1", "unused expr A2", "unused expr B2" });
     }
 
-    // ── Unresolvable source paths (issue #540) ─────────────────────────────────
+    // ── Unresolvable source paths ─────────────────────────────────
 
     /// <summary>
     /// A binding whose source file discovery recorded but could not place on this machine — the

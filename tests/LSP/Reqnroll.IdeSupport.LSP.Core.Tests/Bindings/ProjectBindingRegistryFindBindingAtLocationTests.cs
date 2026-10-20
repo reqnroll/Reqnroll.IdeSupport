@@ -40,7 +40,7 @@ public class ProjectBindingRegistryFindBindingAtLocationTests
     {
         // The [Given] attribute is typically 1-2 lines above the discovered method identifier
         // (Roslyn-path) or method-body start (connector-path) — F2 rename is invoked from the
-        // attribute, so it must resolve, not just the exact recorded line (issue #107).
+        // attribute, so it must resolve, not just the exact recorded line.
         // Without AttributeSourceLine, this uses the 2-line heuristic fallback.
         var binding = CreateBinding(new SourceLocation("Steps.cs", 10, 5));
         var registry = RegistryWith(binding);

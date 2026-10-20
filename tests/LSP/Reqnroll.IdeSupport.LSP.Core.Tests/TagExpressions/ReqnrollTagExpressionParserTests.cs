@@ -3,7 +3,7 @@ using Cucumber.TagExpressions;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.TagExpressions;
 
 /// <summary>
-/// Issue #568: <see cref="ReqnrollTagExpressionParser"/> has real branching (single-literal vs.
+/// <see cref="ReqnrollTagExpressionParser"/> has real branching (single-literal vs.
 /// multi-term @-prefix enforcement, recursive prefix confirmation over Binary/Not/Literal nodes,
 /// exception→<see cref="InvalidTagExpression"/> conversion with offset reporting) with no direct
 /// test coverage anywhere in the codebase.

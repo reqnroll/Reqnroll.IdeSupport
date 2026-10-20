@@ -99,7 +99,7 @@ public class StepLiteralIndexTests
     {
         // [x)abc] is a single character class matching one of x, ), a, b, c -- the stray ')'
         // inside it must not drop the nesting depth, or "abc" would be misread as a depth-0
-        // required literal even though the pattern never requires that text (issue #951).
+        // required literal even though the pattern never requires that text.
         var target = Binding(@"^[x)abc] step$");
         var sut = CreateSut(target);
 
@@ -225,8 +225,8 @@ public class StepLiteralIndexTests
     public void An_optional_character_quantifier_does_not_make_that_character_a_required_literal()
     {
         // "cucumbers?" requires only "cucumber": the 's' the ? quantifies may be absent, so a
-        // step saying "cucumber" must still be a candidate for this binding (issue #947). The
-        // pre-fix behaviour required "cucumbers" verbatim and wrongly dropped the binding.
+        // step saying "cucumber" must still be a candidate for this binding. Requiring "cucumbers"
+        // verbatim would wrongly drop the binding.
         var target = Binding(@"^I have (-?\d+) cucumbers?$");
         var sut = CreateSut(target);
 
@@ -265,7 +265,7 @@ public class StepLiteralIndexTests
     public void A_brace_quantifier_that_may_match_zero_occurrences_drops_the_quantified_character()
     {
         // "abcdef{0,1}" requires only "abcde" (the braced quantifier is {0,1}); "abcde" must
-        // still be a candidate. The pre-fix behaviour treated the 'f' as a required literal.
+        // still be a candidate. Treating the 'f' as a required literal would wrongly drop the binding.
         var target = Binding(@"^abcdef{0,1}$");
         var sut = CreateSut(target);
 

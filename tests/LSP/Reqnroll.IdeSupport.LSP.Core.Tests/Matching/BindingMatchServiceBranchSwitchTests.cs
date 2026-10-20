@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.TestStubs;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Matching;
 
 /// <summary>
-/// Issue #928 -- scenarios D1, D2 and E2: after a branch switch changes which bindings exist, a
+/// Branch-switch behaviour: after a branch switch changes which bindings exist, a
 /// feature file that is re-matched against the new registry must replace (not add to) its previous
 /// match set, and the usage index must end up exactly as if the document had been matched once
 /// against the final registry.

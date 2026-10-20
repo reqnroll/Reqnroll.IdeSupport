@@ -1,9 +1,9 @@
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 
 /// <summary>
-/// Unit tests for <see cref="ProjectBindingRegistry.HasAnyBindingFor"/> (issue #517): the direct
-/// per-file question used to replace the project-level <c>HasSuccessfulConnectorRun</c> proxy in
-/// <c>CSharpBindingDiscoveryService</c>'s didOpen skip-check.
+/// Unit tests for <see cref="ProjectBindingRegistry.HasAnyBindingFor"/>: the direct
+/// per-file question that <c>CSharpBindingDiscoveryService</c>'s didOpen skip-check asks, rather than
+/// a project-level <c>HasSuccessfulConnectorRun</c> proxy.
 /// </summary>
 public class ProjectBindingRegistryHasAnyBindingForTests
 {

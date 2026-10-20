@@ -92,7 +92,7 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("rename");
     }
 
-    // ── Rule 3, Cucumber Expression vs regex operator sets (issue #649) ────────
+    // ── Rule 3, Cucumber Expression vs regex operator sets ────────
 
     [Fact]
     public void ValidateNewName_cucumber_expression_literal_dollar_sign_passes()
@@ -168,7 +168,7 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("rename");
     }
 
-    // ── Rule 3: only newly-introduced operators are rejected (issue #1126) ─────
+    // ── Rule 3: only newly-introduced operators are rejected ─────
 
     [Fact]
     public void ValidateNewName_regex_keeps_original_anchors_passes()
@@ -232,7 +232,7 @@ public class StepRenameValidatorTests
         result.Should().BeNull();
     }
 
-    // ── Real-world repros from the Experimental-instance logs (issue #1126) ────
+    // ── Real-world repros from the Experimental-instance logs ────
     // The binding is `[Then(@"the basket price should be (\d+(\.\d+)?)")]` in a Quickstart
     // project; Rename Step seeds the prompt with the source literal and submits the edited text
     // verbatim. Both the anchored and the unanchored form were rejected.
@@ -255,7 +255,7 @@ public class StepRenameValidatorTests
         result.Should().BeNull();
     }
 
-    // ── Rule 4, parameter slots are syntax-aware (issue #960) ───────────────────
+    // ── Rule 4, parameter slots are syntax-aware ───────────────────
 
     [Fact]
     public void ValidateNewName_regex_dropping_a_non_capturing_group_passes()
@@ -319,8 +319,8 @@ public class StepRenameValidatorTests
     [Fact]
     public void ValidateNewName_cucumber_empty_placeholder_does_not_block_rename()
     {
-        // "{}" is a valid untyped Cucumber placeholder; it used to count as no slot and its
-        // braces were flagged as forbidden operators, rejecting every rename.
+        // "{}" is a valid untyped Cucumber placeholder; it must count as a slot and its
+        // braces must not be flagged as forbidden operators, or every rename is rejected.
         StepRenameValidator.ValidateNewName("I have {} cukes", "I have {} apples").Should().BeNull();
     }
 
@@ -359,7 +359,7 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("project");
     }
 
-    // ── Nested groups (issue #1131) ─────────────────────────────────────────────
+    // ── Nested groups ─────────────────────────────────────────────
 
     [Theory]
     // The whole group is one parameter slot; the wording change introduces nothing.
@@ -416,15 +416,15 @@ public class StepRenameValidatorTests
         StepRenameValidator.ValidateNewName(@"the total \((\d+)\)", @"the sum \((\d+)\)").Should().BeNull();
     }
 
-    // ── Rule 4 across several parameter slots (#1131) ───────────────────────────
+    // ── Rule 4 across several parameter slots ───────────────────────────
     // Rule 4 compares the NUMBER of parameter slots, not their identity, so a rename may re-shape
     // or reorder slots as long as the binding keeps the same number of them. An expression with
-    // more than one slot is where a truncated slot scan (the #1131 defect) shows up as a wrong
+    // more than one slot is where a truncated slot scan (a defect where the scan stopped early) shows up as a wrong
     // verdict rather than a count that happens to come out right on a single-slot expression.
 
     [Theory]
     // Cucumber-authored: two and three placeholders, wording-only changes (the '$' is a plain
-    // literal in a Cucumber Expression - issue #649).
+    // literal in a Cucumber Expression).
     [InlineData("I have {int} cukes and {int} gourds", "I have {int} apples and {int} pears")]
     [InlineData("the basket has {int} apples, {int} pears and {int} plums", "the cart holds {int} apples, {int} pears and {int} plums")]
     [InlineData("the price of {word} is ${float} and the discount is {float}", "the cost of {word} is ${float} and the rebate is {float}")]

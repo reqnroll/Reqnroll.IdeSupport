@@ -205,8 +205,8 @@ public class GherkinDocumentFormatterTests
     public void FormatTable_right_aligns_a_numeric_unfinished_cell_to_match_its_column()
     {
         // Row missing its trailing | in a numeric column should still be right-aligned to the
-        // column width, the same as every finished numeric cell in that column (issue: the
-        // unfinished-cell fallback used to always PadRight, ignoring numeric right-alignment).
+        // column width, the same as every finished numeric cell in that column (the
+        // unfinished-cell fallback must not always PadRight and ignore numeric right-alignment).
         var sut = CreateSUT();
         var lines = new[]
         {
@@ -225,14 +225,14 @@ public class GherkinDocumentFormatterTests
         buffer.GetLineOneBased(6).TrimStart().Should().Be("| Thing  |  12 |");
     }
 
-    // ── Empty Examples table (issue #827) ─────────────────────────────────────
+    // ── Empty Examples table ─────────────────────────────────────
 
     [Fact]
     public void Should_not_crash_when_examples_block_has_no_table()
     {
         // Deleting a table from an Examples: block leaves a table-less node with a null
         // TableHeader/TableBody; Gherkin's Examples.Rows throws ArgumentNullException on
-        // it during formatting (issue #827). The block must be preserved as-is instead.
+        // it during formatting. The block must be preserved as-is instead.
         var sut = CreateSUT();
         var lines = new[]
         {

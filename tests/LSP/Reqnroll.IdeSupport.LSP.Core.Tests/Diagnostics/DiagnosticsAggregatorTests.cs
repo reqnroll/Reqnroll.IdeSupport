@@ -132,7 +132,7 @@ public class DiagnosticsAggregatorTests
     [Fact]
     public void Undefined_step_uses_an_invalid_near_miss_bindings_error_when_present()
     {
-        // Issue #514's "cheap first step": a structurally-matching but invalid binding's Error
+        // A structurally-matching but invalid binding's Error
         // (set by StepDefinitionFileParser's validation, or by the connector for its own import
         // failures) should replace the generic "not found" message.
         var invalidBinding = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
@@ -204,7 +204,7 @@ public class DiagnosticsAggregatorTests
     [Fact]
     public void Ambiguous_step_hover_message_starts_with_a_user_friendly_header()
     {
-        // Issue #775: the hover header should read as an instruction to the user, not a bare label.
+        // The hover header should read as an instruction to the user, not a bare label.
         var b1 = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
             new Regex("^ambiguous step$"), null,
             new ProjectBindingImplementation("Method1", null, new SourceLocation("A.cs", 1, 1)));
@@ -306,14 +306,14 @@ public class DiagnosticsAggregatorTests
         result.Should().BeEmpty();
     }
 
-    // ── Outline without Examples (issue #956) ─────────────────────────────────
+    // ── Outline without Examples ─────────────────────────────────
 
     [Fact]
     public void Scenario_outline_without_examples_produces_no_examples_diagnostic()
     {
         // A "Scenario Outline:" with no Examples block must be treated as an outline so the
-        // "no examples defined" check can fire; previously it collapsed to a SingleScenario and
-        // the check (which only visits ScenarioOutline) never ran.
+        // "no examples defined" check can fire; if it collapsed to a SingleScenario,
+        // the check (which only visits ScenarioOutline) would never run.
         const string feature = "Feature: F\nScenario Outline: S\n  Given a step <x>\n";
         var matchSet = MatchSetFor(feature);
 

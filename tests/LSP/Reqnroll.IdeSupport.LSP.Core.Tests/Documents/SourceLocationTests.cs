@@ -1,7 +1,7 @@
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Documents;
 
 /// <summary>
-/// Covers the value semantics added for issue #540 F6, and the resolution state added for F1.
+/// Covers the structural value semantics of SourceLocation and its resolution state.
 /// </summary>
 public class SourceLocationTests
 {
@@ -10,7 +10,7 @@ public class SourceLocationTests
     [Fact]
     public void Two_locations_with_the_same_file_and_position_are_equal()
     {
-        // Before #540 this was reference equality, which silently defeated
+        // Equality must be structural: reference equality would silently defeat
         // ProjectBindingImplementationEqualityComparer's own promise to compare structurally.
         var a = new SourceLocation(@"C:\Repo\Steps.cs", 12, 5, 12, 20);
         var b = new SourceLocation(@"C:\Repo\Steps.cs", 12, 5, 12, 20);

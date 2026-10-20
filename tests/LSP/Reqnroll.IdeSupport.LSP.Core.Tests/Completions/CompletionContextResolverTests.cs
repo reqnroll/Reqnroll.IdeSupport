@@ -201,7 +201,7 @@ public class CompletionContextResolverTests
     [Fact]
     public void Fallback_language_with_regional_code_resolves_base_dialect_without_throwing()
     {
-        // Issue #957: DefaultFeatureLanguage can be a regional code such as "en-US".
+        // Regression guard: DefaultFeatureLanguage can be a regional code such as "en-US".
         // The plain GherkinDialectProvider rejects that with NoSuchLanguageException, so the
         // fallback must go through ReqnrollGherkinDialectProvider, which retries with the base
         // language ("en") when no exact regional dialect is registered.
@@ -234,7 +234,7 @@ public class CompletionContextResolverTests
     }
 
     // ── Definition-line keyword (Feature/Scenario/etc.) → no completion past it ──
-    // Issue #818: keyword completion must stop once the cursor is editing the block's
+    // Keyword completion must stop once the cursor is editing the block's
     // free-text title, not composing the keyword itself.
     //
     // Line 0 "Feature: F"  → DefinitionLineKeyword covers columns [0, 8)  ("Feature:")
@@ -295,7 +295,7 @@ public class CompletionContextResolverTests
     public void Cursor_past_the_feature_keyword_returns_null()
     {
         // Same rule applies to Feature (and, by the same tag, Rule/Background/Examples) lines,
-        // not just Scenario -- issue #818's "Note 2".
+        // not just Scenario.
         var snapshot = Snapshot(DocText);
         _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 0, length: 8) });

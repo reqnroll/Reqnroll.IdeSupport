@@ -46,7 +46,7 @@ public class StepDefinitionFileBuilderTests
         Approvals.Verify(result);
     }
 
-    // ── Async snippets need `using System.Threading.Tasks;` (issue #961) ─────
+    // ── Async snippets need `using System.Threading.Tasks;` ─────
     // The async snippet mirrors what StepSkeletonRenderer.Render emits for an async style
     // (`public async Task ...`); StepDefinitionFileBuilder is what decides the file's using block.
 

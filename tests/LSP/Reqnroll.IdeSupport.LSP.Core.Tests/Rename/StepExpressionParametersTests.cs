@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.LSP.Core.Rename;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Rename;
 
 /// <summary>
-/// Issue #568: <see cref="StepExpressionParameters"/> is the slot-extraction/counting logic that
+/// <see cref="StepExpressionParameters"/> is the slot-extraction/counting logic that
 /// both <c>NewNameReconciler</c> and <c>FeatureStepTextBuilder</c> depend on for rename
 /// correctness, with zero direct test coverage anywhere in the codebase.
 /// </summary>
@@ -144,7 +144,7 @@ public class StepExpressionParametersTests
         segments.Should().HaveCount(slots.Count + 1);
     }
 
-    // ── IsEscaped / SlotLengthAt: backslash parity (issue #591) ────────────────────
+    // ── IsEscaped / SlotLengthAt: backslash parity ────────────────────
 
     [Fact]
     public void IsEscaped_is_false_for_a_character_with_no_preceding_backslash()
@@ -180,7 +180,7 @@ public class StepExpressionParametersTests
         StepExpressionParameters.SlotLengthAt(s, 3).Should().Be(@"(\d+)".Length);
     }
 
-    // ── ReplaceSlotsWithValues (issue #591) ─────────────────────────────────────────
+    // ── ReplaceSlotsWithValues ─────────────────────────────────────────
 
     [Fact]
     public void ReplaceSlotsWithValues_returns_the_expression_unchanged_when_it_has_no_slots()

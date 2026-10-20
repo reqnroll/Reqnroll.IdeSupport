@@ -67,7 +67,7 @@ public class BindingImporterTests
     [Fact]
     public void MethodIdentifierLocation_overrides_the_PDB_derived_source_location()
     {
-        // Regression guard (issue #471 follow-up): ConnectorDiscoveryService backfills the AST-based
+        // Regression guard: ConnectorDiscoveryService backfills the AST-based
         // method-identifier location to replace the PDB sequence point, which can land inside the
         // method body rather than on the declaration itself. ImportStepDefinition must actually
         // apply that override, not just accept the parameter.
@@ -462,14 +462,14 @@ public class BindingImporterTests
         result.Should().BeNull();
     }
 
-    // ── Source-path resolution state (issue #540 F1/F2) ───────────────────────────────────
+    // ── Source-path resolution state ───────────────────────────────────
 
     [Fact]
     public void An_unresolvable_source_path_is_imported_as_an_unresolved_location()
     {
         // This is the incident: the assembly was built in a devcontainer, so every binding's source
-        // path was /workspaces/... . The registry used to store it verbatim with nothing marking it
-        // as unusable, and every navigation feature then handed it to the IDE.
+        // path was /workspaces/... . Storing it verbatim with nothing marking it
+        // as unusable would hand it to the IDE from every navigation feature.
         var sut = CreateSut();
 
         var result = sut.ImportStepDefinition(
@@ -560,7 +560,7 @@ public class BindingImporterTests
     [Fact]
     public void A_backfilled_hook_identifier_location_replaces_the_pdb_position()
     {
-        // Hooks now get the same method-identifier backfill step definitions have had since #471:
+        // Hooks get the same method-identifier backfill as step definitions:
         // the PDB sequence point is the first executable statement, not the declaration line.
         var path = System.IO.Path.GetTempFileName();
         try
@@ -869,7 +869,7 @@ public class BindingImporterTryGetMethodIdentifierLocationTests : IDisposable
     [Fact]
     public void Returns_the_method_identifiers_own_line_and_column_not_the_attributes()
     {
-        // Regression guard (issue #471 follow-up): the connector's own wire-format location is a
+        // Regression guard: the connector's own wire-format location is a
         // PDB sequence point, which can land a line or more into the method body. This backfill
         // must resolve to the method identifier's own position — the same convention
         // StepDefinitionFileParser.GetSourceLocation already uses for Roslyn-discovered bindings —

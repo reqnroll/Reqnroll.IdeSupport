@@ -232,7 +232,7 @@ public class GherkinDocumentContextCalculatorTests
     [Fact]
     public void ScenarioOutline_untagged_examples_block_does_not_inherit_previous_tagged_block_context()
     {
-        // Regression for #954: an untagged Examples block following a tagged one must use the
+        // Regression guard: an untagged Examples block following a tagged one must use the
         // plain outline context, not inherit the previous block's tag-matching scope.
         const string text = """
             Feature: F
@@ -301,7 +301,7 @@ public class GherkinDocumentContextCalculatorTests
     [Fact]
     public void ScenarioOutline_untagged_tagged_untagged_examples_blocks_each_get_their_own_context()
     {
-        // The untagged block *after* a tagged one is the #954 case; the untagged block *before* it
+        // The untagged block *after* a tagged one is the case that regressed; the untagged block *before* it
         // pins that nothing is carried backwards or left over from the initial state, and the
         // sequence ends untagged again to prove the tag scope is reset after a tagged block.
         const string text = """

@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.LSP.Core.Completions;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Completions;
 
 /// <summary>
-/// Issue #568: <see cref="RegexStepDefinitionExpressionAnalyzer"/> (regex-group analysis feeding
+/// <see cref="RegexStepDefinitionExpressionAnalyzer"/> (regex-group analysis feeding
 /// the completion sampler) and <see cref="AnalyzedStepDefinitionExpression"/> have zero direct
 /// test coverage anywhere in the codebase.
 /// </summary>
