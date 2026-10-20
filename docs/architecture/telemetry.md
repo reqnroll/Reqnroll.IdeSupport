@@ -102,7 +102,14 @@ sequenceDiagram
   counts.
 - Error events must scrub messages for file paths and identifying strings before transmission; the server does this
   (`RedactPaths` replaces Windows, UNC and POSIX paths with `<path>`) before the message leaves the process.
-- Telemetry is opt-out, uniformly across the three clients.
+- **Consent is not uniform across clients** (decision: [design-decisions.md §7](design-decisions.md)). The Beta is
+  opt-out in all three, controlled by `REQNROLL_TELEMETRY_ENABLED` alone. The final release gates per client: Rider
+  requires persisted consent (opt-in, a marketplace requirement), VS Code also honors `vscode.env.isTelemetryEnabled`
+  and `reqnroll.telemetry.enabled`, and Visual Studio uses its own plugin setting and deliberately ignores VS's
+  `TelemetrySession.IsOptedIn`. In every client `REQNROLL_TELEMETRY_ENABLED` is a veto only (`0` always disables; it
+  never grants consent).
+- **Only the clients gate.** The server always emits `telemetry/event` and does not read any consent flag or the kill
+  switch; each host drops events when its gate is closed, so revocation is immediate.
 - Every event and its fields is documented in the public inventory.
 
 ## 7. Pitfalls and design decisions
@@ -120,7 +127,10 @@ sequenceDiagram
 5. **Wire the real service, not a null one.** An access path hardcoded to a no-op (`LspIdeScope.TelemetryService`) once
    silently dropped config-load errors even after the main error path was fixed.
 6. **Table formatting on type is not a command event.** It fires per keystroke, so perf sampling covers it instead.
-7. **Parse timing is not reported by clients any more.** Visual Studio no longer parses `.feature` files locally; the
+7. **Do not gate in the server.** Consent and the kill switch are applied at each client's receive point
+   (`telemetry/event` handler or transmitter), so each client's gate needs a test there. The local debug log
+   (`REQNROLL_TELEMETRY_DEBUG_LOG`) is independent of consent and never leaves the machine.
+8. **Parse timing is not reported by clients any more.** Visual Studio no longer parses `.feature` files locally; the
    sampled `PerfSample` for `didOpen`/`didChange` is the equivalent.
 
 ## 8. Known limitations
