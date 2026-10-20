@@ -10,7 +10,7 @@ using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 /// escaped first. Without escaping, a prefix containing a regex metacharacter either matches a tag it
 /// should not (a <c>.</c> matching any character) or produces an invalid pattern, in which case
 /// <see cref="TagLinkConfiguration.CheckConfiguration"/> throws and the whole configuration is
-/// discarded (issue #966).
+/// discarded.
 /// </summary>
 public class ProjectScopeIdeSupportConfigurationProviderSpecSyncTests
 {

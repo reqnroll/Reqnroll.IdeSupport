@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// <see cref="ShadowDocumentFilterInterceptor"/> drops didOpen/didChange/didClose for documents
-/// under a <c>CopilotBaseline</c> folder inside the system temp directory (issue #562). Both
+/// under a <c>CopilotBaseline</c> folder inside the system temp directory. Both
 /// conditions — under temp, and the specific <c>CopilotBaseline</c> folder name — are required,
 /// so a user's own file under temp, or a "copilot"-named path outside temp, is left alone.
 /// </summary>

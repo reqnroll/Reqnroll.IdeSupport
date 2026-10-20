@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.CommentToggle;
 /// <summary>
 /// Pins the <c>workspace/executeCommand</c> payload <see cref="CommentToggleService"/> sends for
 /// <c>reqnroll.toggleComment</c>: the server's <c>CommentToggleHandler</c> reads the mode from the
-/// fourth argument and only accepts <c>toggle</c>/<c>comment</c>/<c>uncomment</c> (issue #747).
+/// fourth argument and only accepts <c>toggle</c>/<c>comment</c>/<c>uncomment</c>.
 /// </summary>
 public class CommentToggleServiceBuildParamsTests
 {

@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.Utilities;
 
 /// <summary>
 /// Covers the "was this file saved a moment ago?" decision that keeps a format rejection arriving from
-/// the save sequence out of the dialog (issue #1132).
+/// the save sequence out of the dialog.
 /// </summary>
 public class RecentSaveTrackerTests
 {

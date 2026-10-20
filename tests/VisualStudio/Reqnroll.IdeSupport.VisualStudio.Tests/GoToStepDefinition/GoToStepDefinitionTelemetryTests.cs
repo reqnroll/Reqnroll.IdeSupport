@@ -5,7 +5,7 @@ using Xunit;
 namespace Reqnroll.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
-/// The client-originated "GoToStepDefinition command executed" event (issue #898): the genuine navigation,
+/// The client-originated "GoToStepDefinition command executed" event: the genuine navigation,
 /// as opposed to the server's per-lookup "FindStepDefinitions command executed".
 /// </summary>
 public class GoToStepDefinitionTelemetryTests

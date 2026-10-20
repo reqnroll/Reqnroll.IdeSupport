@@ -59,7 +59,7 @@ public class FormatDocumentCommandFilterTests
         uri.Should().Be(string.Empty);
     }
 
-    // ── IsSnapshotStale (issue #766) ──────────────────────────────────────
+    // ── IsSnapshotStale ──────────────────────────────────────
     //
     // Format Document applies its edits onto whatever the buffer's current snapshot happens to
     // be when the LSP round trip completes. If the user typed (or pressed Format again) while the
@@ -93,11 +93,11 @@ public class FormatDocumentCommandFilterTests
         FormatDocumentCommandFilter.IsSnapshotStale(requestSnapshot, currentSnapshot).Should().BeTrue();
     }
 
-    // ── Whole-line selection end adjustment (issue #1035) ─────────────────
+    // ── Whole-line selection end adjustment ─────────────────
     //
-    // Format Selection derived its end line straight from selection.End's containing line, so a
+    // Deriving the end line straight from selection.End's containing line would make a
     // whole-line selection whose end sits at column 0 of the line AFTER the last selected line
-    // formatted one extra line — the same off-by-one Comment Toggle already corrects via
+    // format one extra line — the same off-by-one Comment Toggle already corrects via
     // SelectionLineRange.AdjustEndLineForWholeLineSelection. GetFormatLineRange is the pure seam
     // Exec uses to apply that correction.
 

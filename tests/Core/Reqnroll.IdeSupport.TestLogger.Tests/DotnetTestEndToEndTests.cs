@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.TestLogger.Tests;
 /// way VS's injected runsettings amount to, with this test playing the IDE on a loopback socket.
 /// </summary>
 /// <remarks>
-/// This is the regression test issue #702 never had: it asserts that a Scenario Outline produces one
+/// This is the end-to-end regression guard for Scenario Outline reporting: it asserts that a Scenario Outline produces one
 /// <c>result</c> per example row sharing a row-invariant <c>managedMethod</c>, and that Reqnroll's step
 /// trace rides along in <c>stdout</c>. It builds the fixture on first use (tens of seconds; needs the
 /// fixture's packages restorable — cached locally, nuget.org in CI).
@@ -143,7 +143,7 @@ public class DotnetTestEndToEndTests
         trace.Should().Contain("-> error: deliberate failure in the middle step");
         trace.Should().Contain("-> skipped because of previous errors");
 
-        // The Scenario Outline: one result per Examples row, one method-level identity — issue #702's gap.
+        // The Scenario Outline: one result per Examples row, one method-level identity.
         var rows = results.Where(r => r.GetProperty("fqn").GetString()!.EndsWith(".AddingRows")).ToList();
         rows.Should().HaveCount(3);
         rows.Select(r => r.GetProperty("managedMethod").GetString()).Distinct().Should().ContainSingle()

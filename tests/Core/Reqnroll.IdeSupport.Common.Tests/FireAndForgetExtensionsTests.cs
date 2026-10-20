@@ -6,7 +6,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.Common.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="FireAndForgetExtensions"/> (issue #477): discarding a Task
+/// Unit tests for <see cref="FireAndForgetExtensions"/> (issue-free): discarding a Task
 /// reference does not defer an async method's synchronous prefix off the calling thread, and
 /// silently swallows any exception it throws. These tests pin down that the
 /// <see cref="Func{Task}"/> overload genuinely runs its work off the calling thread, and that

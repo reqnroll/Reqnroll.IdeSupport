@@ -82,7 +82,7 @@ public sealed class SessionScenario
     private readonly LatencyRecorder _codeLens = new(PerfTargets.FeatureHookCodeLens.Operation);
     private readonly LatencyRecorder _diagnostics = new(PerfTargets.PublishDiagnostics.Operation);
 
-    // Issue #714 (scenario D): an outcome lookup is now a routine background request whenever
+    // An outcome lookup is a routine background request whenever
     // outcomes exist — every `reqnroll/testOutcomes/changed` push makes each client re-pull one per
     // visible Run lens — so it belongs in the load-only burst set alongside the outline/folding pulls,
     // with the same TargetMs 0 (measured, never asserted) convention. Only sampled when a seeded
@@ -151,7 +151,7 @@ public sealed class SessionScenario
             TimedAsync(_foldingRange, record, ct => _harness.RequestFoldingRangeAsync(f.Uri, ct), cts.Token),
         };
 
-        // 2b. The outcome pull (issue #714, scenario D) rides the same burst: it is a background
+        // 2b. The outcome pull rides the same burst: it is a background
         //     request the clients issue per visible Run lens whenever outcomes exist, not a
         //     user-initiated one, and it is superseded with the rest.
         if (_seededOutcome is { } seed)

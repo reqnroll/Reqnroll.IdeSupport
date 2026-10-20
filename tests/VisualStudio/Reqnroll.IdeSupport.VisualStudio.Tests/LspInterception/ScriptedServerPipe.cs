@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// <summary>
 /// A real <see cref="LspInterceptingPipe"/> wired to an in-memory "server" that answers each
 /// injected request from a script, so services built over the concrete pipe can be tested
-/// end to end (issue #1017). The n-th request gets the n-th scripted reply: a JSON fragment that
+/// end to end. The n-th request gets the n-th scripted reply: a JSON fragment that
 /// is spliced into the response (<c>"result":...</c> or <c>"error":...</c>), or <see langword="null"/>
 /// for "never answer" (the pipe's owned-request timeout then fires).
 /// </summary>

@@ -334,7 +334,7 @@ public class FileSystemEditorConfigOptionsProviderTests
         Assert.False(opts.GetBoolOption("gherkin_indent_steps", true));
     }
 
-    // Issue #968: EditorConfig glob semantics (https://spec.editorconfig.org/#glob-expressions).
+    // EditorConfig glob semantics (https://spec.editorconfig.org/#glob-expressions).
     // The .editorconfig lives at C:\Repo; each case says whether a section with the given
     // pattern applies to the given file (path relative to C:\Repo).
     [Theory]

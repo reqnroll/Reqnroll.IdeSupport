@@ -15,11 +15,11 @@ public sealed record WorkspaceReloadContentionOptions(
     int SettleDelayMs = 300);
 
 /// <summary>
-/// Dispatch-fairness / head-of-line-blocking scenario (issue #488, following up on #471/#477):
+/// Dispatch-fairness / head-of-line-blocking scenario:
 /// models an editor restoring many already-open tabs at once, or a workspace-wide event (a branch
 /// switch, a <c>reqnroll.json</c> change, a solution reload) that fans a reaction out across every
 /// open feature file simultaneously — the exact "reparse-every-open-feature-file cascade" shape
-/// #477 fixed one contributor to — racing a cheap, unrelated <c>textDocument/foldingRange</c> read
+/// that must not starve other requests — racing a cheap, unrelated <c>textDocument/foldingRange</c> read
 /// on a document the storm never touches.
 /// </summary>
 /// <remarks>

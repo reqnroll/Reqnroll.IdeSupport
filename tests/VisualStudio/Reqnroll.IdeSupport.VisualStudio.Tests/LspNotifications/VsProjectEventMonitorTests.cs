@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspNotifications;
 /// <summary>
 /// <see cref="VsProjectEventMonitor"/> reacts to <see cref="IVsTrackProjectDocumentsEvents2"/>
 /// callbacks (rename/add/remove of individual files) so the server's <c>reqnroll/projectFiles</c>
-/// membership index does not go stale between full builds/solution reloads (issue #32). The
+/// membership index does not go stale between full builds/solution reloads. The
 /// callback plumbing itself is COM/DTE-bound and not practical to unit test (see
 /// ScaffoldTrackingInterceptorTests for the same tradeoff), but the index math and file
 /// classification it depends on are pure and covered here.

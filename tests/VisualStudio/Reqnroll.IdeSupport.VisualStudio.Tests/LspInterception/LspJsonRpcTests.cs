@@ -6,8 +6,8 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// The JSON-RPC shape classifiers and builders extracted from <c>LspInterceptingPipe</c>
-/// (issue #587, step 2). Small, but the distinctions they encode are what the correlation and
+/// The JSON-RPC shape classifiers and builders extracted from <c>LspInterceptingPipe</c>.
+/// Small, but the distinctions they encode are what the correlation and
 /// routing rules are built on, and one of them (<c>"id":null</c>) is a real incident.
 /// </summary>
 public class LspJsonRpcTests
@@ -24,7 +24,7 @@ public class LspJsonRpcTests
     {
         // JObject["id"] returns a JTokenType.Null token for "id":null, not a C# null, so a check for
         // the latter alone misses this frame — leaving the connection looking alive after its server
-        // had been told to leave, which is the exact #555 failure the detection exists to prevent.
+        // had been told to leave, which is the exact failure the detection exists to prevent.
         LspJsonRpc.IsExitNotification(JObject.Parse("{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"exit\"}"))
                   .Should().BeTrue();
     }

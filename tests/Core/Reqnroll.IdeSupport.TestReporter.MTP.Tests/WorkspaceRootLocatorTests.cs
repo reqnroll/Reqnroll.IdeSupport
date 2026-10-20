@@ -110,8 +110,8 @@ public class WorkspaceRootLocatorTests
     public void LooksLikeRoot_returns_false_instead_of_throwing_for_a_path_Directory_EnumerateFiles_rejects()
     {
         // A NUL character makes Directory.EnumerateFiles throw ArgumentException — a type the catch
-        // previously did NOT filter for (only IOException/UnauthorizedAccessException were caught), so
-        // this path alone used to escape LooksLikeRoot, abort FindNearestRoot's walk-up entirely, and
+        // must also handle (not only IOException/UnauthorizedAccessException), or
+        // this path alone would escape LooksLikeRoot, abort FindNearestRoot's walk-up entirely, and
         // give up on a .sln/.git marker that might sit at an ancestor above it, rather than treating
         // just this one level as "not a root" and letting the walk continue.
         Action act = () => WorkspaceRootLocator.LooksLikeRoot("bad\0path");

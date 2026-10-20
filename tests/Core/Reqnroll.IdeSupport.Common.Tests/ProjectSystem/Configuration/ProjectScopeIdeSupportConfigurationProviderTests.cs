@@ -3,7 +3,7 @@
 namespace Reqnroll.IdeSupport.Common.Tests.ProjectSystem.Configuration;
 
 /// <summary>
-/// Issue #967: each configuration source must be applied atomically - a source that fails to load or
+/// Each configuration source must be applied atomically - a source that fails to load or
 /// validate must not leave partial changes behind, and must not discard the settings of valid sources.
 /// </summary>
 public class ProjectScopeIdeSupportConfigurationProviderTests
@@ -49,7 +49,7 @@ public class ProjectScopeIdeSupportConfigurationProviderTests
     [Fact]
     public void A_malformed_specsync_source_does_not_discard_settings_from_reqnroll_json()
     {
-        // SpecSync tag prefixes are escaped (#966), so a bad prefix can no longer yield an invalid tag pattern;
+        // SpecSync tag prefixes are escaped, so a bad prefix cannot yield an invalid tag pattern;
         // an unparseable file is the remaining way for this source to fail.
         AddFile("reqnroll.json", """{ "language": { "feature": "fr-FR" } }""");
         AddFile("specsync.json", "{ this is not json");
@@ -111,7 +111,7 @@ public class ProjectScopeIdeSupportConfigurationProviderTests
     [Fact]
     public void Array_properties_populated_by_several_sources_are_replaced_not_appended()
     {
-        // Empirical record (issue #967 claimed PopulateObject appends): with the sources' arrays populated
+        // Empirical record (PopulateObject does not append): with the sources' arrays populated
         // into the same instance, the later source's array replaces the earlier one. Pinned so a change in
         // Newtonsoft behaviour or in the loading approach is noticed.
         AddFile("reqnroll.json", """

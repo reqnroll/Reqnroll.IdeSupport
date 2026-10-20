@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToHooks;
 
 /// <summary>
 /// The client-originated "GoToHook command executed" event carries the closed <c>Source</c>
-/// property, shared with VS Code and Rider (issue #861).
+/// property, shared with VS Code and Rider.
 /// </summary>
 public class GoToHookTelemetryTests
 {

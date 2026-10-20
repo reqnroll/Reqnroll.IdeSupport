@@ -168,8 +168,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
             // reqnroll/testOutcomes/changed: the outcome listener's throttled (250ms) "re-pull your
             // Run lenses" signal. A notification, not a request — nothing to send back, just a
-            // timestamp and a counter so an ingest can be timed against the push it caused
-            // (issue #714, harness plumbing F).
+            // timestamp and a counter so an ingest can be timed against the push it caused.
             options.OnNotification(CustomLspMethodNames.ReqnrollTestOutcomesChanged, (TestOutcomesChangedParams _) =>
             {
                 lock (_testOutcomesLock)
@@ -229,7 +228,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             projectFolder = corpusRoot,
             outputAssemblyPath = corpusAssemblyPath,
             targetFrameworkMoniker = ".NETCoreApp,Version=v10.0",
-            // The server only runs binding discovery for a Reqnroll test project (issue #731): it
+            // The server only runs binding discovery for a Reqnroll test project: it
             // needs a Reqnroll package reference, or Reqnroll.dll beside the output assembly, which
             // the corpus bin folder doesn't have. Report the reference the corpus csproj declares,
             // as VS does.
@@ -317,7 +316,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// <summary>
     /// Sends <c>reqnroll/renameApplied</c> — the confirmation that commits (or, with
     /// <paramref name="applied"/> <see langword="false"/>, drops) the registry/match-cache updates
-    /// a prior <c>textDocument/rename</c> staged for <paramref name="uri"/> (issue #671, R3). A
+    /// a prior <c>textDocument/rename</c> staged for <paramref name="uri"/>. A
     /// notification, not a request: there is no response to await, so callers needing to know when
     /// the resulting reparse cascade has landed should follow this with
     /// <see cref="WaitForDiagnosticsAsync"/> against an open document the cascade will republish
@@ -374,7 +373,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
-    /// <c>reqnroll/findStepDefinitions</c> (issue #757) — the step-definition bindings of the step at a
+    /// <c>reqnroll/findStepDefinitions</c> — the step-definition bindings of the step at a
     /// <c>.feature</c> position, with class/method/expression detail.
     /// </summary>
     public Task<FindStepDefinitionsResponse?> RequestFindStepDefinitionsAsync(
@@ -387,7 +386,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
-    /// <c>reqnroll/findMatchingScenarios</c> (issue #373) — the inverse of
+    /// <c>reqnroll/findMatchingScenarios</c> — the inverse of
     /// <see cref="RequestFindHooksAsync"/>: given a `.cs` position pinned to a hook-binding
     /// attribute, returns every scenario its scope matches. <paramref name="line"/>/
     /// <paramref name="character"/> must be the attribute's exact position (0-based), same as a
@@ -405,12 +404,12 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
-    /// <c>reqnroll/resolveTestTargets</c> (issue #262/#495) — resolves the generated test method(s)
+    /// <c>reqnroll/resolveTestTargets</c> — resolves the generated test method(s)
     /// for the scenario/Outline/example-row header at <paramref name="range"/> in <paramref name="uri"/>.
     /// Backs the Run CodeLens bridge on all three IDE clients; unlike <see cref="RequestFindHooksAsync"/>
     /// (cursor position), this takes an explicit range the same way a real client's per-line
     /// resolution does (VS's <c>RunTestCodeLensDataPoint</c>, VS Code's <c>resolveCodeLens</c>,
-    /// Rider's <c>RunLensSupport</c> — see issue #495's per-client split).
+    /// Rider's <c>RunLensSupport</c>).
     /// </summary>
     public Task<ResolveTestTargetsResponse?> RequestResolveTestTargetsAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
@@ -421,7 +420,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 Range = range,
             }, ct);
 
-    // ── Test outcomes (issues #700/#714) ────────────────────────────────────────
+    // ── Test outcomes ────────────────────────────────────────
 
     /// <summary>
     /// <c>reqnroll/testOutcomes/registerRun</c> — the IDE's runsettings-injection service's call,

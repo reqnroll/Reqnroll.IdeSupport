@@ -34,14 +34,14 @@ public static class SessionRunner
             NavigateEveryNthBurst = IntArg(args, "--navigate-every", defaults.NavigateEveryNthBurst),
             CodeLensEveryNthBurst = IntArg(args, "--codelens-every", defaults.CodeLensEveryNthBurst),
         };
-        // See BenchmarkRunner's matching change (issue #488): default to the full committed corpus
+        // Matches BenchmarkRunner: default to the full committed corpus
         // rather than a scale too small to reproduce realistic dispatch contention.
         var fileCount = IntArg(args, "--files", 50);
         var outPath = StringArg(args, "--out");
         var outOfProcess = args.Contains("--out-of-process");
         var serverExe = StringArg(args, "--server-exe") ?? (outOfProcess ? ServerExeLocator.Find() : null);
 
-        // Issue #714 hermeticity, same as BenchmarkRunner's: the session's outcome pull must never
+        // Hermetic like BenchmarkRunner: the session's outcome pull must never
         // read or write the developer's real outcome store.
         using var outcomes = TestOutcomePersistenceRedirect.Begin();
         var corpusAssembly = StringArg(args, "--corpus-assembly") ?? CorpusAssemblyLocator.TryFind();
@@ -71,7 +71,7 @@ public static class SessionRunner
 
         var features = await InteractiveScenarios.OpenFeaturesAsync(harness, corpusRoot, fileCount).ConfigureAwait(false);
 
-        // Issue #714 (scenario D): the session's outcome pull is only meaningful against a method the
+        // The session's outcome pull is only meaningful against a method the
         // store genuinely knows about, so it is seeded through the outcome listener first. Without a
         // built corpus assembly to use as that method's container the pull is omitted from the burst
         // mix rather than faked against a key nothing has ever reported.

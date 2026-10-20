@@ -50,7 +50,7 @@ public class ReqnrollLogPathsTests
     [Fact]
     public void ResolveLogDirectory_is_a_logs_subfolder_of_the_application_directory_on_Windows()
     {
-        // Issue #726: log files must not sit directly alongside unrelated persisted state
+        // Log files must not sit directly alongside unrelated persisted state
         // (test-outcomes.json, the telemetry userid file) in the application directory's root.
         ReqnrollLogPaths
             .ResolveLogDirectory("Microsoft Windows 10.0.22631", @"C:\Users\me\AppData\Local", @"C:\Users\me")

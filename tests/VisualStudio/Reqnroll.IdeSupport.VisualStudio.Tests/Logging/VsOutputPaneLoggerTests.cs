@@ -9,7 +9,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.Logging;
 
 /// <summary>
-/// Coverage for issue #651's "Reqnroll" VS Output Window pane sink. Only the sink's pure
+/// Coverage for the "Reqnroll" VS Output Window pane sink. Only the sink's pure
 /// formatting/threshold decisions are covered here - actual pane creation/writes are UI-thread-
 /// affinitized VS SDK glue with no host available in this test process (same "extract pure logic,
 /// leave glue untested" split the rest of the VS-extension test suite follows).

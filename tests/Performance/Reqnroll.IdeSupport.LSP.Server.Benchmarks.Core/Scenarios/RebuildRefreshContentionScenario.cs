@@ -15,14 +15,13 @@ public sealed record RebuildRefreshContentionOptions(
     int StormSize = 10);
 
 /// <summary>
-/// Dispatch-fairness / head-of-line-blocking scenario for issue #542: before that fix, a
-/// <c>reqnroll/projectLoaded</c> re-send for an already-loaded project only re-triggered binding
-/// discovery when the output path or target framework had changed — a plain rebuild does neither, so
-/// Visual Studio's <c>OnBuildDone</c> re-send (its only rebuild signal, since it never registers the
-/// output-assembly file watcher) was silently ignored. The fix makes every re-send always re-trigger
-/// discovery, relying on <c>ConnectorDiscoveryService</c>'s assembly-hash guard to make a redundant
+/// Dispatch-fairness / head-of-line-blocking scenario for repeated rebuild refreshes: a
+/// <c>reqnroll/projectLoaded</c> re-send for an already-loaded project always re-triggers binding
+/// discovery, not only when the output path or target framework changed. A plain rebuild changes
+/// neither, and Visual Studio's <c>OnBuildDone</c> re-send is its only rebuild signal (it never
+/// registers the output-assembly file watcher), so the re-send must not be ignored. This relies on <c>ConnectorDiscoveryService</c>'s assembly-hash guard to make a redundant
 /// run (unchanged assembly) a cheap no-op downstream. This scenario is the regression guard for that
-/// "cheap" half of the claim: fires a storm of repeated, identical <c>projectLoaded</c> notifications
+/// "cheap" half of the design: fires a storm of repeated, identical <c>projectLoaded</c> notifications
 /// (modelling several rapid rebuilds, or several projects in one solution finishing a build within the
 /// same window) and races a cheap, unrelated <c>textDocument/foldingRange</c> read on a document the
 /// storm never touches — same "storm vs. probe" shape as
@@ -69,8 +68,8 @@ public sealed class RebuildRefreshContentionScenario
 
             // The storm: identical projectLoaded notifications fired back to back, unawaited — the
             // same "issued together" shape a real client's build-finished event produces, not a
-            // sequence of separately-awaited reloads. Every one now unconditionally re-triggers
-            // discovery (issue #542) instead of being gated on the output path/TFM changing.
+            // sequence of separately-awaited reloads. Every one unconditionally re-triggers
+            // discovery rather than being gated on the output path/TFM changing.
             for (var i = 0; i < _options.StormSize; i++)
                 _harness.SendCorpusProjectLoaded(_corpusRoot, _corpusAssemblyPath);
 

@@ -10,8 +10,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LineCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="LineKeyedCodeLensTagger{TEntry}"/> — the generic classic-CodeLens
-/// tagger shared by every Reqnroll classic CodeLens feature (issue #372/#262 follow-up
-/// extraction). Exercises it against a fake <see cref="ITextBuffer"/>/<see cref="ITextSnapshot"/>
+/// tagger shared by every Reqnroll classic CodeLens feature. Exercises it against a fake <see cref="ITextBuffer"/>/<see cref="ITextSnapshot"/>
 /// rather than a real VS editor host: every method this class calls on those interfaces resolves to
 /// plain value math (line/position bookkeeping), with no live editor session needed.
 /// </summary>
@@ -265,7 +264,7 @@ public class LineKeyedCodeLensTaggerTests
     [Fact]
     public void A_fetch_that_throws_is_logged_at_Info_with_the_exception()
     {
-        // Issue #1032: the failure used to vanish into a bare catch { }. Info, not Warning: a Warning
+        // The failure is logged rather than swallowed. Info, not Warning: a Warning
         // would bring the Output window to the front for a best-effort background refresh.
         var snapshot = CreateSnapshot(lineCount: 5);
         var buffer = CreateBuffer(snapshot);
@@ -322,7 +321,7 @@ public class LineKeyedCodeLensTaggerTests
     [Fact]
     public async Task RequestRefresh_is_not_lost_when_the_in_flight_refresh_finishes_between_its_in_flight_check_and_its_return()
     {
-        // Issue #1032 (lost wakeup): request B finds refresh A in flight; before B does anything else,
+        // Lost wakeup: request B finds refresh A in flight; before B does anything else,
         // A finishes and checks whether a request arrived meanwhile. A must see B, or nobody ever runs
         // B's refresh and the lens stays stale until some unrelated later trigger. The
         // RefreshInFlightObserved seam fires on B's thread at exactly that point; completing A's fetch
@@ -386,16 +385,16 @@ public class LineKeyedCodeLensTaggerTests
         fetchCount.Should().Be(2);
 
         // The registry holds taggers weakly and `sut` is otherwise unread after construction, so in
-        // Release the JIT may treat it as dead and a GC before InvalidateFile would collect it (#713).
+        // Release the JIT may treat it as dead and a GC before InvalidateFile would collect it.
         GC.KeepAlive(sut);
     }
 
     [Fact]
     public void The_tagger_is_not_disposable_so_a_closing_view_cannot_stop_it_for_the_other_views_sharing_it()
     {
-        // Issue #1028: this used to assert that Dispose unregistered the tagger. But the providers share
+        // The tagger must not be IDisposable: the providers share
         // one instance per buffer, and VS's tag aggregator disposes every IDisposable tagger it obtained
-        // when its own view closes, so that Dispose froze the lenses in every other view on the buffer.
+        // when its own view closes, so a Dispose would freeze the lenses in every other view on the buffer.
         // The registry holds taggers weakly (see WeakTaggerRegistryTests'
         // A_collected_tagger_is_dropped_and_no_longer_receives_refresh_requests), which is what releases
         // a tagger once its buffer is gone. SharedCodeLensTaggerLifetimeTests covers the behaviour end to end.

@@ -38,7 +38,7 @@ public class TelemetryEventInterceptorTests
     [Fact]
     public async Task FeatureUsageSummary_counts_string_is_forwarded_verbatim()
     {
-        // The server sends the per-kind counts as a compact JSON *string* (#582) precisely because a
+        // The server sends the per-kind counts as a compact JSON *string* precisely because a
         // nested object would be re-rendered by JToken.ToString() as multi-line indented JSON.
         var transmitter = new CapturingTransmitter();
         var sut = Create(transmitter);

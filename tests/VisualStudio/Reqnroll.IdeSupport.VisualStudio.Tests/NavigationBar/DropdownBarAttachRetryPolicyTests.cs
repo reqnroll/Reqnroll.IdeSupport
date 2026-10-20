@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.NavigationBar;
 
 /// <summary>
 /// Covers when an unattached <see cref="GherkinDropdownBarClient"/> stops retrying, so a client
-/// whose view is gone can no longer retry for the rest of the session (issue #78).
+/// whose view is gone can no longer retry for the rest of the session.
 /// </summary>
 public class DropdownBarAttachRetryPolicyTests
 {

@@ -13,9 +13,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.HookCodeLens;
 /// </summary>
 /// <remarks>
 /// The 5th command argument (<c>alwaysShowPicker</c>) is the only thing distinguishing the two lens
-/// kinds a <c>Scenario:</c> line carries, and it is what each data point provider filters on. It was
-/// parsed here but silently dropped further downstream, which is what made only one of the two
-/// lenses render (issue #400) — so it is asserted explicitly below.
+/// kinds a <c>Scenario:</c> line carries, and it is what each data point provider filters on. If it were
+/// dropped downstream, only one of the two lenses would render — so it is asserted explicitly below.
 /// </remarks>
 public class HookFeatureCodeLensServiceParseItemsTests
 {
@@ -72,7 +71,7 @@ public class HookFeatureCodeLensServiceParseItemsTests
     [Fact]
     public void Both_lens_kinds_on_one_line_are_kept_as_separate_entries()
     {
-        // The regression behind issue #400: these two must survive as distinct entries so the two
+        // Regression guard: these two must survive as distinct entries so the two
         // data point providers can each claim their own.
         var result = HookFeatureCodeLensService.ParseItems(new JArray(
             Lens(1, "1 hook",       Uri, 1, 0, true),

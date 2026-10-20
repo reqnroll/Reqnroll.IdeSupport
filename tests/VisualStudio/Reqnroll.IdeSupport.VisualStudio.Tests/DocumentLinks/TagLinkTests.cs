@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.DocumentLinks;
 
 /// <summary>
-/// Client-side pieces of clickable tags in Visual Studio (issue #755): mapping the server's
+/// Client-side pieces of clickable tags in Visual Studio: mapping the server's
 /// <c>DocumentLink[]</c>, locating the link under the pointer, and the URL-scheme allow-list.
 /// </summary>
 public class TagLinkTests

@@ -8,7 +8,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Covers the client side of the server's "edit rejected" contract (issue #1132): only a
+/// Covers the client side of the server's "edit rejected" contract: only a
 /// <c>-32803</c> error with a message is a user-facing rejection; everything else — including
 /// <c>ContentModified</c> — must never reach the modal dialog.
 /// </summary>

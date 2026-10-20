@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.Classification;
 
 /// <summary>
-/// Lifetime coverage for <see cref="GherkinSemanticClassifier"/> (issue #1018): the classifier subscribes to the
+/// Lifetime coverage for <see cref="GherkinSemanticClassifier"/> — the classifier subscribes to the
 /// process-wide <see cref="SemanticTokenClassificationStore"/>, and that subscription must not keep the classifier
 /// (and through it the editor's <see cref="ITextBuffer"/>) alive after the editor has released it.
 /// Each test uses its own store instance, so no shared static state is touched.

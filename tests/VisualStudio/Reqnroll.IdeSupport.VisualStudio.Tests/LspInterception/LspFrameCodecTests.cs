@@ -12,10 +12,9 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Characterization tests for <see cref="LspFrameCodec"/> — the pure wire-protocol codec extracted
-/// from <see cref="LspInterceptingPipe"/> (issue #587, step 1 of the issue's own ordered,
-/// low-risk-first list). Exercises the partial/malformed/oversized-frame cases the issue calls out
-/// as "currently awkward to reach" through the full pipe, directly against a real
+/// Characterization tests for <see cref="LspFrameCodec"/> — the pure wire-protocol codec used by
+/// <see cref="LspInterceptingPipe"/>. Exercises the partial/malformed/oversized-frame cases that
+/// are awkward to reach through the full pipe, directly against a real
 /// <see cref="System.IO.Pipelines.Pipe"/> rather than a live VS↔server connection.
 /// </summary>
 public class LspFrameCodecTests
@@ -234,7 +233,7 @@ public class LspFrameCodecTests
 
     [Theory]
     [InlineData("-1")]                    // ArgumentOutOfRangeException out of ReadExactAsync's List(count)
-    [InlineData("abc")]                   // not a number -- used to look "incomplete" and hang
+    [InlineData("abc")]                   // not a number -- must not look "incomplete" and hang
     [InlineData("")]                      // present but empty
     [InlineData("9223372036854775808")]   // past long.MaxValue, never mind int
     [InlineData("99999999999")]           // ~93 GiB: no byte[] can be that long
@@ -282,11 +281,12 @@ public class LspFrameCodecTests
     [InlineData("Garbage-Header: 1\r\n\r\n")]
     public async Task ReadNextFrameAsync_returns_a_malformed_header_frame_instead_of_throwing_or_hanging(string header)
     {
-        // Each of these used to be fatal in a different way. -1 threw ArgumentOutOfRangeException out
-        // of ReadExactAsync's allocation, which escaped the codec into ReceivePumpAsync's catch-all
-        // and ended the pump -- and therefore all server->VS traffic -- for the life of the process.
-        // "abc", a length no byte[] could hold, and a missing Content-Length all looked like an
-        // incomplete header instead, so the read waited for bytes that could never help.
+        // Each of these would be fatal in a different way if mishandled. -1 would throw
+        // ArgumentOutOfRangeException out of ReadExactAsync's allocation, which escapes the codec into
+        // ReceivePumpAsync's catch-all and ends the pump -- and therefore all server->VS traffic --
+        // for the life of the process. "abc", a length no byte[] could hold, and a missing
+        // Content-Length would look like an incomplete header instead, so the read would wait for
+        // bytes that could never help.
         var pipe = new Pipe();
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(header));
 

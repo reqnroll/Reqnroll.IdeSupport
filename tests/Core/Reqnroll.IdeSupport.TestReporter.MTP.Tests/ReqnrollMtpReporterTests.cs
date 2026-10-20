@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 /// <summary>
 /// Covers <see cref="ReqnrollMtpReporter.FormatRunComplete"/> directly — the <c>runComplete</c> NDJSON
 /// line's <c>canceled</c> field must reflect <c>ITestSessionContext.CancellationToken.IsCancellationRequested</c>,
-/// not the hardcoded <c>false</c> the field originally shipped with (found in review of #718).
+/// not a hardcoded <c>false</c>.
 /// </summary>
 public class ReqnrollMtpReporterTests
 {

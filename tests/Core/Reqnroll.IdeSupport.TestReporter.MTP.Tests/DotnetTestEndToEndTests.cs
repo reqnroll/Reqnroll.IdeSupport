@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 /// The whole MTP reporter path without an IDE: a real <c>dotnet test</c> (native MTP mode, via the
 /// fixture's own scoped <c>global.json</c>) against a copy of a real Reqnroll + MSTest project
 /// (<c>tests/Core/TestReporterFixtures/MsTestReqnrollMtp</c>) connected to the reporter exactly the way
-/// the IDEs connect a user's project (issue #741): a project-local
+/// the IDEs connect a user's project: a project-local
 /// <c>obj/&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub importing the source bundle, which
 /// compiles the reporter's sources into the fixture's own test assembly — discovering
 /// this test's loopback listener through a hand-written session breadcrumb file — exactly the discovery
@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 /// the LSP server's role on both sides (the breadcrumb writer and the listener).
 /// </summary>
 /// <remarks>
-/// This is issue #715 Phase 2's own exit criterion: a live run showing per-row Scenario Outline
+/// This is the end-to-end proof of the MTP reporter: a live run showing per-row Scenario Outline
 /// outcomes for an MTP-mode Reqnroll fixture project, over the same wire protocol the VSTest logger's
 /// <c>DotnetTestEndToEndTests</c> (Reqnroll.IdeSupport.TestLogger.Tests) already proves for VSTest.
 /// </remarks>

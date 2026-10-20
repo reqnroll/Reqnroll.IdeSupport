@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.Utilities;
 
 /// <summary>
-/// Source-level guard for issue #1021: <c>VsUtils.ShowStatusBarMessage</c> touches the VS status bar
+/// Source-level guard: <c>VsUtils.ShowStatusBarMessage</c> touches the VS status bar
 /// and is UI-thread-only, so it must not be called directly from a command's background
 /// (<c>ConfigureAwait(false)</c>) continuation. Background callers use
 /// <c>ShowStatusBarMessageAsync</c>, which switches to the UI thread first. Scans the checked-in

@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Scenarios;
 /// Matches <c>ResolveTestTargetsContentionOptions</c>'s 200x rather than
 /// <c>WorkspaceReloadContentionScenario</c>'s 30x default: this storm is <see cref="ConcurrentCallers"/>
 /// concurrent <em>requests</em>, each needing a real response, so it is the same shape (and the same
-/// order of magnitude) as the #495 check. A regression ceiling, not a claimed steady-state ratio.
+/// order of magnitude) as the resolveTestTargets contention check. A regression ceiling, not a claimed steady-state ratio.
 /// </param>
 /// <param name="StreamSpacingMs">
 /// How far apart the streamed results are. Must exceed the listener's 250ms throttle
@@ -36,7 +36,7 @@ public sealed record TestOutcomesContentionOptions(
     int StreamSpacingMs = 300);
 
 /// <summary>
-/// Dispatch-fairness scenario for the outcome pipeline's fan-out (issue #714, scenario C), following
+/// Dispatch-fairness scenario for the outcome pipeline's fan-out, following
 /// <see cref="ResolveTestTargetsContentionScenario"/>'s shape: a synthetic run streams results
 /// further apart than the 250ms throttle, so every one of them fires its own
 /// <c>reqnroll/testOutcomes/changed</c> push, and each push makes every visible Run lens on the one
@@ -75,7 +75,7 @@ public sealed class TestOutcomesContentionScenario
     }
 
     /// <summary>
-    /// Opens the in-memory very-large feature (same synthetic shape #495 uses, via the shared
+    /// Opens the in-memory very-large feature (same synthetic shape the resolveTestTargets contention scenario uses, via the shared
     /// builder) and returns the ready-to-run scenario. <paramref name="probe"/> must be a document the
     /// storm never touches, already open on <paramref name="harness"/>.
     /// </summary>

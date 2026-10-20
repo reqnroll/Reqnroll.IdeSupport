@@ -12,7 +12,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
-/// Pins the static MEF registration of the <c>Gherkin</c> content type (issue #78) to the
+/// Pins the static MEF registration of the <c>Gherkin</c> content type to the
 /// VisualStudio.Extensibility document type it must coexist with: VS reuses an existing content
 /// type of the same name, so a different name or base would silently split them.
 /// </summary>

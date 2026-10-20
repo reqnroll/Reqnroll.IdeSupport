@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Scenarios;
 
 /// <summary>Knobs for <see cref="ResolveTestTargetsContentionScenario"/>.</summary>
 /// <param name="CeilingRatio">
-/// Higher than <c>WorkspaceReloadContentionScenario</c>'s 30x default (issue #488) — that scenario's
+/// Higher than <c>WorkspaceReloadContentionScenario</c>'s 30x default — that scenario's
 /// storm is <see cref="ConcurrentCallers"/>-many fire-and-forget <c>didChange</c> notifications
 /// (no response to wait for), while this one's storm is that many concurrent <em>requests</em>, each
 /// needing a real response round-tripped back through the same dispatch pipeline the probe read
@@ -33,13 +33,12 @@ public sealed record ResolveTestTargetsContentionOptions(
     int ScenarioCount = 2_000);
 
 /// <summary>
-/// Dispatch-fairness scenario for the Run CodeLens bridge (issue #495): models N visible Run
+/// Dispatch-fairness scenario for the Run CodeLens bridge: models N visible Run
 /// CodeLens/CodeVision entries all resolving at once against one very large <c>.feature</c> file —
-/// the exact "VeryLargeFeature" stress-corpus shape the issue's live report used (~2,000-2,400
+/// the "VeryLargeFeature" stress-corpus shape (~2,000-2,400
 /// scenarios in one file) — racing a cheap, unrelated <c>textDocument/foldingRange</c> read on a
 /// document the storm never touches. Follows <see cref="WorkspaceReloadContentionScenario"/>'s shape
-/// (issue #488) as instructed by issue #495's own scope note, rather than reinventing the
-/// baseline/under-load/ceiling-ratio pattern.
+/// rather than reinventing the baseline/under-load/ceiling-ratio pattern.
 /// </summary>
 /// <remarks>
 /// Unlike the isolated <c>InteractiveScenarios.ResolveTestTargetsAsync</c> (one caller, one range,
@@ -48,7 +47,7 @@ public sealed record ResolveTestTargetsContentionOptions(
 /// "pipelined on one connection" shape N simultaneously-visible Run lenses (VS's per-line data
 /// points, VS Code's lazily-resolved lenses, Rider's <c>CodeVisionProvider</c> recompute) produce
 /// against a single huge file — against a rotating set of distinct scenario ranges in the one large
-/// file, so the storm exercises the same dispatch path #495's per-target fix targets rather than
+/// file, so the storm exercises the same dispatch path the per-target resolution uses rather than
 /// N requests for the identical range.
 /// </remarks>
 public sealed class ResolveTestTargetsContentionScenario
@@ -158,7 +157,7 @@ public sealed class ResolveTestTargetsContentionScenario
     /// hooks — this scenario measures dispatch fairness under many concurrent resolution requests,
     /// not resolution correctness (which the isolated <c>InteractiveScenarios.ResolveTestTargetsAsync</c>
     /// and the server-side <c>ScenarioTestTargetResolverTests</c> already cover).
-    /// <c>internal</c> so the outcome fan-out scenario (issue #714) reuses this exact shape rather
+    /// <c>internal</c> so the outcome fan-out scenario reuses this exact shape rather
     /// than duplicating it.
     /// </summary>
     internal static (string Text, IReadOnlyList<Range> ScenarioRanges) BuildLargeFeature(int scenarioCount)

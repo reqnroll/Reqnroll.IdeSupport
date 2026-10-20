@@ -6,7 +6,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.NavigationBar;
 
 /// <summary>
-/// Pure combo-population logic for the Navigation Bar (Issue #5 / Q22 Option B):
+/// Pure combo-population logic for the Navigation Bar:
 /// <see cref="GherkinNavigationBarLayout"/>.
 /// </summary>
 public class GherkinNavigationBarLayoutTests

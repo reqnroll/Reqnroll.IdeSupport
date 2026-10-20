@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Covers the rules <see cref="DocumentInitializationMonitor"/> applies to RDT monikers and
-/// attribute-change notifications (issue #533, phase 2).
+/// attribute-change notifications.
 /// </summary>
 public class RdtDocumentInitializationTests
 {
@@ -85,7 +85,7 @@ public class RdtDocumentInitializationTests
     [Fact]
     public void LogDocumentEvent_logs_a_stale_cookie_ArgumentException_at_Verbose_not_Error()
     {
-        // Issue #814: a document released/closed during restore leaves a stale RDT cookie, and
+        // A document released/closed during restore leaves a stale RDT cookie, and
         // GetDocumentMoniker throws ArgumentException for it. In an observe-only monitor that is
         // an expected race, so it must be logged at Verbose — never surface as a spurious [Error].
         var rdt4 = (IVsRunningDocumentTable4)Substitute.For<IVsRunningDocumentTable, IVsRunningDocumentTable4>();

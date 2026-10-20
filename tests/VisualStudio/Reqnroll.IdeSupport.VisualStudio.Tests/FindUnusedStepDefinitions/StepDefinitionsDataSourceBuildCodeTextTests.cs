@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.FindUnusedStepDefinitions;
 
 /// <summary>
 /// The Code-column text of a step-definition row (<see cref="StepDefinitionsDataSource.BuildCodeText"/>),
-/// shared by Find Unused Step Definitions and Go To Definition with several matches (issue #757).
+/// shared by Find Unused Step Definitions and Go To Definition with several matches.
 /// </summary>
 public class StepDefinitionsDataSourceBuildCodeTextTests
 {

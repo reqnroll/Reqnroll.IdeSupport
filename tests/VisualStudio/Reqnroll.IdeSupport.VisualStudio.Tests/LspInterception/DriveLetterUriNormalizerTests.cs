@@ -8,8 +8,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// <summary>
 /// <see cref="DriveLetterUriNormalizer"/> upper-cases the drive letter of <c>file:///</c> URIs
 /// wherever they appear in a parsed JSON-RPC body, so server-emitted locations (OmniSharp's
-/// <c>DocumentUri</c> always lowercases the drive letter) match VS's own document identity
-/// (see issue #65).
+/// <c>DocumentUri</c> always lowercases the drive letter) match VS's own document identity.
 /// </summary>
 public class DriveLetterUriNormalizerTests
 {

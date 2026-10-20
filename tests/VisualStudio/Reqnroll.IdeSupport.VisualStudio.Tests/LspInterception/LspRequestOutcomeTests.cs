@@ -10,7 +10,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Issues #1017/#1019/#1020: <see cref="LspInterceptingPipe.SendRequestAsync"/> must say <em>how</em> a
+/// <see cref="LspInterceptingPipe.SendRequestAsync"/> must say <em>how</em> a
 /// request ended, so a failure can never be mistaken for a server that answered "nothing" (JSON null,
 /// <c>[]</c>, <c>{}</c>). Drives a real pipe over a scripted in-memory server.
 /// </summary>

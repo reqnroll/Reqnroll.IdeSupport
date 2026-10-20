@@ -7,7 +7,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LineCodeLens;
 
 /// <summary>
-/// Issue #1028: the Run and hook-count CodeLens tagger providers hand every consumer of a buffer the
+/// The Run and hook-count CodeLens tagger providers hand every consumer of a buffer the
 /// same <see cref="LineKeyedCodeLensTagger{TEntry}"/> (a per-buffer singleton in
 /// <see cref="ITextBuffer.Properties"/>). VS's tag aggregator (<c>TagAggregator&lt;T&gt;.UnregisterTagger</c>
 /// in <c>Microsoft.VisualStudio.Platform.VSEditor.dll</c>) calls <see cref="IDisposable.Dispose"/> on every

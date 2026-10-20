@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
 /// Direct unit tests for the three stages <see cref="RunTestOutcomeBridge.TryGetOutcomeAsync"/>
-/// splits into (issue #590): <b>invoke</b> (<see cref="RunTestOutcomeBridge.InvokeGetTestOutcomeAsync"/>)
+/// splits into: <b>invoke</b> (<see cref="RunTestOutcomeBridge.InvokeGetTestOutcomeAsync"/>)
 /// and <b>map</b> (<see cref="RunTestOutcomeBridge.ParseOutcome"/>) are tested here with substituted
 /// handles instead of the real (unsupported, internal) VS test-window API; <b>acquire</b>
 /// (<c>GetOrCreateProxyAsync</c>) does real reflection against that API and is deliberately not
@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 /// </summary>
 public class RunTestOutcomeBridgeTests : IDisposable
 {
-    // All fields RunTestOutcomeBridge touches are static (issue #590's own remarks: a stable
+    // All fields RunTestOutcomeBridge touches are static (a stable
     // per-process cached connection), so every test resets them on both sides of the run to avoid
     // leaking state into whichever test happens to run next.
     public RunTestOutcomeBridgeTests() => RunTestOutcomeBridge.ResetStateForTests();
@@ -174,7 +174,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
         act.Should().NotThrow();
     }
 
-    // ── Disposal of the cached proxy on a failure (issue #1034) ─────────────
+    // ── Disposal of the cached proxy on a failure ─────────────
 
     private sealed class DisposableProxySpy : IDisposable
     {

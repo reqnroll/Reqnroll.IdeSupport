@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Scenarios;
 /// Unlike <c>WorkspaceReloadContentionScenario</c>'s 30x and <c>ResolveTestTargetsContentionScenario</c>'s
 /// 200x, this default is <b>not</b> backed by a local measurement — this scenario has not yet been
 /// run against a built corpus in this environment. It is a starting placeholder only, deliberately
-/// generous: because rename now shares the same Serial FIFO the storm occupies (R8) rather than
+/// generous: because rename now shares the same Serial FIFO the storm occupies rather than
 /// racing it from a separate Parallel path, the relationship here is queuing delay, not scheduler
 /// unfairness, and could plausibly need a materially different ceiling than either precedent once
 /// real reference-machine data exists. Recalibrate from an actual run before trusting this as a
@@ -25,24 +25,23 @@ public sealed record RenameSerialLaneContentionOptions(
     int SettleDelayMs = 300);
 
 /// <summary>
-/// Dispatch-fairness scenario for <c>textDocument/rename</c>'s Serial-lane dispatch (issue #671,
-/// R8): does a rename's own latency stay reasonable while the user keeps typing in other open
+/// Dispatch-fairness scenario for <c>textDocument/rename</c>'s Serial-lane dispatch: does a rename's own latency stay reasonable while the user keeps typing in other open
 /// files?
 /// </summary>
 /// <remarks>
 /// <para>
-/// Rename used to run on OmniSharp's default Parallel lane, racing (and, per issue #654, sometimes
-/// losing to) whatever Serial-dispatched <c>didChange</c>/<c>didOpen</c>/<c>didSave</c> traffic was
-/// in flight. R8 moved it onto the Serial lane instead, for the multi-document snapshot consistency
+/// Rename runs on the Serial lane rather than OmniSharp's default Parallel lane, which would race
+/// (and could lose to) whatever Serial-dispatched <c>didChange</c>/<c>didOpen</c>/<c>didSave</c>
+/// traffic is in flight. The Serial lane gives the multi-document snapshot consistency
 /// a rename spanning several files needs — but that trades one failure mode for a different cost:
-/// rename now shares one shared, global FIFO queue with every routine edit notification, in any
+/// rename shares one global FIFO queue with every routine edit notification, in any
 /// open file, not just the one being renamed. This scenario is the coverage that trade explicitly
 /// needs: does a typing storm elsewhere in the workspace make a concurrent rename noticeably
 /// slower?
 /// </para>
 /// <para>
 /// Follows <see cref="WorkspaceReloadContentionScenario"/>'s baseline/under-load/ceiling-ratio shape
-/// (issue #488) rather than inventing a new one: the "many tabs react to one event" storm there is
+/// rather than inventing a new one: the "many tabs react to one event" storm there is
 /// exactly the "many keystrokes fire didChange" storm here, just measured against a rename instead
 /// of a cheap unrelated read.
 /// </para>
@@ -109,8 +108,8 @@ public sealed class RenameSerialLaneContentionScenario
 
             // The typing storm: didChange fired across every OTHER open file, back to back, the
             // same "issued together" shape a real client's keystrokes produce on one connection —
-            // not a sequence of separately-awaited edits. Since R8 put textDocument/rename on the
-            // same Serial dispatch lane these notifications occupy, the rename below now queues
+            // not a sequence of separately-awaited edits. Because textDocument/rename runs on the
+            // same Serial dispatch lane these notifications occupy, the rename below queues
             // FIFO alongside them instead of racing past on a separate Parallel path.
             version++;
             foreach (var f in _typingFiles)

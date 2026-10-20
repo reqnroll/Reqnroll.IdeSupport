@@ -17,7 +17,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Regression coverage for issue #395: a response to a request the <em>old</em> VS-facing session
+/// Regression guard: a response to a request the <em>old</em> VS-facing session
 /// sent (e.g. the <c>shutdown</c> request <see cref="LspInterceptingPipe.CreateFreshVsFacingPipe"/>'s
 /// own remarks describe) must not be misdelivered to whichever session happens to be current when
 /// the response finally arrives. Confirmed live: VS's JsonRpc treats an unmatched response as a
@@ -29,7 +29,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     private static readonly TimeSpan ShortTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>Records every message it sees, for asserting an owned-RPC request/response was
-    /// actually run through the interceptor list (issue #491) rather than bypassing it.</summary>
+    /// actually run through the interceptor list rather than bypassing it.</summary>
     private sealed class RecordingInterceptor : ILspMessageInterceptor
     {
         public List<LspMessage> Seen { get; } = new();
@@ -53,7 +53,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         }
     }
 
-    /// <summary>Captures every formatted log entry, for asserting the issue #764 diagnostics.</summary>
+    /// <summary>Captures every formatted log entry, for asserting the owned-request diagnostics.</summary>
     private sealed class RecordingLogger : ILogger<LspInterceptingPipe>
     {
         private readonly object _gate = new();
@@ -129,7 +129,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         var forwarded = await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
         forwarded.Should().Contain("\"id\":143").And.Contain("shutdown");
 
-        // Reconnect: a fresh session #2 pipe, matching CreateFreshVsFacingPipe (issue #156).
+        // Reconnect: a fresh session #2 pipe, matching CreateFreshVsFacingPipe.
         var session2 = _pipe.CreateFreshVsFacingPipe();
 
         // The server's response to session #1's shutdown request finally arrives — after the
@@ -145,15 +145,15 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task A_late_response_for_a_cancelled_owned_request_is_dropped_not_delivered_to_vs()
     {
-        // Regression coverage for issue #401: SendRequestToServerAsync (used by StepCodeLensService,
+        // Regression guard: SendRequestToServerAsync (used by StepCodeLensService,
         // FindStepUsagesService, etc.) removes its pending-request entry as soon as its caller's
         // CancellationToken fires — e.g. cancelled mid-reconnect, same as the captured repro. If the
         // server's real response for that id arrives afterward, TryGetCorrelatedResponseId/
         // CompleteCorrelatedResponse must still recognise and drop it purely from the
         // "reqnroll-rpc-" id prefix (proof it's ours),
         // rather than letting it fall through to VS's JsonRpc — which never sent that request and
-        // would treat it as the same fatal "unmatched response" protocol violation #395 fixed for
-        // VS's own peer-session responses.
+        // would treat it as the same fatal "unmatched response" protocol violation that peer-session
+        // routing prevents for VS's own responses.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
             serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
@@ -211,7 +211,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task SendRequestToServerWithErrorAsync_surfaces_the_servers_error_object_instead_of_collapsing_it_to_null()
     {
-        // Issue #650: SendRequestToServerAsync intentionally collapses a JSON-RPC error response to
+        // SendRequestToServerAsync intentionally collapses a JSON-RPC error response to
         // a plain null result (see its own doc comment) — indistinguishable from "no result". The
         // new WithError overload must preserve the error's message/code/data instead, so a caller
         // that actually needs to explain a failure (e.g. Rename Step's status-bar message) can.
@@ -238,7 +238,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         error["data"]!.Value<string>().Should().Be("rename");
     }
 
-    // ── Owned-request diagnostics and timeout (issue #764) ────────────────────────────────────
+    // ── Owned-request diagnostics and timeout ────────────────────────────────────
 
     [Fact]
     public async Task A_server_error_on_an_owned_request_is_logged_at_warning_while_the_plain_overload_still_returns_null()
@@ -292,8 +292,8 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task An_unanswered_owned_request_times_out_even_with_an_uncancellable_token_and_is_logged_at_warning()
     {
-        // The VSSDK command-filter redirects pass CancellationToken.None, so before this fix a hung
-        // server handler left the request pending forever, with no log line.
+        // The VSSDK command-filter redirects pass CancellationToken.None, so without a timeout a hung
+        // server handler would leave the request pending forever, with no log line.
         var logger = new RecordingLogger();
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
@@ -316,7 +316,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task A_late_response_after_a_timeout_is_still_consumed_not_forwarded_to_vs()
     {
-        // The timeout removes the waiter exactly like caller cancellation does, so the #401
+        // The timeout removes the waiter exactly like caller cancellation does, so the
         // guarantee — an owned id is never forwarded to VS — must hold for it too.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
@@ -360,12 +360,12 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task An_owned_rpc_request_and_its_response_are_both_run_through_the_interceptors()
     {
-        // Regression coverage for issue #491: a request injected by SendRequestToServerAsync (e.g.
+        // Regression guard: a request injected by SendRequestToServerAsync (e.g.
         // ScenarioTestTargetService's reqnroll/resolveTestTargets) and the response consumed for it
         // must both reach the interceptor list — that's how LspInspectorLogger sees this traffic —
-        // even though the response is never forwarded on to VS. Before this fix, neither direction
-        // ran through the interceptors at all, so this owned-RPC channel was invisible to the
-        // inspector log regardless of how much traffic crossed it.
+        // even though the response is never forwarded on to VS. If neither direction ran through the
+        // interceptors, this owned-RPC channel would be invisible to the inspector log regardless
+        // of how much traffic crossed it.
         var sendInterceptor = new RecordingInterceptor();
         var receiveInterceptor = new RecordingInterceptor();
         var serverSide = new FakeServerPipe();
@@ -391,7 +391,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
             m.Direction == LspMessageDirection.Receive && m.Id!.Value<string>() == id);
     }
 
-    // ── Session termination (issue #555) ─────────────────────────────────────────────────────
+    // ── Session termination ─────────────────────────────────────────────────────
     //
     // VS ends an LSP session with `shutdown` then `exit`, and it does that on a solution close, not
     // only at IDE shutdown. `exit` reaches the real server, which terminates — so everything after
@@ -471,8 +471,8 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
         await WaitForAsync(() => _pipe.ServerTerminated, ShortTimeout);
 
-        // Uncancelled token on purpose: before this fix the only thing that ended such a request was
-        // the caller's own token, which is why the log filled with OperationCanceledException.
+        // Uncancelled token on purpose: without the timeout the only thing that ends such a request is
+        // the caller's own token, which would fill the log with OperationCanceledException.
         var result = await WithTimeoutAsync(
             _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None), ShortTimeout);
 
@@ -522,19 +522,17 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().BeNull();
     }
 
-    // ── Characterization coverage taken before the #587 phase-2/3 extractions ─────────────────
+    // ── Characterization coverage for the pipe's decomposed collaborators ─────────────────
     //
-    // These pin behaviour that the decomposition must preserve but that nothing asserted before.
-    // Two of the invariants in the design's table (I7: the receive pump must never exit; I8: injected
-    // writes must not interleave with the send pump's) had no coverage at all, and the #395 shape was
-    // only tested one generation deep. They are written against the *current* implementation and are
-    // expected to pass unchanged through every pure-move commit; one of them (the purge-boundary test
-    // below) deliberately records a latent defect rather than the desired behaviour.
+    // These pin behaviour that the pipe's decomposition must preserve.
+    // Two of the invariants (the receive pump must never exit; injected writes must not interleave
+    // with the send pump's) and the peer-session routing shape across several generations are
+    // covered here.
 
     [Fact]
     public async Task Owned_and_vs_responses_arriving_together_each_reach_only_their_own_requester()
     {
-        // #395 and #401 in one shape: an owned RPC and one of VS's own requests in flight at the same
+        // Peer-session routing and owned-RPC consumption in one shape: an owned RPC and one of VS's own requests in flight at the same
         // time, answered out of order. The owned response must be consumed (never forwarded), and
         // VS's must be forwarded (never swallowed) -- the two policies meeting on one connection.
         var serverSide = new FakeServerPipe();
@@ -569,12 +567,11 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task A_response_for_a_session_abandoned_two_generations_ago_is_dropped()
     {
-        // This assertion was inverted deliberately (design §3.5). It previously recorded a latent
-        // recurrence of #395: CreateFreshVsFacingPipe purges request->session entries older than two
-        // generations, and the old guard only fired when the entry was *found*, so a response whose
-        // entry had been purged fell through and was forwarded to the current session -- the same
-        // unmatched response #395 exists to prevent, delayed by one more generation. The router now
-        // delivers a response only when its id is tracked against the current session.
+        // CreateFreshVsFacingPipe purges request->session entries older than two generations. A
+        // response whose entry has been purged must not fall through and be forwarded to the current
+        // session -- that is the unmatched response the routing exists to prevent, delayed by one
+        // more generation. The router delivers a response only when its id is tracked against the
+        // current session.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
             serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
@@ -599,7 +596,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task The_receive_pump_survives_an_interceptor_that_throws_and_keeps_delivering()
     {
-        // I7: the receive pump is persistent and shared by every future VS session, so nothing short
+        // The receive pump is persistent and shared by every future VS session, so nothing short
         // of the server's stdout ending may stop it.
         var throwing = new ThrowingInterceptor();
         var serverSide = new FakeServerPipe();
@@ -622,8 +619,8 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task The_receive_pump_survives_a_malformed_header_from_the_server_and_keeps_delivering()
     {
-        // I7 again, via the case step 2.0 made survivable: a header block with no usable
-        // Content-Length used to escape the codec as an exception and end this pump for good.
+        // A header block with no usable Content-Length must not escape the codec as an
+        // exception and end this pump for good.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
             serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
@@ -642,7 +639,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task The_receive_pump_keeps_delivering_after_a_session_is_abandoned()
     {
-        // I7 + I1: the pump looks up the *current* VS-facing writer per frame rather than capturing
+        // The pump looks up the *current* VS-facing writer per frame rather than capturing
         // one, so abandoning a session (whose VS-side reader is gone) must not disturb it.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
@@ -662,7 +659,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task Injected_traffic_and_send_pump_traffic_never_interleave_on_the_server_stream()
     {
-        // I8: SendNotificationToServerAsync/SendRequestToServerAsync write straight to the server's
+        // SendNotificationToServerAsync/SendRequestToServerAsync write straight to the server's
         // stdin from arbitrary threads, on the same unsynchronised PipeWriter the send pump forwards
         // VS's own frames to. Without the inject lock the two can interleave mid-frame and corrupt
         // the framing -- which would show up here as a frame that does not parse, or a lost one.
@@ -713,9 +710,9 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task Late_responses_arriving_after_termination_are_handled_without_reaching_vs_wrongly()
     {
-        // I5/I6 interaction: MarkServerTerminated releases the in-flight owned request, and a
+        // MarkServerTerminated releases the in-flight owned request, and a
         // response that still turns up afterwards must not be forwarded to VS -- the "reqnroll-rpc-"
-        // prefix proves it is ours whether or not a waiter survives (#401). VS's own outstanding
+        // prefix proves it is ours whether or not a waiter survives. VS's own outstanding
         // response is a different matter: VS asked for it and is still listening, so it is delivered.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
@@ -744,14 +741,14 @@ public class LspInterceptingPipeTests : IAsyncLifetime
             .Should().BeNull("the owned response must never reach VS's JsonRpc");
     }
 
-    // ── Writes to a server whose stdin is gone (issue #1023) ─────────────────────────────────
+    // ── Writes to a server whose stdin is gone ─────────────────────────────────
     //
     // The send methods' contract is "failure is reported, not thrown": a dead or terminated server
-    // yields a null result / a dropped notification. Before #1023 that only held when the #555 flag
-    // was already set when the call started. A crashed server's closed stdin surfaced IOException,
-    // a write racing the generation's disposal surfaced ObjectDisposedException, and a call that
-    // passed the flag check and then queued on the write lock wrote to the server after it had been
-    // marked terminated.
+    // yields a null result / a dropped notification. That must hold even when the terminated flag
+    // was not set when the call started: a crashed server's closed stdin surfaces IOException,
+    // a write racing the generation's disposal surfaces ObjectDisposedException, and a call that
+    // passed the flag check and then queued on the write lock must not write to the server after it
+    // has been marked terminated.
 
     [Fact]
     public async Task An_injected_request_whose_stdin_write_fails_with_IOException_returns_null_promptly_and_warns_once()
@@ -786,7 +783,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     public async Task A_stdin_write_failure_does_not_mark_the_connection_terminated()
     {
         // ServerTerminated == true tells LspServerConnectionService the server was *asked* to go, which
-        // suppresses the ServerExitedUnexpectedly report for a crash (issue #845). A failed write is
+        // suppresses the ServerExitedUnexpectedly report for a crash. A failed write is
         // evidence of a crash, not of an orderly exit, so it must leave that flag alone.
         var serverSide = new FaultingServerPipe();
         _pipe = new LspInterceptingPipe(
@@ -824,9 +821,9 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     [Fact]
     public async Task Injected_traffic_queued_behind_the_write_lock_is_refused_once_the_server_terminates()
     {
-        // The TOCTOU: the #555 flag used to be checked before taking the write lock, so a call that
-        // passed the check and then waited behind another write went on to write into a server that
-        // had been marked terminated in the meantime.
+        // The TOCTOU: the terminated flag must be checked after taking the write lock, otherwise a call
+        // that passed the check and then waited behind another write would go on to write into a
+        // server that had been marked terminated in the meantime.
         var serverSide = new FaultingServerPipe();
         _pipe = new LspInterceptingPipe(
             serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),

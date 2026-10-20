@@ -20,7 +20,7 @@ public class TelemetryTransmitterTests
 {
     private InMemoryTelemetryChannel _telemetryChannel;
     // VS writes no user-facing notice when the endpoint is unreachable, and its "flush did not
-    // finish" notes are verbose-only (#859 asymmetry), so both levels are captured separately.
+    // finish" notes are verbose-only, so both levels are captured separately.
     private readonly List<string> _infoLogLines = new();
     private readonly List<string> _verboseLogLines = new();
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
@@ -171,7 +171,7 @@ public class TelemetryTransmitterTests
         return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, logger, _debugLog);
     }
 
-    // ── Unreachable endpoint (#859) ───────────────────────────────────────────────
+    // ── Unreachable endpoint ───────────────────────────────────────────────
     //
     // Visual Studio's contract differs from VS Code's and Rider's. The Application Insights channel
     // hands events to a background sender and swallows the outcome (ETW/self-diagnostics only), so

@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="RunTestCodeLensService.CollectContainerNodes"/> — the Feature/Rule
-/// node walk backing the "Run scenarios" CodeLens (issue #744). Pure symbol-tree logic, so it's
+/// node walk backing the "Run scenarios" CodeLens. Pure symbol-tree logic, so it's
 /// tested directly against hand-built <see cref="GherkinSymbolNode"/> trees, the same way
 /// <see cref="ScenarioTestTargetService.MapResult"/> and other pure mapping helpers are tested
 /// elsewhere in this project.

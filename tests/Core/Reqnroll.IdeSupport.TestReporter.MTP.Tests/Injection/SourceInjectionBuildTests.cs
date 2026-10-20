@@ -1,7 +1,7 @@
 namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests.Injection;
 
 /// <summary>
-/// Issue #741: the project-local stub + <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c> + generated
+/// The project-local stub + <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c> + generated
 /// reporter sources, exercised with real <c>dotnet build</c>s of throwaway user projects. Every project
 /// is built exactly as a user's would be (outside the repo, no repo props), with nothing but the
 /// <c>obj/</c> stub connecting it to the reporter.
@@ -14,7 +14,7 @@ public class SourceInjectionBuildTests
     /// <summary>The runtime package alone: enough for the .targets file's Reqnroll gate (a resolved Reqnroll.dll) without Reqnroll's code generation.</summary>
     private const string ReqnrollReference = """<PackageReference Include="Reqnroll" Version="3.3.4" />""";
 
-    /// <summary>An MTP-only MSTest project (no Microsoft.NET.Test.Sdk, so IsTestProject is never set) that references Reqnroll — the shape issue #741's spike found main's IsTestProject guard wrongly excluded.</summary>
+    /// <summary>An MTP-only MSTest project (no Microsoft.NET.Test.Sdk, so IsTestProject is never set) that references Reqnroll — the shape an IsTestProject guard would wrongly exclude.</summary>
     private static string MsTestMtpProject(string msTestVersion = LatestMsTest, string extraProperties = "", string extraItems = "", bool reqnroll = true) => $"""
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
@@ -40,7 +40,7 @@ public class SourceInjectionBuildTests
     private static void ShouldSucceed(DotnetResult result) =>
         result.ExitCode.Should().Be(0, "the build must succeed; output:\n" + result.Output);
 
-    // ---- T1: compile + register ------------------------------------------------------------
+    // ---- compile + register ------------------------------------------------------------
 
     [Fact]
     public void An_MTP_only_project_gets_the_sources_compiled_in_and_the_hook_registered_with_no_reporter_binary()
@@ -56,7 +56,7 @@ public class SourceInjectionBuildTests
         Directory.GetFiles(workspace.OutputDirectory(), "Reqnroll.IdeSupport.*").Should().BeEmpty("the reporter is compiled from source; no assembly of ours is shipped into bin/");
     }
 
-    // ---- T2/T10: the supported Microsoft.Testing.Platform range --------------------------
+    // ---- the supported Microsoft.Testing.Platform range --------------------------
 
     [Theory]
     [InlineData("4.0.0", "")]   // Microsoft.Testing.Platform 2.0.0: the floor, the REQNROLL_IDE_MTP_BEFORE_2_1 branch.
@@ -74,7 +74,7 @@ public class SourceInjectionBuildTests
     }
 
     /// <summary>
-    /// Issue #741 T9: the latest published MSTest + Microsoft.Testing.Platform. Run weekly by
+    /// The latest published MSTest + Microsoft.Testing.Platform. Run weekly by
     /// .github/workflows/mtp-reporter-latest.yml; skipped otherwise, because its result depends on
     /// nuget.org rather than on the commit. Fails when a new release breaks the injected sources at
     /// compile time, or ships a major outside the range the .targets file gates on.
@@ -108,7 +108,7 @@ public class SourceInjectionBuildTests
         result.Output.Should().Contain("Microsoft.Testing.Platform 1.9.1 is outside the supported range [2.0.0, 3.0.0)");
     }
 
-    // ---- T3: hostile compiler settings -----------------------------------------------------
+    // ---- hostile compiler settings -----------------------------------------------------
 
     [Fact]
     public void The_injected_sources_build_clean_under_the_strictest_compiler_and_analyzer_settings()
@@ -127,7 +127,7 @@ public class SourceInjectionBuildTests
         workspace.ReporterHookRegistered().Should().BeTrue();
     }
 
-    // ---- T4 + T12: incremental build, clean, and removing the stub -------------------------
+    // ---- incremental build, clean, and removing the stub -------------------------
 
     [Fact]
     public void A_no_change_rebuild_does_not_recompile_clean_keeps_the_stub_and_removing_the_stub_removes_the_reporter()
@@ -150,7 +150,7 @@ public class SourceInjectionBuildTests
         workspace.InjectedSources().Should().BeEmpty();
     }
 
-    // ---- T5: negative gating ---------------------------------------------------------------
+    // ---- negative gating ---------------------------------------------------------------
 
     [Fact]
     public void An_MTP_test_project_that_does_not_use_Reqnroll_gets_nothing_even_with_a_stub()
@@ -284,7 +284,7 @@ public class SourceInjectionBuildTests
         Directory.GetFiles(workspace.OutputDirectory(), "Reqnroll.IdeSupport.*").Should().BeEmpty("the stale prebuilt reference is superseded by the compiled sources");
     }
 
-    // ---- T6: collisions with user types and global usings -----------------------------------
+    // ---- collisions with user types and global usings -----------------------------------
 
     [Fact]
     public void User_types_and_global_usings_that_reuse_the_reporters_names_do_not_break_the_build()

@@ -99,7 +99,7 @@ public class GherkinNavigationBarSymbolServiceMapResultTests
     public void Detail_is_mapped_when_present()
     {
         // Kind alone can't distinguish Scenario from Scenario Outline on the wire (both collapse
-        // to LSP SymbolKind.Method) — Detail carries that distinction (issue #262 follow-up, Run
+        // to LSP SymbolKind.Method) — Detail carries that distinction (used for the Run
         // CodeLens "Run Scenario" vs "Run Scenarios" wording).
         var symbol = Symbol("SO", 6, Range(1, 0, 3, 0));
         symbol["detail"] = "Scenario Outline";
@@ -118,10 +118,10 @@ public class GherkinNavigationBarSymbolServiceMapResultTests
         result[0].Detail.Should().BeNull();
     }
 
-    // ── IsContentModified (issue #671, R6a): the retry decision for FetchSymbolsAsync. Only the
+    // ── IsContentModified: the retry decision for FetchSymbolsAsync. Only the
     //    pure decision is unit-tested here — the retry orchestration around the live
     //    LspInterceptingPipe has no test seam, matching this class's existing boundary (transport
-    //    methods like the pre-R6a FetchSymbolsAsync were likewise untested; only pure mapping was). ─
+    //    methods are untested; only pure mapping is). ─
 
     [Fact]
     public void IsContentModified_is_true_for_the_LSP_ContentModified_error_code()

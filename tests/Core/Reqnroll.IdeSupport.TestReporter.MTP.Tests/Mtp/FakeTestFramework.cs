@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests.Mtp;
 
 /// <summary>
 /// A Microsoft.Testing.Platform test framework that publishes a fixed list of <see cref="TestNode"/>
-/// updates — the in-process harness for issue #741 T0, after the pattern Tyrrrz/GitHubActionsTestLogger
+/// updates — the in-process harness, after the pattern Tyrrrz/GitHubActionsTestLogger
 /// uses (<c>GitHubActionsTestLogger.Tests/Mtp/FakeTestFramework.cs</c>). It drives the reporter through
 /// MTP's real pipeline (extension enablement, session lifetime, message bus) with no <c>dotnet test</c>
 /// process and no fixture project.

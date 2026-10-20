@@ -5,7 +5,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Pure state-machine tests for <see cref="DocumentActivationState"/> (issue #85), including
+/// Pure state-machine tests for <see cref="DocumentActivationState"/>, including
 /// the ordering case where <c>WindowActivated</c> races ahead of <c>didOpen</c>.
 /// </summary>
 public class DocumentActivationStateTests
@@ -125,7 +125,7 @@ public class DocumentActivationStateTests
     [Fact]
     public void Reset_forgets_activations_so_a_replacement_server_is_notified_again()
     {
-        // Issue #555: this state records what a *particular* server has already been told. When VS
+        // This state records what a *particular* server has already been told. When VS
         // ends the session and a replacement server is launched, a file left in the Activated phase
         // would never produce another notification, so the new server would never learn the document
         // is active.

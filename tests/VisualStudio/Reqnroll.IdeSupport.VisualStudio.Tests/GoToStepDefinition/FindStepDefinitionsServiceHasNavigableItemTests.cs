@@ -7,7 +7,7 @@ namespace Reqnroll.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
 /// The client-side navigability test behind the Ctrl+hover underline
-/// (<see cref="FindStepDefinitionsService.HasNavigableItem"/>, issue #898): only a binding whose source
+/// (<see cref="FindStepDefinitionsService.HasNavigableItem"/>): only a binding whose source
 /// file is on this machine is somewhere Go To Definition can take the user.
 /// </summary>
 public class FindStepDefinitionsServiceHasNavigableItemTests

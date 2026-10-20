@@ -9,10 +9,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.StepCodeLens;
 /// (<c>RegisterLens</c>/<c>InvalidateLensesForFile</c>).
 /// </summary>
 /// <remarks>
-/// The invalidation half was previously excluded here as needing a real <see cref="StepCodeLens"/>
-/// and a VS host. Issue #400 generalised the registry to the <c>IInvalidatableLens</c> interface so
-/// <c>HookMatchCountCodeLens</c> could participate, which incidentally made the registry's own
-/// bookkeeping fakeable. Only <c>InvalidateLabel()</c> is exercised — the SDK's
+/// The registry works against the <c>IInvalidatableLens</c> interface (so <c>HookMatchCountCodeLens</c>
+/// can participate alongside <see cref="StepCodeLens"/>), which makes its own bookkeeping
+/// fakeable without a VS host. Only <c>InvalidateLabel()</c> is exercised — the SDK's
 /// <c>CodeLens.Invalidate()</c> call inside the real implementations still needs a VS host.
 /// </remarks>
 public class StepCodeLensStateTests
@@ -62,7 +61,7 @@ public class StepCodeLensStateTests
     [Fact]
     public void A_stale_line_left_over_from_a_deleted_or_moved_method_does_not_leak_into_later_lookups()
     {
-        // Reproduces issue #321: a method at line 20 is deleted (its StepCodeLens disposes and
+        // Regression guard: a method at line 20 is deleted (its StepCodeLens disposes and
         // unregisters line 20), then a new method is registered at line 15 in the edited layout.
         // Without UnregisterMethodLine, the stale "20" would remain in the bag forever and could
         // still be picked as the upper bound for line 10's lookback window, even though it no
@@ -101,10 +100,10 @@ public class StepCodeLensStateTests
         act.Should().NotThrow();
     }
 
-    // ── Lens invalidation registry (issue #400) ───────────────────────────────
+    // ── Lens invalidation registry ───────────────────────────────
     //
-    // Testable since the registry was generalised from the sealed, VS-host-bound StepCodeLens to
-    // the IInvalidatableLens interface — the very change that let HookMatchCountCodeLens
+    // Testable because the registry is typed to the IInvalidatableLens interface rather than the
+    // sealed, VS-host-bound StepCodeLens, which also lets HookMatchCountCodeLens
     // participate. Only InvalidateLabel() is exercised here; the SDK's CodeLens.Invalidate() call
     // behind the real implementations still needs a VS host.
 
@@ -131,7 +130,7 @@ public class StepCodeLensStateTests
     [Fact]
     public void Every_lens_registered_for_a_file_is_invalidated()
     {
-        // A .cs file has one lens per method, plus — since #400 — a second lens kind on the same
+        // A .cs file has one lens per method, plus a second lens kind on the same
         // file from HookMatchCountCodeLensProvider.
         var state   = new StepCodeLensState();
         var lenses  = new[] { new FakeLens(), new FakeLens(), new FakeLens() };
@@ -146,7 +145,7 @@ public class StepCodeLensStateTests
     [Fact]
     public void Different_lens_implementations_registered_for_one_file_are_all_invalidated()
     {
-        // The regression #400 was actually about: the registry used to be typed to StepCodeLens, so
+        // Regression guard: the registry must not be typed to StepCodeLens, or
         // a second implementation (HookMatchCountCodeLens) could not participate at all.
         var state      = new StepCodeLensState();
         var stepLens   = new FakeLens();
@@ -215,7 +214,7 @@ public class StepCodeLensStateTests
     [Fact]
     public void InvalidateAllTrackedLenses_reaches_every_file()
     {
-        // The full-replacement (rebuild) path, and — since #343 — the incremental path too.
+        // The full-replacement (rebuild) path, and the incremental path too.
         var state = new StepCodeLensState();
         var mine  = new FakeLens();
         var other = new FakeLens();

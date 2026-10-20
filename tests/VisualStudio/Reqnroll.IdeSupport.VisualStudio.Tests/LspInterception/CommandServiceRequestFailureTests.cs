@@ -14,7 +14,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Issue #1020: Find Unused Step Definitions, Find Step Usages, Go To Step Definition and Go To Hooks
+/// Find Unused Step Definitions, Find Step Usages, Go To Step Definition and Go To Hooks
 /// must report a failed or timed-out request as a failure — never as "0 unused", "not a binding",
 /// "no step definition found" or "no hooks". Each service is driven over a real
 /// <c>LspInterceptingPipe</c> talking to a scripted in-memory server.

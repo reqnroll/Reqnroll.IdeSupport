@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
-/// Coverage for <see cref="TagLinkNavigableSymbolProvider"/> (issue #755). The editor takes the first non-null
+/// Coverage for <see cref="TagLinkNavigableSymbolProvider"/>. The editor takes the first non-null
 /// symbol in MEF order, so the ordering metadata is what makes a tag win over Go To Definition; it is pinned
 /// here because nothing else would notice it drifting. The source-level tests need no real VS UI thread, so
 /// they use plain NSubstitute fakes, like <see cref="GoToDefinitionNavigableSymbolProviderTests"/>.

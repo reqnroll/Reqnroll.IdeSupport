@@ -162,7 +162,7 @@ public class ProjectSettingsProviderTests : IDisposable
         sut.GetProjectSettings().IsUninitialized.Should().BeTrue();
     }
 
-    // ── Unknown (null) target framework monikers — issue #963 ─────────────────────
+    // ── Unknown (null) target framework monikers ─────────────────────
 
     [Fact]
     public void Constructor_with_both_target_framework_moniker_sources_null_does_not_throw_and_stays_uninitialized()
@@ -211,7 +211,7 @@ public class ProjectSettingsProviderTests : IDisposable
         settings.TargetFrameworkMonikers.Should().Be(".NETCoreApp,Version=v8.0");
     }
 
-    // ── Thread affinity (#962) ───────────────────────────────────────────────────
+    // ── Thread affinity ───────────────────────────────────────────────────
 
     /// <summary>
     /// Mirrors VS: <c>VsProjectScope</c> members call <c>ThreadHelper.ThrowIfNotOnUIThread()</c>

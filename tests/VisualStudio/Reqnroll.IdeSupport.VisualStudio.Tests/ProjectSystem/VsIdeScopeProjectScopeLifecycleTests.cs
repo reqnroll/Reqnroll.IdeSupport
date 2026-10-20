@@ -14,11 +14,11 @@ using Project = EnvDTE.Project;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.ProjectSystem;
 
 /// <summary>
-/// Issue #1030: <see cref="VsIdeScope"/> caches one <see cref="VsProjectScope"/> per project (keyed by
-/// the project file path) and used to keep it forever. After a project was unloaded/removed and
-/// reloaded under the same path, the stale scope - still holding the old, dead DTE
-/// <see cref="Project"/> and its cached settings - kept being served, and neither eviction nor
-/// <see cref="VsIdeScope.Dispose"/> ever disposed a scope's <see cref="IProjectScope.Properties"/>.
+/// <see cref="VsIdeScope"/> caches one <see cref="VsProjectScope"/> per project (keyed by
+/// the project file path). After a project is unloaded/removed and reloaded under the same path, a
+/// stale scope - still holding the old, dead DTE <see cref="Project"/> and its cached settings -
+/// must not be served, and both eviction and <see cref="VsIdeScope.Dispose"/> must dispose a
+/// scope's <see cref="IProjectScope.Properties"/>.
 /// </summary>
 [Collection(TestUiThreadCollection.Name)]
 public sealed class VsIdeScopeProjectScopeLifecycleTests : IDisposable

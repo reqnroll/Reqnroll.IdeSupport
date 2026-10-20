@@ -10,8 +10,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Owned-RPC correlation, tested without a pipe (issue #587, step 2). Issues #401 and #555 both
-/// live here: what happens to a response whose waiter is already gone, and what happens to waiters
+/// Owned-RPC correlation, tested without a pipe. Two behaviours live here: what happens to a response whose waiter is already gone, and what happens to waiters
 /// when the server goes.
 /// </summary>
 public class LspRequestCorrelatorTests
@@ -57,7 +56,7 @@ public class LspRequestCorrelatorTests
     [Fact]
     public void A_response_is_recognised_as_ours_even_after_its_waiter_is_gone()
     {
-        // Issue #401: the caller's token fires (e.g. StepCodeLensService torn down mid-reconnect),
+        // The caller's token fires (e.g. StepCodeLensService torn down mid-reconnect),
         // Dispose removes the waiter, and the server's real response lands milliseconds later.
         // Recognition must not depend on the waiter still existing — if this returned false the
         // response would be forwarded to VS, which never sent the request, and VS closes the
@@ -86,7 +85,7 @@ public class LspRequestCorrelatorTests
     [Fact]
     public async Task Releasing_completes_every_waiter_promptly_with_null()
     {
-        // Issue #555: without this, callers sit until their own tokens trip, which turned one dead
+        // Without this, callers sit until their own tokens trip, which turned one dead
         // server into a stream of OperationCanceledExceptions from every CodeLens and navigation-bar
         // request for the rest of the session.
         var correlator = NewCorrelator();

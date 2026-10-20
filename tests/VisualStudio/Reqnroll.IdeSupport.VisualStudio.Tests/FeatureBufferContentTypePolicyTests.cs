@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Covers the rule <see cref="FeatureBufferContentTypeGuard"/> applies to decide whether a
-/// <c>.feature</c> buffer is re-typed to <c>Gherkin</c> (issue #78).
+/// <c>.feature</c> buffer is re-typed to <c>Gherkin</c>.
 /// </summary>
 public class FeatureBufferContentTypePolicyTests
 {

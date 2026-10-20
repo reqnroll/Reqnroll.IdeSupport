@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
-/// Coverage for <see cref="GoToDefinitionNavigableSymbolProvider"/> (issue #761): Ctrl+Click routing
+/// Coverage for <see cref="GoToDefinitionNavigableSymbolProvider"/>: Ctrl+Click routing
 /// through <see cref="GoToDefinitionRedirect"/>. Mirrors <see cref="GoToDefinitionCommandFilterTests"/>
 /// — <c>GetTextBufferFileUri</c> and the "no redirect set" fallback need no real VS UI thread, so they
 /// are exercised here with plain NSubstitute fakes.
