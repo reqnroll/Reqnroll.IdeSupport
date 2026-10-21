@@ -111,7 +111,7 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `ClientSessionId` | Each client generates one random GUID per IDE process (`ClientSession` in Common, `clientSession.ts`, Rider's `ClientSession`), stamps it on every event it transmits, and passes it to the server as `--client-session-id <guid>`; the server (`IdentityStampingLspTelemetryService`) stamps it on every server event, ignoring a value that is not a GUID (#1199) | not user-identifying. Unlike `SessionId` it exists before the server does and survives a server restart, so one `ClientSessionId` can span several `SessionId`s; join a client-origin `UnhandledException` to `ServerSessionStarted` on it for the IDE, OS and versions |
 | `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version (**the single source of the IDE version**), extension version |
 
-**Wire names (issue #1257).** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage / welcome and upgrade dialogs), `Usage`, `Perf`, `Error` and `Vs` (Visual Studio-only host events such as self-check failures). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
+**Wire names.** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage / welcome and upgrade dialogs), `Usage`, `Perf`, `Error` and `Vs` (Visual Studio-only host events such as self-check failures). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
 
 | Constant (`TelemetryEvents`) | Event name |
 |---|---|
@@ -160,9 +160,9 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `ServerExitedUnexpectedly` | `Server.ExitedUnexpectedly` |
 | `ServerRestarted` | `Server.Restarted` |
 
-Before #1257 the names mixed three styles (`FindStepDefinitions command executed`, `TestOutcomesRunCompleted`, `PerfSample`) and the daily heartbeat put its count in the name (`7 day usage`); it is now `Lifecycle.DaysOfUsage` with a `UsageDays` property. `telemetry/event-name-map.kql` lists every legacy name and its replacement; the files under `telemetry/queries` embed it as `CanonicalEventName()`, which also strips the VS Code prefix below, so one query covers old and new data.
+Previously the names mixed three styles (`FindStepDefinitions command executed`, `TestOutcomesRunCompleted`, `PerfSample`) and the daily heartbeat put its count in the name (`7 day usage`); it is now `Lifecycle.DaysOfUsage` with a `UsageDays` property. `telemetry/event-name-map.kql` lists every legacy name and its replacement; the files under `telemetry/queries` embed it as `CanonicalEventName()`, which also strips the VS Code prefix below, so one query covers old and new data.
 
-**Event names carry no extension-id prefix (issue #1256).** VS Code's telemetry logger prepends `<publisher>.<name>/` to every event name. `telemetry.ts` therefore sends usage events through its own `TelemetryLogger` (so `telemetry.telemetryLevel` is still honoured) whose sender strips that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`. Events recorded before the fix still carry the prefix; the queries under `telemetry/queries` compare names through `CanonicalEventName()`.
+**Event names carry no extension-id prefix.** VS Code's telemetry logger prepends `<publisher>.<name>/` to every event name. `telemetry.ts` therefore sends usage events through its own `TelemetryLogger` (so `telemetry.telemetryLevel` is still honoured) whose sender strips that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`. Events recorded before the fix still carry the prefix; the queries under `telemetry/queries` compare names through `CanonicalEventName()`.
 
 Stamping never overrides a key the caller already set, and server-side stamping copies the property
 dictionary rather than mutating the caller's. `PerfSample`'s former `IDEClient` key is retired in
@@ -182,7 +182,7 @@ Names are `Category.Name` (see "Wire names" above); the category prefix is what 
 **Renaming policy.** A rename shows up as a compile error at every call site (all names flow
 through the catalog), so it is *safe* to do — but historical Application Insights data is not
 back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExecuted` and
-`UnhandledException` (#627) as the precedent: confirm with the team before renaming any event. #1257 is the second such rename: all events moved to the hierarchical scheme at once, with the legacy names kept in `telemetry/event-name-map.kql`. Add a row there (and a catalog constant) for every future rename; `TelemetryEventCatalogTests` fails if the map, the VS Code mirror or the Rider mirror drift from the catalog.
+`UnhandledException` as the precedent: confirm with the team before renaming any event. The move to the hierarchical scheme was the second such rename: all events moved to the hierarchical scheme at once, with the legacy names kept in `telemetry/event-name-map.kql`. Add a row there (and a catalog constant) for every future rename; `TelemetryEventCatalogTests` fails if the map, the VS Code mirror or the Rider mirror drift from the catalog.
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
 are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
@@ -349,7 +349,7 @@ binding, `OccurrenceCount` how many steps a rename rewrites, and `DurationBucket
 ### `FindStepDefinitionUsagesCommandExecuted`
 | | |
 |---|---|
-| **Emitters** | `FindStepUsagesHandler` (`reqnroll/findStepUsages`, the explicit Find Step Usages command in all three IDEs) and `ReferencesHandler` (`textDocument/references`, the editor's native Find All References — issue #581 finding 3) — one event, discriminated by `Protocol`, because both are the user asking for a binding's usages |
+| **Emitters** | `FindStepUsagesHandler` (`reqnroll/findStepUsages`, the explicit Find Step Usages command in all three IDEs) and `ReferencesHandler` (`textDocument/references`, the editor's native Find All References) — one event, discriminated by `Protocol`, because both are the user asking for a binding's usages |
 | **When** | After a usage lookup on a binding ("is a binding" gate passed) |
 | **Properties** | `UsagesCount` (int), `IsCancelled` (bool), `Protocol` (`"reqnroll/findStepUsages"` \| `"textDocument/references"`), `FileCount` (int — distinct `.feature` files in the result), `DurationBucket` (string, see "Bucket schemes" below) |
 
@@ -732,7 +732,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Go-to-step-definition: lookups vs navigations | `Lookup.FindStepDefinitions` (server; all IDEs) vs `Command.GoToStepDefinition` (client; Visual Studio and VS Code's picker command only - F12/Ctrl+click in VS Code and Rider are not distinguishable from hover) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |
 | Crash/error rates | `UnhandledException` (server; VS Code/Rider client code with `ExceptionOrigin = "Client"`) + VS `ExceptionTelemetry` |
-| Adoption lifecycle | All IDEs (#875): `Lifecycle.Loaded`, `Lifecycle.Installed`, `Lifecycle.Upgraded`, `"{N} day usage"`; VS only: wizard events; `ServerSessionStarted` by distinct `ai.user.id` as a cross-check |
+| Adoption lifecycle | All IDEs: `Lifecycle.Loaded`, `Lifecycle.Installed`, `Lifecycle.Upgraded`, `"{N} day usage"`; VS only: wizard events; `ServerSessionStarted` by distinct `ai.user.id` as a cross-check |
 | Server health: start failures, crashes, restarts, time-to-ready | `ServerStartFailed`, `ServerExitedUnexpectedly`, `ServerRestarted` (clients); `ServerSessionStarted` (`StartupMs`); Started without Ended per `SessionId` |
 | Project size snapshot (steps, hooks per type, binding classes, feature files) | `ProjectCharacteristics` |
 | Field performance (P95/P99) | `PerfSample` |
@@ -768,7 +768,7 @@ abrupt process death is accepted but detectable via `Sequence`.
   MSBuild switches (e.g. `EnableMSTestRunner`) that opt MSTest/xUnit/NUnit into MTP, so a project on MTP that still
   references the VSTest SDK reads as `VSTest`. Both properties are omitted for clients that send no package
   references (Rider today).
-- **`ReqnrollVersion` / `LegacySpecFlow` on `Project.Opened`** — decision (#845): the
+- **`ReqnrollVersion` / `LegacySpecFlow` on `Project.Opened`** — decision: the
   first `ReqnrollDiscoveryExecuted` is the authoritative source for the Reqnroll version (the connector
   resolves it; the server's project model does not), so it is not duplicated on `OpenProject`.
   `LegacySpecFlow` is not available server-side; per #873 it stays on the VS feature-file/config events
