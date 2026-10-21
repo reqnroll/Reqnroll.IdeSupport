@@ -1,6 +1,6 @@
 {
   "name": "reqnroll-ide-support-vscode",
-  "displayName": "Reqnroll Extension for VS Code (Preview)",
+  "displayName": "Reqnroll Extension for Visual Studio Code (Preview)",
   "description": "[Preview] Support for Reqnroll & Gherkin — syntax highlighting, navigation, completion, and more.",
   "version": "2026.1.99999",
   "publisher": "Reqnroll",
