@@ -73,7 +73,7 @@ let reporter: TelemetryReporter | undefined;
 // Usage events go through our own TelemetryLogger (created with the reporter) rather than straight
 // into `reporter.sendTelemetryEvent`. Both are VS Code TelemetryLoggers, so both honour
 // `telemetry.telemetryLevel`, but VS Code prefixes every event name with the extension id
-// (`<publisher>.<name>/`), which the other IDE clients do not do (#1256). Our logger's sender strips
+// (`<publisher>.<name>/`), which the other IDE clients do not do. Our logger's sender strips
 // that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`
 // (safe: the opt-out has already been applied by *our* logger), so one event has one name in all IDEs.
 let logger: vscode.TelemetryLogger | undefined;
@@ -82,7 +82,7 @@ let lastSendError: string | undefined;
 
 const EXTENSION_ID_PREFIX = /^[^/\s]+\.[^/\s]+\//;
 
-/** Removes the `<publisher>.<name>/` extension-id prefix VS Code adds to event names (#1256). */
+/** Removes the `<publisher>.<name>/` extension-id prefix VS Code adds to event names. */
 export function stripExtensionIdPrefix(eventName: string): string {
   return eventName.replace(EXTENSION_ID_PREFIX, '');
 }

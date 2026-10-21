@@ -82,7 +82,7 @@ suite('stepNavigation', () => {
       assert.match(info ?? '', /No step definition found/);
     });
 
-    test('sends "Command.GoToStepDefinition" with the navigable LocationCount (issue #899)', async () => {
+    test('sends "Command.GoToStepDefinition" with the navigable LocationCount', async () => {
       const client = {
         sendRequest: () =>
           Promise.resolve({

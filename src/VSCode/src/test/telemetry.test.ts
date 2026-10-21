@@ -134,7 +134,7 @@ suite('telemetry', () => {
   // The activated extension owns a module-level reporter (ensureTelemetryReporter); start clean.
   setup(() => resetTelemetryReporterForTests());
 
-  suite('event names carry no extension-id prefix (#1256)', () => {
+  suite('event names carry no extension-id prefix', () => {
     test('stripExtensionIdPrefix removes a <publisher>.<name>/ prefix and nothing else', () => {
       assert.strictEqual(
         stripExtensionIdPrefix('Reqnroll.reqnroll-ide-support-vscode/Command.FindStepDefinitions'),

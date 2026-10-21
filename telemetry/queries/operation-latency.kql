@@ -23,8 +23,8 @@
 //     Request       everything else                   (completion, hover, definition, rename, CodeLens, ...)
 // - reqnroll/testOutcomes/ingestRun is excluded: it records the duration of a whole test run, not server latency.
 let lookback = 7d;
-// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/, #1256), and the names
-// themselves were renamed to Category.Name in #1257. CanonicalEventName() maps all of those to the current name, so a
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Name. CanonicalEventName() maps all of those to the current name, so a
 // query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
 let LegacyEventNames = dynamic({
     "CommentUncomment command executed": "Command.CommentUncomment",

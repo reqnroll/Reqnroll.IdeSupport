@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 namespace Reqnroll.IdeSupport.Common.Tests.Telemetry;
 
 /// <summary>
-/// Pins the event-name scheme (issue #1257) and keeps the hand-kept mirrors of
+/// Pins the event-name scheme and keeps the hand-kept mirrors of
 /// <see cref="TelemetryEvents"/> (VS Code, Rider, the KQL legacy-name map) from drifting.
 /// </summary>
 public class TelemetryEventCatalogTests

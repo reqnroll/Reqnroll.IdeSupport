@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <item><description>
 /// <b>LSP server</b> — events sent via <c>ILspTelemetryService.SendEvent</c> as
 /// <c>telemetry/event</c> notifications. Names are hierarchical, <c>Category.Name</c> (or
-/// <c>Category.Name.Qualifier</c>), PascalCase segments separated by dots (issue #1257). Categories:
+/// <c>Category.Name.Qualifier</c>), PascalCase segments separated by dots. Categories:
 /// <c>Command</c> (a user-invoked command ran), <c>Lookup</c> (a request the server answered that is not
 /// necessarily a user action), <c>CodeAction</c> (a quick fix offered / picked), <c>Discovery</c>, <c>Project</c>,
 /// <c>TestRun</c>, <c>TagIndex</c>, <c>Server</c> (process lifecycle), <c>Lifecycle</c> (extension install / upgrade / welcome and upgrade dialogs /
@@ -227,7 +227,7 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Daily-active-usage heartbeat, sent by all three IDEs on the first activation of each new day
-    /// after install. Property: <c>UsageDays</c> (the running count). Before #1257 the count was part of
+    /// after install. Property: <c>UsageDays</c> (the running count). Previously the count was part of
     /// the event name (<c>"7 day usage"</c>), so every count was its own event; query the legacy names
     /// through the <c>ReqnrollEvents()</c> function in <c>telemetry/queries</c>.
     /// </summary>

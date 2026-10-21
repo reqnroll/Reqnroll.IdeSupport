@@ -32,7 +32,7 @@ export function run(): Promise<void> {
 
   // The test host has telemetry disabled, so VS Code's real TelemetryLogger never invokes its sender.
   // Substitute one that always forwards and prefixes event names with the extension id, as the host
-  // does, so the tests exercise the sender's prefix stripping (#1256).
+  // does, so the tests exercise the sender's prefix stripping.
   setTelemetryLoggerFactoryForTests((sender) => {
     const forward = (eventName: string, data?: Record<string, unknown>) =>
       sender.sendEventData(`Reqnroll.reqnroll-ide-support/${eventName}`, data);

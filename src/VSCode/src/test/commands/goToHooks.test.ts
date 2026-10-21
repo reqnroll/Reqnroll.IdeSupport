@@ -273,7 +273,7 @@ suite('goToHooks', () => {
       }
     }
 
-    test('sends "Command.GoToHook" telemetry directly on a genuine invocation (issue #698)', async () => {
+    test('sends "Command.GoToHook" telemetry directly on a genuine invocation', async () => {
       const sent = await captureTelemetry((client) =>
         doGoToHooks(
           client,
