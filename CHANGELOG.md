@@ -1,4 +1,4 @@
-# [vNext]
+# v2026.1 - 2026-10-21
 
 ## Improvements:
 * Client-side `UnhandledException` telemetry is now attributable: VS, VS Code and Rider each generate a per-IDE-session `ClientSessionId`, send it on every event and pass it to the language server as `--client-session-id` so the server's events carry it too (a client exception joins to its `ServerSessionStarted`), and VS Code and Rider now send the same sanitized `StackFrames` as the server and Visual Studio (only the extension's own frames; no paths or file names). `telemetry/queries/error-rates.kql` reports distinct sessions affected (VS, VS Code, Rider, LSP server) - see #1199
