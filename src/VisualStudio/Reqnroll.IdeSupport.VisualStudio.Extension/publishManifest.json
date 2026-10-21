@@ -1,9 +1,9 @@
 {
   "$schema": "http://json.schemastore.org/vsix-publish",
-  "categories": [ "coding", "testing" ],
+  "categories": [ "coding", "testing", "documentation" ],
   "identity": {
-    "internalName": "Reqnroll.IdeSupport.VisualStudio",
-    "tags": [ "reqnroll", "gherkin", "bdd", "specflow", "feature", "cucumber" ]
+    "internalName": "reqnroll-ide-support-vs",
+    "tags": [ "Reqnroll", "Gherkin", "BDD", "Feature File" ]
   },
   "overview": "overview.md",
   "priceCategory": "free",
