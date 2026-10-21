@@ -13,8 +13,8 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <c>Category.Name.Qualifier</c>), PascalCase segments separated by dots (issue #1257). Categories:
 /// <c>Command</c> (a user-invoked command ran), <c>Lookup</c> (a request the server answered that is not
 /// necessarily a user action), <c>CodeAction</c> (a quick fix offered / picked), <c>Discovery</c>, <c>Project</c>,
-/// <c>TestRun</c>, <c>TagIndex</c>, <c>Server</c> (process lifecycle), <c>Lifecycle</c> (extension install / upgrade /
-/// usage), <c>Usage</c>, <c>Perf</c>, <c>Wizard</c> (project-template wizard and welcome/upgrade dialog interactions), <c>Error</c> and <c>Vs</c> (Visual Studio-only host events such as self-check failures). The category prefix is
+/// <c>TestRun</c>, <c>TagIndex</c>, <c>Server</c> (process lifecycle), <c>Lifecycle</c> (extension install / upgrade / welcome and upgrade dialogs /
+/// usage), <c>Usage</c>, <c>Perf</c>, <c>Wizard</c> (project-template wizard), <c>Error</c> and <c>Vs</c> (Visual Studio-only host events such as self-check failures). The category prefix is
 /// what keeps a generic tail such as "Executed" or "Error" from colliding in aggregate reporting.
 /// Referencing these constants instead of literals means a typo or an accidental rename shows up
 /// as a compile error, not a silently-orphaned telemetry event.
@@ -240,19 +240,19 @@ public static class TelemetryEvents
     public const string ReqnrollConfigAdded = "Project.ReqnrollConfigAdded";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorProjectTemplateWizardStarted</c>) when the "add new Reqnroll project" wizard starts.</summary>
-    public const string ProjectTemplateWizardStarted = "Wizard.ProjectTemplateWizardStarted";
+    public const string ProjectTemplateWizardStarted = "Wizard.ProjectTemplateStarted";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorProjectTemplateWizardCompleted</c>) when the project-template wizard completes with the chosen options.</summary>
-    public const string ProjectTemplateWizardCompleted = "Wizard.ProjectTemplateWizardCompleted";
+    public const string ProjectTemplateWizardCompleted = "Wizard.ProjectTemplateCompleted";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorLinkClicked</c>) when a link is clicked from extension UI, carrying the source and URL.</summary>
-    public const string LinkClicked = "Wizard.LinkClicked";
+    public const string LinkClicked = "Lifecycle.LinkClicked";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorUpgradeDialogDismissed</c>) when the upgrade dialog is dismissed.</summary>
-    public const string UpgradeDialogDismissed = "Wizard.UpgradeDialogDismissed";
+    public const string UpgradeDialogDismissed = "Lifecycle.UpgradeDialogDismissed";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorWelcomeDialogDismissed</c>) when the welcome dialog is dismissed.</summary>
-    public const string WelcomeDialogDismissed = "Wizard.WelcomeDialogDismissed";
+    public const string WelcomeDialogDismissed = "Lifecycle.WelcomeDialogDismissed";
 
     /// <summary>Sent by the VS extension (<c>VsWellKnownIdsSelfCheck</c>) when the startup self-check finds hard-coded well-known command IDs that do not resolve in this Visual Studio version.</summary>
     public const string VsWellKnownIdsSelfCheckMismatch = "Vs.WellKnownIdsSelfCheckMismatch";

@@ -111,7 +111,7 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `ClientSessionId` | Each client generates one random GUID per IDE process (`ClientSession` in Common, `clientSession.ts`, Rider's `ClientSession`), stamps it on every event it transmits, and passes it to the server as `--client-session-id <guid>`; the server (`IdentityStampingLspTelemetryService`) stamps it on every server event, ignoring a value that is not a GUID (#1199) | not user-identifying. Unlike `SessionId` it exists before the server does and survives a server restart, so one `ClientSessionId` can span several `SessionId`s; join a client-origin `UnhandledException` to `ServerSessionStarted` on it for the IDE, OS and versions |
 | `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version (**the single source of the IDE version**), extension version |
 
-**Wire names (issue #1257).** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage), `Usage`, `Perf`, `Wizard` (project-template wizard and welcome/upgrade dialog interactions), `Error` and `Vs` (Visual Studio-only host events such as self-check failures). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
+**Wire names (issue #1257).** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage / welcome and upgrade dialogs), `Usage`, `Perf`, `Wizard` (project-template wizard), `Error` and `Vs` (Visual Studio-only host events such as self-check failures). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
 
 | Constant (`TelemetryEvents`) | Event name |
 |---|---|
@@ -148,11 +148,11 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `DaysOfUsage` | `Lifecycle.DaysOfUsage` |
 | `FeatureFileAdded` | `Project.FeatureFileAdded` |
 | `ReqnrollConfigAdded` | `Project.ReqnrollConfigAdded` |
-| `ProjectTemplateWizardStarted` | `Wizard.ProjectTemplateWizardStarted` |
-| `ProjectTemplateWizardCompleted` | `Wizard.ProjectTemplateWizardCompleted` |
-| `LinkClicked` | `Wizard.LinkClicked` |
-| `UpgradeDialogDismissed` | `Wizard.UpgradeDialogDismissed` |
-| `WelcomeDialogDismissed` | `Wizard.WelcomeDialogDismissed` |
+| `ProjectTemplateWizardStarted` | `Wizard.ProjectTemplateStarted` |
+| `ProjectTemplateWizardCompleted` | `Wizard.ProjectTemplateCompleted` |
+| `LinkClicked` | `Lifecycle.LinkClicked` |
+| `UpgradeDialogDismissed` | `Lifecycle.UpgradeDialogDismissed` |
+| `WelcomeDialogDismissed` | `Lifecycle.WelcomeDialogDismissed` |
 | `VsWellKnownIdsSelfCheckMismatch` | `Vs.WellKnownIdsSelfCheckMismatch` |
 | `GoToHookCommandExecuted` | `Command.GoToHook` |
 | `TagLinkCommandExecuted` | `Command.TagLink` |
@@ -503,10 +503,10 @@ only originate here.
 | `"{N} day usage"` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService`, right after incrementing `UsageDays`); the day count is part of the name, so each count is its own event (constant: `DaysOfUsageEventNameFormat` = `"{0} day usage"`) | — |
 | `Project.FeatureFileAdded` | `MonitorCommandAddFeatureFile` — feature file added via command/wizard | project settings¹ |
 | `Project.ReqnrollConfigAdded` | `MonitorCommandAddReqnrollConfigFile` — `reqnroll.json` added via command/wizard | project settings¹ |
-| `Wizard.ProjectTemplateWizardStarted` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |
-| `Wizard.ProjectTemplateWizardCompleted` | `MonitorProjectTemplateWizardCompleted` — wizard finishes | `SelectedDotNetFramework`, `SelectedUnitTestFramework`, `AddFluentAssertions` |
-| `Wizard.LinkClicked` | `MonitorLinkClicked` — a link in extension UI (welcome/upgrade dialogs) is opened | `Source` (dialog/VM name), `URL` |
-| `Wizard.WelcomeDialogDismissed` / `Wizard.UpgradeDialogDismissed` | `MonitorWelcomeDialogDismissed` / `MonitorUpgradeDialogDismissed` — dialog closes | additional props (e.g. visited pages) |
+| `Wizard.ProjectTemplateStarted` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |
+| `Wizard.ProjectTemplateCompleted` | `MonitorProjectTemplateWizardCompleted` — wizard finishes | `SelectedDotNetFramework`, `SelectedUnitTestFramework`, `AddFluentAssertions` |
+| `Lifecycle.LinkClicked` | `MonitorLinkClicked` — a link in extension UI (welcome/upgrade dialogs) is opened | `Source` (dialog/VM name), `URL` |
+| `Lifecycle.WelcomeDialogDismissed` / `Lifecycle.UpgradeDialogDismissed` | `MonitorWelcomeDialogDismissed` / `MonitorUpgradeDialogDismissed` — dialog closes | additional props (e.g. visited pages) |
 
 ¹ **Project settings props** (`GetProjectSettingsProps`): `ReqnrollVersion`,
 `ProjectTargetFramework`, `SingleFileGeneratorUsed` (design-time code-behind generation on),

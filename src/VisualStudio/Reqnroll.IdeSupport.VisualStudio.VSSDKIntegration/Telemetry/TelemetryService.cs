@@ -101,13 +101,13 @@ public class TelemetryService : ITelemetryService
 
     // PROJECT TEMPLATE WIZARD
 
-    /// <summary>Transmits the "Wizard.ProjectTemplateWizardStarted" event.</summary>
+    /// <summary>Transmits the "Wizard.ProjectTemplateStarted" event.</summary>
     public void MonitorProjectTemplateWizardStarted()
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectTemplateWizardStarted));
     }
 
-    /// <summary>Transmits the "Wizard.ProjectTemplateWizardCompleted" event with the selected wizard options.</summary>
+    /// <summary>Transmits the "Wizard.ProjectTemplateCompleted" event with the selected wizard options.</summary>
     public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework,
         bool addFluentAssertions)
     {
@@ -133,7 +133,7 @@ public class TelemetryService : ITelemetryService
     //        GetNotificationProps(notification)));
     //}
 
-    /// <summary>Transmits the "Wizard.LinkClicked" event with the link source and URL.</summary>
+    /// <summary>Transmits the "Lifecycle.LinkClicked" event with the link source and URL.</summary>
     public void MonitorLinkClicked(string source, string url, Dictionary<string, object> additionalProps = null)
     {
         additionalProps ??= new Dictionary<string, object>();
@@ -143,14 +143,14 @@ public class TelemetryService : ITelemetryService
             additionalProps));
     }
 
-    /// <summary>Transmits the "Wizard.UpgradeDialogDismissed" event.</summary>
+    /// <summary>Transmits the "Lifecycle.UpgradeDialogDismissed" event.</summary>
     public void MonitorUpgradeDialogDismissed(Dictionary<string, object> additionalProps)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.UpgradeDialogDismissed,
             additionalProps));
     }
 
-    /// <summary>Transmits the "Wizard.WelcomeDialogDismissed" event.</summary>
+    /// <summary>Transmits the "Lifecycle.WelcomeDialogDismissed" event.</summary>
     public void MonitorWelcomeDialogDismissed(Dictionary<string, object> additionalProps)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.WelcomeDialogDismissed,
