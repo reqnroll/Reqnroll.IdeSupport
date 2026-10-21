@@ -35,7 +35,7 @@ public sealed class NullLspTelemetryService : ITelemetryService
     /// <summary>No-op: the LSP server does not track project-template-wizard-started telemetry.</summary>
     public void MonitorProjectTemplateWizardStarted() { }
     /// <summary>No-op: the LSP server does not track project-template-wizard-completed telemetry.</summary>
-    public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework, bool addFluentAssertions) { }
+    public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework) { }
     /// <summary>No-op: the LSP server does not track upgrade-dialog-dismissed telemetry.</summary>
     public void MonitorUpgradeDialogDismissed(Dictionary<string, object> additionalProps) { }
     /// <summary>No-op: the LSP server does not track welcome-dialog-dismissed telemetry.</summary>

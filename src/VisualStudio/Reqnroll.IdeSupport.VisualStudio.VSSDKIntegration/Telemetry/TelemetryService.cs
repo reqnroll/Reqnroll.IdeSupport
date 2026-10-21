@@ -101,22 +101,20 @@ public class TelemetryService : ITelemetryService
 
     // PROJECT TEMPLATE WIZARD
 
-    /// <summary>Transmits the "Wizard.ProjectTemplateStarted" event.</summary>
+    /// <summary>Transmits the "Project.CreationStarted" event.</summary>
     public void MonitorProjectTemplateWizardStarted()
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectTemplateWizardStarted));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectCreationStarted));
     }
 
-    /// <summary>Transmits the "Wizard.ProjectTemplateCompleted" event with the selected wizard options.</summary>
-    public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework,
-        bool addFluentAssertions)
+    /// <summary>Transmits the "Project.CreationCompleted" event with the selected wizard options.</summary>
+    public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectTemplateWizardCompleted,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectCreationCompleted,
             new Dictionary<string, object>
             {
                 {"SelectedDotNetFramework", dotNetFramework},
-                {"SelectedUnitTestFramework", unitTestFramework},
-                {"AddFluentAssertions", addFluentAssertions}
+                {"SelectedUnitTestFramework", unitTestFramework}
             }));
     }
 

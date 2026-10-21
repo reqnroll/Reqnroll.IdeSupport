@@ -91,11 +91,11 @@ public class VsWizardTelemetryTests
     }
 
     [Fact]
-    public void OnProjectTemplateWizardCompleted_delegates_with_addFluentAssertions_hardcoded_to_false()
+    public void OnProjectTemplateWizardCompleted_delegates_to_the_telemetry_service()
     {
         CreateSut().OnProjectTemplateWizardCompleted("net8.0", "xUnit");
 
-        _telemetryService.Received(1).MonitorProjectTemplateWizardCompleted("net8.0", "xUnit", false);
+        _telemetryService.Received(1).MonitorProjectTemplateWizardCompleted("net8.0", "xUnit");
     }
 
     [Fact]

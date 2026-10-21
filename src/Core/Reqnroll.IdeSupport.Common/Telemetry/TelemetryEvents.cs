@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <c>Command</c> (a user-invoked command ran), <c>Lookup</c> (a request the server answered that is not
 /// necessarily a user action), <c>CodeAction</c> (a quick fix offered / picked), <c>Discovery</c>, <c>Project</c>,
 /// <c>TestRun</c>, <c>TagIndex</c>, <c>Server</c> (process lifecycle), <c>Lifecycle</c> (extension install / upgrade / welcome and upgrade dialogs /
-/// usage), <c>Usage</c>, <c>Perf</c>, <c>Wizard</c> (project-template wizard), <c>Error</c> and <c>Vs</c> (Visual Studio-only host events such as self-check failures). The category prefix is
+/// usage), <c>Usage</c>, <c>Perf</c>, <c>Error</c> and <c>Vs</c> (Visual Studio-only host events such as self-check failures). The category prefix is
 /// what keeps a generic tail such as "Executed" or "Error" from colliding in aggregate reporting.
 /// Referencing these constants instead of literals means a typo or an accidental rename shows up
 /// as a compile error, not a silently-orphaned telemetry event.
@@ -240,10 +240,10 @@ public static class TelemetryEvents
     public const string ReqnrollConfigAdded = "Project.ReqnrollConfigAdded";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorProjectTemplateWizardStarted</c>) when the "add new Reqnroll project" wizard starts.</summary>
-    public const string ProjectTemplateWizardStarted = "Wizard.ProjectTemplateStarted";
+    public const string ProjectCreationStarted = "Project.CreationStarted";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorProjectTemplateWizardCompleted</c>) when the project-template wizard completes with the chosen options.</summary>
-    public const string ProjectTemplateWizardCompleted = "Wizard.ProjectTemplateCompleted";
+    public const string ProjectCreationCompleted = "Project.CreationCompleted";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorLinkClicked</c>) when a link is clicked from extension UI, carrying the source and URL.</summary>
     public const string LinkClicked = "Lifecycle.LinkClicked";

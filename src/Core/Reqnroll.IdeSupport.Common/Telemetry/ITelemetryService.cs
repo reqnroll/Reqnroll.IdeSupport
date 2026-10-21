@@ -58,8 +58,7 @@ public interface ITelemetryService : IErrorTelemetryService
     void MonitorProjectTemplateWizardStarted();
 
     /// <summary>Records that the "add new Reqnroll project" wizard completed with the given choices.</summary>
-    void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework,
-        bool addFluentAssertions);
+    void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework);
 
     //void MonitorNotificationShown(NotificationData notification);
     //void MonitorNotificationDismissed(NotificationData notification);

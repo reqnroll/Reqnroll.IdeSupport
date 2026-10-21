@@ -238,7 +238,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorCommandAddFeatureFile(null!);
         sut.MonitorCommandAddReqnrollConfigFile(null!);
         sut.MonitorProjectTemplateWizardStarted();
-        sut.MonitorProjectTemplateWizardCompleted("net10.0", "xunit", false);
+        sut.MonitorProjectTemplateWizardCompleted("net10.0", "xunit");
         sut.MonitorLinkClicked("source", "https://example.com");
         sut.MonitorUpgradeDialogDismissed(new Dictionary<string, object>());
         sut.MonitorWelcomeDialogDismissed(new Dictionary<string, object>());
