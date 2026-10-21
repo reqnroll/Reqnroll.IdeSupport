@@ -34,6 +34,12 @@ class ReqnrollServerEvents : LspServerListener {
         telemetry.onStateChanged(LspServerState.Initializing)
     }
 
+    /** Launching the server process threw, so the platform will not report a stop. */
+    fun serverStartFailed() {
+        isRunning = false
+        telemetry.onStateChanged(LspServerState.ShutdownUnexpectedly)
+    }
+
     override fun serverInitialized(params: InitializeResult) {
         isRunning = true
         telemetry.onStateChanged(LspServerState.Running)

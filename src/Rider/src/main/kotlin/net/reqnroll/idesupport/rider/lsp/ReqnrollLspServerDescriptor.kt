@@ -1,6 +1,7 @@
 package net.reqnroll.idesupport.rider.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -137,9 +138,24 @@ class ReqnrollLspServerDescriptor(project: Project) :
     override val lspServerListener: LspServerListener
         get() = project.service<ReqnrollServerEvents>()
 
+    /**
+     * Launches the server process, reporting the attempt to [ReqnrollServerEvents]. A launch that
+     * throws (server binary missing, process cannot be spawned) never reaches the platform's
+     * [LspServerListener.serverStopped], so the failure is reported here.
+     */
+    override fun startServerProcess(): OSProcessHandler {
+        val events = project.service<ReqnrollServerEvents>()
+        events.serverStarting()
+        try {
+            return super.startServerProcess()
+        } catch (ex: Exception) {
+            events.serverStartFailed()
+            throw ex
+        }
+    }
+
     /** Resolves the bundled server executable and builds the launch command line, with the log level chosen per [resolveLogLevel]. */
     override fun createCommandLine(): GeneralCommandLine {
-        project.service<ReqnrollServerEvents>().serverStarting()
         val serverPath = try {
             ReqnrollServerPathResolver.resolve()
         } catch (ex: Exception) {
