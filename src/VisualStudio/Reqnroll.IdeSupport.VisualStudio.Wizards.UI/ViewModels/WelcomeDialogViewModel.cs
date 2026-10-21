@@ -10,11 +10,11 @@ public class WelcomeDialogViewModel : WizardViewModel
     public const string WELCOME_TEXT = """
         # Welcome to Reqnroll
 
-        Reqnroll for Visual Studio includes a number of features that make it easier work with Reqnroll and SpecFlow projects.
+        Reqnroll for Visual Studio includes a number of features that make it easier work with Reqnroll projects.
 
         Here are the most important features supported currently:
 
-        * **Support Reqnroll** (all versions) and **SpecFlow** (from v3)
+        * **Support Reqnroll** (all versions)
         * **Gherkin syntax coloring and keyword completion** with new colors, context-sensitive keyword completion and highlighting syntax errors
         * **Step definition matching** with *Navigate to step definition*, *Find step definition usages* and *Define Step wizard* (you need to build the project)
         * **Add new Reqnroll project** and **Add new feature file** templates
