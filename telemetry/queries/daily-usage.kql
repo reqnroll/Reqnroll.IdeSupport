@@ -24,9 +24,12 @@
 // Known gap: a session that started before the lookback window has no ServerSessionStarted row in range, so
 // its later activity is dropped.
 let lookback = 30d;
+// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
+// compare through UnprefixedName() to cover events sent before that was fixed.
+let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
 let sessions = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where Name == "ServerSessionStarted"
+    | where UnprefixedName(Name) == "ServerSessionStarted"
     | extend SessionId = tostring(Properties.SessionId),
              IdeClient = tostring(Properties.IdeClient),
              OperatingSystem = tostring(Properties.OperatingSystem),
@@ -40,12 +43,12 @@ let sessions = AppEvents
     | summarize take_any(IdeClient, OperatingSystem, Rid) by SessionId;
 AppEvents
 | where TimeGenerated > ago(lookback)
-| where Name in ("ServerSessionStarted", "FeatureUsageSummary", "ServerSessionEnded")
+| where UnprefixedName(Name) in ("ServerSessionStarted", "FeatureUsageSummary", "ServerSessionEnded")
 | extend SessionId = tostring(Properties.SessionId)
 | where isnotempty(SessionId) and isnotempty(UserId)
 | join kind=inner sessions on SessionId
 | summarize DailyActiveUsers = dcount(UserId),
-            Sessions = dcountif(SessionId, Name == "ServerSessionStarted")
+            Sessions = dcountif(SessionId, UnprefixedName(Name) == "ServerSessionStarted")
         by Day = bin(TimeGenerated, 1d), IdeClient, OperatingSystem, Rid
 | extend SessionsPerUser = round(todouble(Sessions) / DailyActiveUsers, 2)
 | order by Day asc, IdeClient asc, OperatingSystem asc, Rid asc

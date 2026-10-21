@@ -17,6 +17,7 @@ import {
   resolveConnectionString,
   effectiveTelemetryEnvironment,
   sendTelemetryEvent,
+  stripExtensionIdPrefix,
   withClientIdentity,
 } from '../telemetry';
 
@@ -41,7 +42,7 @@ interface RecordedEvent {
 }
 
 /**
- * Stubs `TelemetryReporter.prototype.sendTelemetryEvent` for the duration of `fn`, so
+ * Stubs `TelemetryReporter.prototype.sendDangerousTelemetryEvent` for the duration of `fn`, so
  * `registerTelemetry`'s forwarding logic can be verified without ever reaching the real
  * Application Insights / 1DS sending pipeline underneath it (which `sendTelemetryEvent` is the
  * sole gateway into -- see `internalSendTelemetryEvent` in
@@ -55,16 +56,16 @@ async function withStubbedSendTelemetryEvent(
 ): Promise<void> {
   const calls: RecordedEvent[] = [];
   const proto = TelemetryReporter.prototype as unknown as {
-    sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+    sendDangerousTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
   };
-  const original = proto.sendTelemetryEvent;
-  proto.sendTelemetryEvent = (eventName: string, properties?: Record<string, string>) => {
+  const original = proto.sendDangerousTelemetryEvent;
+  proto.sendDangerousTelemetryEvent = (eventName: string, properties?: Record<string, string>) => {
     calls.push({ eventName, properties });
   };
   try {
     await fn(calls);
   } finally {
-    proto.sendTelemetryEvent = original;
+    proto.sendDangerousTelemetryEvent = original;
     for (const sub of context.subscriptions) sub.dispose();
   }
 }
@@ -132,6 +133,40 @@ suite('telemetry', () => {
 
   // The activated extension owns a module-level reporter (ensureTelemetryReporter); start clean.
   setup(() => resetTelemetryReporterForTests());
+
+  suite('event names carry no extension-id prefix (#1256)', () => {
+    test('stripExtensionIdPrefix removes a <publisher>.<name>/ prefix and nothing else', () => {
+      assert.strictEqual(
+        stripExtensionIdPrefix('Reqnroll.reqnroll-ide-support-vscode/Command.FindStepDefinitions'),
+        'Command.FindStepDefinitions',
+      );
+      assert.strictEqual(
+        stripExtensionIdPrefix(
+          'Reqnroll.reqnroll-ide-support/FindStepDefinitions command executed',
+        ),
+        'FindStepDefinitions command executed',
+      );
+      assert.strictEqual(
+        stripExtensionIdPrefix('Command.FindStepDefinitions'),
+        'Command.FindStepDefinitions',
+      );
+      assert.strictEqual(stripExtensionIdPrefix('Server.StartFailed'), 'Server.StartFailed');
+    });
+
+    test('an event reaches the reporter under its own name, whatever prefix the host adds', async () => {
+      const context = fakeContext();
+      const { client } = fakeClient();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        sendTelemetryEvent('Command.GoToHook', { Source: 'Command' });
+
+        assert.strictEqual(calls.length, 1);
+        assert.strictEqual(calls[0].eventName, 'Command.GoToHook');
+        assert.strictEqual(calls[0].properties?.Source, 'Command');
+      });
+    });
+  });
 
   suite('client identity (#844)', () => {
     test('withClientIdentity stamps IdeClient, Ide, IdeVersion and ExtensionVersion', () => {
@@ -489,10 +524,10 @@ suite('telemetry', () => {
   suite('unreachable endpoint (#859)', () => {
     const originalEnv = process.env.REQNROLL_TELEMETRY_ENABLED;
     const proto = TelemetryReporter.prototype as unknown as {
-      sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+      sendDangerousTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
       dispose: () => Promise<unknown>;
     };
-    const originalSend = proto.sendTelemetryEvent;
+    const originalSend = proto.sendDangerousTelemetryEvent;
     const originalDispose = proto.dispose;
     let infoLines: string[];
 
@@ -507,7 +542,7 @@ suite('telemetry', () => {
     });
 
     teardown(() => {
-      proto.sendTelemetryEvent = originalSend;
+      proto.sendDangerousTelemetryEvent = originalSend;
       proto.dispose = originalDispose;
       setAppLogChannel(undefined);
       if (originalEnv === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
@@ -516,7 +551,7 @@ suite('telemetry', () => {
 
     test('a throwing reporter never throws out of sendTelemetryEvent and logs one notice', () => {
       let attempts = 0;
-      proto.sendTelemetryEvent = () => {
+      proto.sendDangerousTelemetryEvent = () => {
         attempts++;
         throw new Error('getaddrinfo ENOTFOUND dc.services.visualstudio.com');
       };
@@ -540,7 +575,7 @@ suite('telemetry', () => {
     });
 
     test('dispose is bounded when the flush never completes', async () => {
-      proto.sendTelemetryEvent = () => undefined;
+      proto.sendDangerousTelemetryEvent = () => undefined;
       proto.dispose = () => new Promise(() => undefined); // black hole
       const context = fakeContext();
       registerTelemetry(fakeClient().client, context);
@@ -554,7 +589,7 @@ suite('telemetry', () => {
     });
 
     test('dispose does not wait for the flush once the breaker is open', async () => {
-      proto.sendTelemetryEvent = () => {
+      proto.sendDangerousTelemetryEvent = () => {
         throw new Error('offline');
       };
       proto.dispose = () => new Promise(() => undefined);
@@ -571,7 +606,7 @@ suite('telemetry', () => {
     });
 
     test('a rejecting dispose does not surface as an unhandled rejection', async () => {
-      proto.sendTelemetryEvent = () => undefined;
+      proto.sendDangerousTelemetryEvent = () => undefined;
       proto.dispose = () => Promise.reject(new Error('flush failed'));
       const context = fakeContext();
       registerTelemetry(fakeClient().client, context);
@@ -588,7 +623,7 @@ suite('telemetry', () => {
       const prior = process.env.REQNROLL_TELEMETRY_DEBUG_LOG;
       process.env.REQNROLL_TELEMETRY_DEBUG_LOG = file;
       try {
-        proto.sendTelemetryEvent = () => {
+        proto.sendDangerousTelemetryEvent = () => {
           throw new Error('boom');
         };
         proto.dispose = () => Promise.resolve();

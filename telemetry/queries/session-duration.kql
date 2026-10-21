@@ -17,16 +17,19 @@
 //   shutdown, but also a session that is still running, so recent days (today in particular)
 //   overstate it. Read it as a crash proxy for days at least a day old.
 let lookback = 30d;
+// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
+// compare through UnprefixedName() to cover events sent before that was fixed.
+let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
 let started = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where Name == "ServerSessionStarted"
+    | where UnprefixedName(Name) == "ServerSessionStarted"
     | extend SessionId = tostring(Properties.SessionId),
              IdeClient = tostring(Properties.IdeClient)
     | where isnotempty(SessionId)
     | summarize Day = bin(min(TimeGenerated), 1d), take_any(IdeClient) by SessionId;
 let ended = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where Name == "ServerSessionEnded"
+    | where UnprefixedName(Name) == "ServerSessionEnded"
     | extend SessionId = tostring(Properties.SessionId),
              SessionSeconds = todouble(Properties.SessionSeconds)
     | where isnotempty(SessionId)

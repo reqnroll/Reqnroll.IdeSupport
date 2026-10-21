@@ -26,23 +26,26 @@
 // - UnhandledException stack frames are only attached for the first ~25 distinct stacks per session, but the event
 //   itself is always sent and counted, so Events is complete (subject to ingestion loss).
 let lookback = 30d;
+// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
+// compare through UnprefixedName() to cover events sent before that was fixed.
+let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
 let failureEvents = dynamic(["UnhandledException", "ServerStartFailed", "ServerExitedUnexpectedly", "ServerRestarted"]);
 let sessionsPerDay = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where Name == "ServerSessionStarted"
+    | where UnprefixedName(Name) == "ServerSessionStarted"
     | extend IdeClient = tostring(Properties.IdeClient)
     | summarize Sessions = dcount(tostring(Properties.SessionId)) by Day = bin(TimeGenerated, 1d), IdeClient;
 AppEvents
 | where TimeGenerated > ago(lookback)
-| where Name in (failureEvents)
+| where UnprefixedName(Name) in (failureEvents)
 | extend IdeClient = tostring(Properties.IdeClient),
-         Origin = iff(Name == "UnhandledException",
+         Origin = iff(UnprefixedName(Name) == "UnhandledException",
                       iff(tostring(Properties.ExceptionOrigin) == "Client", "Client", "Server"),
                       ""),
-         Reason = iff(Name == "UnhandledException", "", tostring(Properties.Reason))
+         Reason = iff(UnprefixedName(Name) == "UnhandledException", "", tostring(Properties.Reason))
 | summarize Events = count(), AffectedUsers = dcount(UserId),
             AffectedSessions = dcount(tostring(Properties.ClientSessionId))
-        by Day = bin(TimeGenerated, 1d), IdeClient, EventName = Name, Origin, Reason
+        by Day = bin(TimeGenerated, 1d), IdeClient, EventName = UnprefixedName(Name), Origin, Reason
 | join kind=leftouter sessionsPerDay on Day, IdeClient
 | extend Sessions = coalesce(Sessions, 0)
 | extend EventsPer100Sessions = iff(Sessions > 0, round(100.0 * Events / Sessions, 1), real(null))
