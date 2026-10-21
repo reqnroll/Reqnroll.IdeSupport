@@ -23,10 +23,13 @@
 //     Request       everything else                   (completion, hover, definition, rename, CodeLens, ...)
 // - reqnroll/testOutcomes/ingestRun is excluded: it records the duration of a whole test run, not server latency.
 let lookback = 7d;
+// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
+// compare through UnprefixedName() to cover events sent before that was fixed.
+let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
 let minSamples = 1;
 AppEvents
 | where TimeGenerated > ago(lookback)
-| where Name == "PerfSample"
+| where UnprefixedName(Name) == "PerfSample"
 | extend Operation = tostring(Properties.Operation),
          IdeClient = tostring(Properties.IdeClient),
          DurationMs = todouble(Properties.DurationMs)

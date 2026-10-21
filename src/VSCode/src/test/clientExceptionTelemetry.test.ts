@@ -432,17 +432,17 @@ suite('clientExceptionTelemetry (#621)', () => {
     ): void {
       const calls: Sent[] = [];
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (name: string, props?: Record<string, string>) => void;
+        sendDangerousTelemetryEvent: (name: string, props?: Record<string, string>) => void;
       };
-      const original = proto.sendTelemetryEvent;
-      proto.sendTelemetryEvent = (name, props) => {
+      const original = proto.sendDangerousTelemetryEvent;
+      proto.sendDangerousTelemetryEvent = (name, props) => {
         calls.push({ name, props: props ?? {} });
       };
       const context = { subscriptions: [] } as unknown as vscode.ExtensionContext;
       try {
         fn(calls, context);
       } finally {
-        proto.sendTelemetryEvent = original;
+        proto.sendDangerousTelemetryEvent = original;
         for (const sub of context.subscriptions) sub.dispose();
       }
     }

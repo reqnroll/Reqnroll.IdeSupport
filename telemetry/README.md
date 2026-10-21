@@ -21,6 +21,7 @@ All files are in `queries/`. Each one starts with a header comment that lists it
 
 - **`PerfSample` is sampled.** `Samples` is a confidence measure for the percentiles, not a usage count. For usage use
   the `* command executed` events and `FeatureUsageSummary`.
+- **VS Code event names used to carry an extension-id prefix** (`Reqnroll.reqnroll-ide-support-vscode/...`, #1256), so older VS Code rows do not match a plain `Name == "..."`. Every query defines `UnprefixedName()` and compares through it; do the same in new queries.
 - **RID is derived** from `OperatingSystem` and `Architecture`; the client never sends a RID.
 - **Exceptions are events, not rows in the Application Insights `exceptions` table.** Client-side exceptions
   (`ExceptionOrigin = "Client"`) carry no `SessionId` but do carry `ClientSessionId` (#1199), which every server event carries too: join on it to attribute a client exception to a session; see the error-rates header.

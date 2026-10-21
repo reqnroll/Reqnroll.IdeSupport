@@ -107,11 +107,14 @@ suite('stepNavigation', () => {
       } as unknown as LanguageClient;
       const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+        sendDangerousTelemetryEvent: (
+          eventName: string,
+          properties?: Record<string, string>,
+        ) => void;
       };
-      const original = proto.sendTelemetryEvent;
+      const original = proto.sendDangerousTelemetryEvent;
       const sent: Array<[string, Record<string, string> | undefined]> = [];
-      proto.sendTelemetryEvent = (eventName, properties) => {
+      proto.sendDangerousTelemetryEvent = (eventName, properties) => {
         sent.push([eventName, properties]);
       };
 
@@ -121,7 +124,7 @@ suite('stepNavigation', () => {
           doGoToStepDefinition(client),
         );
       } finally {
-        proto.sendTelemetryEvent = original;
+        proto.sendDangerousTelemetryEvent = original;
         for (const sub of telemetryContext.subscriptions) sub.dispose();
       }
 

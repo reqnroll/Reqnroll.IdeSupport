@@ -70,6 +70,61 @@ function isTelemetryEnabledByEnv(): boolean {
 // that never call registerTelemetry at all).
 let reporter: TelemetryReporter | undefined;
 
+// Usage events go through our own TelemetryLogger (created with the reporter) rather than straight
+// into `reporter.sendTelemetryEvent`. Both are VS Code TelemetryLoggers, so both honour
+// `telemetry.telemetryLevel`, but VS Code prefixes every event name with the extension id
+// (`<publisher>.<name>/`), which the other IDE clients do not do (#1256). Our logger's sender strips
+// that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`
+// (safe: the opt-out has already been applied by *our* logger), so one event has one name in all IDEs.
+let logger: vscode.TelemetryLogger | undefined;
+// Set by the sender when the reporter throws, because the logger swallows sender errors.
+let lastSendError: string | undefined;
+
+const EXTENSION_ID_PREFIX = /^[^/\s]+\.[^/\s]+\//;
+
+/** Removes the `<publisher>.<name>/` extension-id prefix VS Code adds to event names (#1256). */
+export function stripExtensionIdPrefix(eventName: string): string {
+  return eventName.replace(EXTENSION_ID_PREFIX, '');
+}
+
+type TelemetryLoggerFactory = (
+  sender: vscode.TelemetrySender,
+  options?: vscode.TelemetryLoggerOptions,
+) => vscode.TelemetryLogger;
+
+let createTelemetryLogger: TelemetryLoggerFactory = (sender, options) =>
+  vscode.env.createTelemetryLogger(sender, options);
+
+/**
+ * Test hook: replaces `vscode.env.createTelemetryLogger`. The Extension Development Host used by the
+ * tests has telemetry disabled, so the real logger never calls its sender; a fake that forwards
+ * (and prefixes, like the host) lets the tests exercise the sender. Not used in production code.
+ */
+export function setTelemetryLoggerFactoryForTests(
+  factory: TelemetryLoggerFactory | undefined,
+): void {
+  createTelemetryLogger =
+    factory ?? ((sender, options) => vscode.env.createTelemetryLogger(sender, options));
+}
+
+function createUnprefixingLogger(target: TelemetryReporter): vscode.TelemetryLogger {
+  return createTelemetryLogger(
+    {
+      sendEventData: (eventName, data) => {
+        try {
+          const properties = (data?.properties ?? data) as Record<string, string> | undefined;
+          target.sendDangerousTelemetryEvent(stripExtensionIdPrefix(eventName), properties);
+        } catch (err) {
+          lastSendError = err instanceof Error ? err.message : String(err);
+        }
+      },
+      // Usage telemetry only: client exceptions are sent as ordinary events (UnhandledException).
+      sendErrorData: () => undefined,
+    },
+    { ignoreUnhandledErrors: true },
+  );
+}
+
 // The server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
 // handling the LSP `shutdown` request, i.e. during `client.stop()`. VS Code disposes
 // `context.subscriptions` as soon as `deactivate()` has been *called* (it does not wait for the returned
@@ -157,14 +212,18 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
   const created = new TelemetryReporter(
     resolveConnectionString(connectionOverride, logInfo, builtIn),
   );
+  const createdLogger = createUnprefixingLogger(created);
   reporter = created;
+  logger = createdLogger;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),
   });
   context.subscriptions.push({
     dispose: () =>
       afterTeardownGate(() => {
+        createdLogger.dispose();
         reporter = undefined;
+        logger = undefined;
       }),
   });
 }
@@ -176,6 +235,7 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
  */
 export function resetTelemetryReporterForTests(): void {
   reporter = undefined;
+  logger = undefined;
 }
 
 /**
@@ -255,7 +315,7 @@ export function sendTelemetryEvent(
   // The mirror records what would be transmitted, identity keys (IdeClient, ClientSessionId, ...) included.
   const stringProps = withClientIdentity(properties);
 
-  if (!reporter) {
+  if (!reporter || !logger) {
     debugLog.record('host', eventName, stringProps, enabled, false);
     return;
   }
@@ -272,13 +332,16 @@ export function sendTelemetryEvent(
     return;
   }
 
+  lastSendError = undefined;
   try {
-    reporter.sendTelemetryEvent(eventName, stringProps);
+    logger.logUsage(eventName, { properties: stringProps });
   } catch (err) {
+    lastSendError = err instanceof Error ? err.message : String(err);
+  }
+  if (lastSendError !== undefined) {
     // Telemetry must never surface to the user: record it, open the breaker, carry on.
-    const message = err instanceof Error ? err.message : String(err);
-    breaker.recordFailure(message);
-    debugLog.record('host', eventName, stringProps, enabled, false, message);
+    breaker.recordFailure(lastSendError);
+    debugLog.record('host', eventName, stringProps, enabled, false, lastSendError);
     return;
   }
   debugLog.record('host', eventName, stringProps, enabled, true);

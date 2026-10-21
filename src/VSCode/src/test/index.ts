@@ -1,5 +1,7 @@
 import * as path from 'path';
 import Mocha from 'mocha';
+import type * as vscode from 'vscode';
+import { setTelemetryLoggerFactoryForTests } from '../telemetry';
 
 /**
  * Bootstraps the Mocha `suite`/`test` globals inside the Extension Development Host and runs the
@@ -26,6 +28,19 @@ export function run(): Promise<void> {
   mocha.suite.afterEach(() => {
     if (originalTelemetryEnabled === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
     else process.env.REQNROLL_TELEMETRY_ENABLED = originalTelemetryEnabled;
+  });
+
+  // The test host has telemetry disabled, so VS Code's real TelemetryLogger never invokes its sender.
+  // Substitute one that always forwards and prefixes event names with the extension id, as the host
+  // does, so the tests exercise the sender's prefix stripping (#1256).
+  setTelemetryLoggerFactoryForTests((sender) => {
+    const forward = (eventName: string, data?: Record<string, unknown>) =>
+      sender.sendEventData(`Reqnroll.reqnroll-ide-support/${eventName}`, data);
+    return {
+      logUsage: forward,
+      logError: () => undefined,
+      dispose: () => undefined,
+    } as unknown as vscode.TelemetryLogger;
   });
 
   // extension.test.js pulls in the other suites (projectManager.test, lspInspectorLogger.test)

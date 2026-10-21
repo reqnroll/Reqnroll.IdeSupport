@@ -249,11 +249,17 @@ suite('goToHooks', () => {
       const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
 
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+        sendDangerousTelemetryEvent: (
+          eventName: string,
+          properties?: Record<string, string>,
+        ) => void;
       };
-      const original = proto.sendTelemetryEvent;
+      const original = proto.sendDangerousTelemetryEvent;
       const sent: Array<[string, Record<string, string> | undefined]> = [];
-      proto.sendTelemetryEvent = (eventName: string, properties?: Record<string, string>) => {
+      proto.sendDangerousTelemetryEvent = (
+        eventName: string,
+        properties?: Record<string, string>,
+      ) => {
         sent.push([eventName, properties]);
       };
 
@@ -262,7 +268,7 @@ suite('goToHooks', () => {
         await invoke(client);
         return sent;
       } finally {
-        proto.sendTelemetryEvent = original;
+        proto.sendDangerousTelemetryEvent = original;
         for (const sub of telemetryContext.subscriptions) sub.dispose();
       }
     }
