@@ -35,7 +35,7 @@ public class TelemetryService : ITelemetryService
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ExtensionLoaded));
     }
 
-    /// <summary>Transmits the "Vs.FeatureFileOpened" event with project settings.</summary>
+    /// <summary>Transmits the "Project.FeatureFileOpened" event with project settings.</summary>
     public void MonitorOpenFeatureFile(ProjectSettings projectSettings)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.FeatureFileOpened,
@@ -73,14 +73,14 @@ public class TelemetryService : ITelemetryService
 
     //COMMAND
 
-    /// <summary>Transmits the "Vs.FeatureFileAdded" event with project settings.</summary>
+    /// <summary>Transmits the "Project.FeatureFileAdded" event with project settings.</summary>
     public void MonitorCommandAddFeatureFile(ProjectSettings settings)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.FeatureFileAdded,
             GetProjectSettingsProps(settings)));
     }
 
-    /// <summary>Transmits the "Vs.ReqnrollConfigAdded" event with project settings.</summary>
+    /// <summary>Transmits the "Project.ReqnrollConfigAdded" event with project settings.</summary>
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings settings)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ReqnrollConfigAdded,
@@ -101,13 +101,13 @@ public class TelemetryService : ITelemetryService
 
     // PROJECT TEMPLATE WIZARD
 
-    /// <summary>Transmits the "Vs.ProjectTemplateWizardStarted" event.</summary>
+    /// <summary>Transmits the "Wizard.ProjectTemplateWizardStarted" event.</summary>
     public void MonitorProjectTemplateWizardStarted()
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectTemplateWizardStarted));
     }
 
-    /// <summary>Transmits the "Vs.ProjectTemplateWizardCompleted" event with the selected wizard options.</summary>
+    /// <summary>Transmits the "Wizard.ProjectTemplateWizardCompleted" event with the selected wizard options.</summary>
     public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework,
         bool addFluentAssertions)
     {
@@ -133,7 +133,7 @@ public class TelemetryService : ITelemetryService
     //        GetNotificationProps(notification)));
     //}
 
-    /// <summary>Transmits the "Vs.LinkClicked" event with the link source and URL.</summary>
+    /// <summary>Transmits the "Wizard.LinkClicked" event with the link source and URL.</summary>
     public void MonitorLinkClicked(string source, string url, Dictionary<string, object> additionalProps = null)
     {
         additionalProps ??= new Dictionary<string, object>();
@@ -143,14 +143,14 @@ public class TelemetryService : ITelemetryService
             additionalProps));
     }
 
-    /// <summary>Transmits the "Vs.UpgradeDialogDismissed" event.</summary>
+    /// <summary>Transmits the "Wizard.UpgradeDialogDismissed" event.</summary>
     public void MonitorUpgradeDialogDismissed(Dictionary<string, object> additionalProps)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.UpgradeDialogDismissed,
             additionalProps));
     }
 
-    /// <summary>Transmits the "Vs.WelcomeDialogDismissed" event.</summary>
+    /// <summary>Transmits the "Wizard.WelcomeDialogDismissed" event.</summary>
     public void MonitorWelcomeDialogDismissed(Dictionary<string, object> additionalProps)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.WelcomeDialogDismissed,

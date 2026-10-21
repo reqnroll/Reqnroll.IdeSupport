@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <c>Command</c> (a user-invoked command ran), <c>Lookup</c> (a request the server answered that is not
 /// necessarily a user action), <c>CodeAction</c> (a quick fix offered / picked), <c>Discovery</c>, <c>Project</c>,
 /// <c>TestRun</c>, <c>TagIndex</c>, <c>Server</c> (process lifecycle), <c>Lifecycle</c> (extension install / upgrade /
-/// usage), <c>Usage</c>, <c>Perf</c>, <c>Error</c> and <c>Vs</c> (Visual Studio-only host events). The category prefix is
+/// usage), <c>Usage</c>, <c>Perf</c>, <c>Wizard</c> (project-template wizard and welcome/upgrade dialog interactions), <c>Error</c> and <c>Vs</c> (Visual Studio-only host events such as self-check failures). The category prefix is
 /// what keeps a generic tail such as "Executed" or "Error" from colliding in aggregate reporting.
 /// Referencing these constants instead of literals means a typo or an accidental rename shows up
 /// as a compile error, not a silently-orphaned telemetry event.
@@ -217,7 +217,7 @@ public static class TelemetryEvents
     public const string ExtensionLoaded = "Lifecycle.Loaded";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenFeatureFile</c>) when a <c>.feature</c> file is opened.</summary>
-    public const string FeatureFileOpened = "Vs.FeatureFileOpened";
+    public const string FeatureFileOpened = "Project.FeatureFileOpened";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorExtensionInstalled</c>) on first activation after installation.</summary>
     public const string ExtensionInstalled = "Lifecycle.Installed";
@@ -234,25 +234,25 @@ public static class TelemetryEvents
     public const string DaysOfUsage = "Lifecycle.DaysOfUsage";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorCommandAddFeatureFile</c>) when a feature file is added via the command/wizard.</summary>
-    public const string FeatureFileAdded = "Vs.FeatureFileAdded";
+    public const string FeatureFileAdded = "Project.FeatureFileAdded";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorCommandAddReqnrollConfigFile</c>) when a Reqnroll config file is added via the command/wizard.</summary>
-    public const string ReqnrollConfigAdded = "Vs.ReqnrollConfigAdded";
+    public const string ReqnrollConfigAdded = "Project.ReqnrollConfigAdded";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorProjectTemplateWizardStarted</c>) when the "add new Reqnroll project" wizard starts.</summary>
-    public const string ProjectTemplateWizardStarted = "Vs.ProjectTemplateWizardStarted";
+    public const string ProjectTemplateWizardStarted = "Wizard.ProjectTemplateWizardStarted";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorProjectTemplateWizardCompleted</c>) when the project-template wizard completes with the chosen options.</summary>
-    public const string ProjectTemplateWizardCompleted = "Vs.ProjectTemplateWizardCompleted";
+    public const string ProjectTemplateWizardCompleted = "Wizard.ProjectTemplateWizardCompleted";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorLinkClicked</c>) when a link is clicked from extension UI, carrying the source and URL.</summary>
-    public const string LinkClicked = "Vs.LinkClicked";
+    public const string LinkClicked = "Wizard.LinkClicked";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorUpgradeDialogDismissed</c>) when the upgrade dialog is dismissed.</summary>
-    public const string UpgradeDialogDismissed = "Vs.UpgradeDialogDismissed";
+    public const string UpgradeDialogDismissed = "Wizard.UpgradeDialogDismissed";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorWelcomeDialogDismissed</c>) when the welcome dialog is dismissed.</summary>
-    public const string WelcomeDialogDismissed = "Vs.WelcomeDialogDismissed";
+    public const string WelcomeDialogDismissed = "Wizard.WelcomeDialogDismissed";
 
     /// <summary>Sent by the VS extension (<c>VsWellKnownIdsSelfCheck</c>) when the startup self-check finds hard-coded well-known command IDs that do not resolve in this Visual Studio version.</summary>
     public const string VsWellKnownIdsSelfCheckMismatch = "Vs.WellKnownIdsSelfCheckMismatch";

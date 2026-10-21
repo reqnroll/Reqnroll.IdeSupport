@@ -111,7 +111,7 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `ClientSessionId` | Each client generates one random GUID per IDE process (`ClientSession` in Common, `clientSession.ts`, Rider's `ClientSession`), stamps it on every event it transmits, and passes it to the server as `--client-session-id <guid>`; the server (`IdentityStampingLspTelemetryService`) stamps it on every server event, ignoring a value that is not a GUID (#1199) | not user-identifying. Unlike `SessionId` it exists before the server does and survives a server restart, so one `ClientSessionId` can span several `SessionId`s; join a client-origin `UnhandledException` to `ServerSessionStarted` on it for the IDE, OS and versions |
 | `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version (**the single source of the IDE version**), extension version |
 
-**Wire names (issue #1257).** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage), `Usage`, `Perf`, `Error` and `Vs` (Visual Studio-only host events). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
+**Wire names (issue #1257).** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage), `Usage`, `Perf`, `Wizard` (project-template wizard and welcome/upgrade dialog interactions), `Error` and `Vs` (Visual Studio-only host events such as self-check failures). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
 
 | Constant (`TelemetryEvents`) | Event name |
 |---|---|
@@ -142,17 +142,17 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `ServerSessionEnded` | `Server.SessionEnded` |
 | `ProjectCharacteristics` | `Project.Characteristics` |
 | `ExtensionLoaded` | `Lifecycle.Loaded` |
-| `FeatureFileOpened` | `Vs.FeatureFileOpened` |
+| `FeatureFileOpened` | `Project.FeatureFileOpened` |
 | `ExtensionInstalled` | `Lifecycle.Installed` |
 | `ExtensionUpgraded` | `Lifecycle.Upgraded` |
 | `DaysOfUsage` | `Lifecycle.DaysOfUsage` |
-| `FeatureFileAdded` | `Vs.FeatureFileAdded` |
-| `ReqnrollConfigAdded` | `Vs.ReqnrollConfigAdded` |
-| `ProjectTemplateWizardStarted` | `Vs.ProjectTemplateWizardStarted` |
-| `ProjectTemplateWizardCompleted` | `Vs.ProjectTemplateWizardCompleted` |
-| `LinkClicked` | `Vs.LinkClicked` |
-| `UpgradeDialogDismissed` | `Vs.UpgradeDialogDismissed` |
-| `WelcomeDialogDismissed` | `Vs.WelcomeDialogDismissed` |
+| `FeatureFileAdded` | `Project.FeatureFileAdded` |
+| `ReqnrollConfigAdded` | `Project.ReqnrollConfigAdded` |
+| `ProjectTemplateWizardStarted` | `Wizard.ProjectTemplateWizardStarted` |
+| `ProjectTemplateWizardCompleted` | `Wizard.ProjectTemplateWizardCompleted` |
+| `LinkClicked` | `Wizard.LinkClicked` |
+| `UpgradeDialogDismissed` | `Wizard.UpgradeDialogDismissed` |
+| `WelcomeDialogDismissed` | `Wizard.WelcomeDialogDismissed` |
 | `VsWellKnownIdsSelfCheckMismatch` | `Vs.WellKnownIdsSelfCheckMismatch` |
 | `GoToHookCommandExecuted` | `Command.GoToHook` |
 | `TagLinkCommandExecuted` | `Command.TagLink` |
@@ -392,7 +392,7 @@ how many scenarios a hook typically applies to.
 | | |
 |---|---|
 | **Emitter** | `LspWorkspaceScopeManager` (server — issue #581 finding 2) |
-| **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Vs.FeatureFileOpened` |
+| **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Project.FeatureFileOpened` |
 | **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero); `ProjectTargetFramework` (string, the full TFM moniker); `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`, from the project-file extension — never the path). The Reqnroll version is *not* here: they are reported by the first `ReqnrollDiscoveryExecuted` (issue #846) |
 
 **Analytics use.** Active-session project counts; per-solution feature-file scale. A *sessions*
@@ -497,16 +497,16 @@ only originate here.
 | Event | Emitter / when | Properties |
 |---|---|---|
 | `ExtensionLoaded` | `MonitorOpenProjectSystem` — on extension activation in an IDE scope | — |
-| `Vs.FeatureFileOpened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
+| `Project.FeatureFileOpened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
 | `Lifecycle.Installed` | `MonitorExtensionInstalled` — first activation after installation | — |
 | `Lifecycle.Upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
 | `"{N} day usage"` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService`, right after incrementing `UsageDays`); the day count is part of the name, so each count is its own event (constant: `DaysOfUsageEventNameFormat` = `"{0} day usage"`) | — |
-| `Vs.FeatureFileAdded` | `MonitorCommandAddFeatureFile` — feature file added via command/wizard | project settings¹ |
-| `Vs.ReqnrollConfigAdded` | `MonitorCommandAddReqnrollConfigFile` — `reqnroll.json` added via command/wizard | project settings¹ |
-| `Vs.ProjectTemplateWizardStarted` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |
-| `Vs.ProjectTemplateWizardCompleted` | `MonitorProjectTemplateWizardCompleted` — wizard finishes | `SelectedDotNetFramework`, `SelectedUnitTestFramework`, `AddFluentAssertions` |
-| `Vs.LinkClicked` | `MonitorLinkClicked` — a link in extension UI (welcome/upgrade dialogs) is opened | `Source` (dialog/VM name), `URL` |
-| `Vs.WelcomeDialogDismissed` / `Vs.UpgradeDialogDismissed` | `MonitorWelcomeDialogDismissed` / `MonitorUpgradeDialogDismissed` — dialog closes | additional props (e.g. visited pages) |
+| `Project.FeatureFileAdded` | `MonitorCommandAddFeatureFile` — feature file added via command/wizard | project settings¹ |
+| `Project.ReqnrollConfigAdded` | `MonitorCommandAddReqnrollConfigFile` — `reqnroll.json` added via command/wizard | project settings¹ |
+| `Wizard.ProjectTemplateWizardStarted` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |
+| `Wizard.ProjectTemplateWizardCompleted` | `MonitorProjectTemplateWizardCompleted` — wizard finishes | `SelectedDotNetFramework`, `SelectedUnitTestFramework`, `AddFluentAssertions` |
+| `Wizard.LinkClicked` | `MonitorLinkClicked` — a link in extension UI (welcome/upgrade dialogs) is opened | `Source` (dialog/VM name), `URL` |
+| `Wizard.WelcomeDialogDismissed` / `Wizard.UpgradeDialogDismissed` | `MonitorWelcomeDialogDismissed` / `MonitorUpgradeDialogDismissed` — dialog closes | additional props (e.g. visited pages) |
 
 ¹ **Project settings props** (`GetProjectSettingsProps`): `ReqnrollVersion`,
 `ProjectTargetFramework`, `SingleFileGeneratorUsed` (design-time code-behind generation on),
@@ -538,8 +538,8 @@ executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` cover Reqnrol
 language and counts, so the VS-only duplicate (and its double-count of project opens) is gone.
 Decision (#873): reporting the Reqnroll version on discovery is sufficient; nothing was added to
 `Project.Opened`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available
-server-side (the connector does not expose them); they remain on the VS `Vs.FeatureFileOpened`,
-`Vs.FeatureFileAdded` and `Vs.ReqnrollConfigAdded` events (see ¹), so they are now per-event rather than
+server-side (the connector does not expose them); they remain on the VS `Project.FeatureFileOpened`,
+`Project.FeatureFileAdded` and `Project.ReqnrollConfigAdded` events (see ¹), so they are now per-event rather than
 per-project-open signals.
 
 **Analytics use.** Adoption lifecycle: install→upgrade funnel, daily-active heartbeat (rollup
