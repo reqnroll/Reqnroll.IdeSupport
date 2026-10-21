@@ -1,7 +1,9 @@
 package net.reqnroll.idesupport.rider.lsp
 
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerListener
+import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerState
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
@@ -20,28 +22,32 @@ import java.util.concurrent.CopyOnWriteArrayList
  * whatever platform thread completes the transition, not the EDT.
  */
 @Service(Service.Level.PROJECT)
-class ReqnrollServerEvents : LspServerListener {
+class ReqnrollServerEvents(private val project: Project) : LspServerListener {
     private val runningSubscribers = CopyOnWriteArrayList<() -> Unit>()
     private val telemetry = ReqnrollServerLifecycleTelemetry(RiderTelemetryTransmitter::transmit)
 
-    @Volatile
-    var isRunning: Boolean = false
-        private set
+    /**
+     * Whether the platform currently has the Reqnroll server in [LspServerState.Running]. Read from the
+     * platform on every call: a restart replaces the server (via `fileOpened`) before the new process
+     * is launched, and the old server's stop is not reported before then, so any state tracked from
+     * the listener callbacks alone is stale exactly when a restart's readiness check runs.
+     */
+    val isRunning: Boolean
+        get() = LspServerManager.getInstance(project)
+            .getServersForProvider(ReqnrollLspServerSupportProvider::class.java)
+            .firstOrNull()?.state == LspServerState.Running
 
     /** The server process is about to be launched (first start, or any restart). */
     fun serverStarting() {
-        isRunning = false
         telemetry.onStateChanged(LspServerState.Initializing)
     }
 
     /** Launching the server process threw, so the platform will not report a stop. */
     fun serverStartFailed() {
-        isRunning = false
         telemetry.onStateChanged(LspServerState.ShutdownUnexpectedly)
     }
 
     override fun serverInitialized(params: InitializeResult) {
-        isRunning = true
         telemetry.onStateChanged(LspServerState.Running)
         // One failing subscriber must not starve the others, nor propagate into the platform's handshake.
         runningSubscribers.forEach {
@@ -54,7 +60,6 @@ class ReqnrollServerEvents : LspServerListener {
     }
 
     override fun serverStopped(shutdownNormally: Boolean) {
-        isRunning = false
         telemetry.onStateChanged(
             if (shutdownNormally) LspServerState.ShutdownNormally else LspServerState.ShutdownUnexpectedly,
         )
