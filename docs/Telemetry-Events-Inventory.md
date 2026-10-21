@@ -349,7 +349,7 @@ binding, `OccurrenceCount` how many steps a rename rewrites, and `DurationBucket
 ### `FindStepDefinitionUsagesCommandExecuted`
 | | |
 |---|---|
-| **Emitters** | `FindStepUsagesHandler` (`reqnroll/findStepUsages`, VS) and `ReferencesHandler` (`textDocument/references`, VS Code/Rider — issue #581 finding 3) — one event so the metric doesn't undercount by excluding two of three IDEs |
+| **Emitters** | `FindStepUsagesHandler` (`reqnroll/findStepUsages`, the explicit Find Step Usages command in all three IDEs) and `ReferencesHandler` (`textDocument/references`, the editor's native Find All References — issue #581 finding 3) — one event, discriminated by `Protocol`, because both are the user asking for a binding's usages |
 | **When** | After a usage lookup on a binding ("is a binding" gate passed) |
 | **Properties** | `UsagesCount` (int), `IsCancelled` (bool), `Protocol` (`"reqnroll/findStepUsages"` \| `"textDocument/references"`), `FileCount` (int — distinct `.feature` files in the result), `DurationBucket` (string, see "Bucket schemes" below) |
 

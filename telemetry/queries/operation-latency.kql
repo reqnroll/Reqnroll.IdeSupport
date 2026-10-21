@@ -40,7 +40,6 @@ let LegacyEventNames = dynamic({
     "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
     "Rename step command executed": "Command.RenameStep",
     "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
-    "FindStepUsages command executed": "Command.FindStepDefinitionUsages",
     "GoToStepDefinition command executed": "Command.GoToStepDefinition",
     "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
     "OpenProject command executed": "Project.Opened",
