@@ -14,7 +14,7 @@
 //
 // Reading the numbers
 // - PerfSample is SAMPLED: ~5% by default (REQNROLL_PERF_TELEMETRY_SAMPLE overrides; dev runs use 1). Samples is a
-//   confidence measure for the percentiles, NOT a usage count. For usage use the "* command executed" events and
+//   confidence measure for the percentiles, NOT a usage count. For usage use the `Command.*` / `Lookup.*` events and
 //   FeatureUsageSummary. With few samples P95 equals the max, so raise minSamples in production.
 // - Category is derived from the operation name, for grouping tiles:
 //     DocumentSync  textDocument/did*, workspace/did*  (the cost of the server ingesting an edit/open)
@@ -23,13 +23,63 @@
 //     Request       everything else                   (completion, hover, definition, rename, CodeLens, ...)
 // - reqnroll/testOutcomes/ingestRun is excluded: it records the duration of a whole test run, not server latency.
 let lookback = 7d;
-// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
-// compare through UnprefixedName() to cover events sent before that was fixed.
-let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/, #1256), and the names
+// themselves were renamed to Category.Name in #1257. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "FindStepUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Loaded",
+    "Extension installed": "Lifecycle.Installed",
+    "Extension upgraded": "Lifecycle.Upgraded",
+    "Feature file opened": "Vs.FeatureFileOpened",
+    "Feature file added": "Vs.FeatureFileAdded",
+    "Reqnroll config added": "Vs.ReqnrollConfigAdded",
+    "Project Template Wizard Started": "Vs.ProjectTemplateWizardStarted",
+    "Project Template Wizard Completed": "Vs.ProjectTemplateWizardCompleted",
+    "Link clicked": "Vs.LinkClicked",
+    "Upgrade dialog dismissed": "Vs.UpgradeDialogDismissed",
+    "Welcome dialog dismissed": "Vs.WelcomeDialogDismissed",
+    "ReqnrollDiscoveryExecuted": "Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "TestRun.Completed",
+    "TagIndexFirstScanCompleted": "TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Usage.Summary",
+    "ServerSessionStarted": "Server.SessionStarted",
+    "ServerSessionEnded": "Server.SessionEnded",
+    "ServerStartFailed": "Server.StartFailed",
+    "ServerExitedUnexpectedly": "Server.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Vs.WellKnownIdsSelfCheckMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.DaysOfUsage", coalesce(tostring(LegacyEventNames[s]), s))
+};
 let minSamples = 1;
 AppEvents
 | where TimeGenerated > ago(lookback)
-| where UnprefixedName(Name) == "PerfSample"
+| where CanonicalEventName(Name) == "Perf.Sample"
 | extend Operation = tostring(Properties.Operation),
          IdeClient = tostring(Properties.IdeClient),
          DurationMs = todouble(Properties.DurationMs)

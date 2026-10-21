@@ -23,7 +23,7 @@ class ReqnrollServerLifecycleTelemetryTest {
         move(LspServerState.Initializing, LspServerState.ShutdownUnexpectedly)
 
         assertEquals(
-            listOf("ServerStartFailed" to mapOf<String, Any?>("Reason" to "StartFailed", "AttemptNumber" to 1)),
+            listOf("Server.StartFailed" to mapOf<String, Any?>("Reason" to "StartFailed", "AttemptNumber" to 1)),
             sent,
         )
     }
@@ -37,8 +37,8 @@ class ReqnrollServerLifecycleTelemetryTest {
 
         assertEquals(
             listOf(
-                "ServerExitedUnexpectedly" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 1),
-                "ServerRestarted" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 2),
+                "Server.ExitedUnexpectedly" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 1),
+                "Server.Restarted" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 2),
             ),
             sent,
         )
@@ -52,7 +52,7 @@ class ReqnrollServerLifecycleTelemetryTest {
         )
 
         assertEquals(
-            listOf("ServerStartFailed", "ServerRestarted", "ServerStartFailed"),
+            listOf("Server.StartFailed", "Server.Restarted", "Server.StartFailed"),
             sent.map { it.first },
         )
         assertEquals(listOf<Any?>(1, 2, 2), sent.map { it.second["AttemptNumber"] })
@@ -67,7 +67,7 @@ class ReqnrollServerLifecycleTelemetryTest {
         )
 
         assertEquals(
-            listOf("ServerRestarted" to mapOf<String, Any?>("Reason" to "SessionEnded", "AttemptNumber" to 2)),
+            listOf("Server.Restarted" to mapOf<String, Any?>("Reason" to "SessionEnded", "AttemptNumber" to 2)),
             sent,
         )
     }
@@ -79,8 +79,8 @@ class ReqnrollServerLifecycleTelemetryTest {
 
         assertEquals(
             listOf(
-                "ServerExitedUnexpectedly" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 1),
-                "ServerRestarted" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 2),
+                "Server.ExitedUnexpectedly" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 1),
+                "Server.Restarted" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 2),
             ),
             sent,
         )
@@ -95,7 +95,7 @@ class ReqnrollServerLifecycleTelemetryTest {
         sut.seed(LspServerState.Initializing)
         move(LspServerState.Initializing)
 
-        assertEquals(listOf("ServerExitedUnexpectedly", "ServerRestarted"), sent.map { it.first })
+        assertEquals(listOf("Server.ExitedUnexpectedly", "Server.Restarted"), sent.map { it.first })
         assertEquals(listOf<Any?>(1, 2), sent.map { it.second["AttemptNumber"] })
     }
 

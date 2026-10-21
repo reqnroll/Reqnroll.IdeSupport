@@ -99,7 +99,7 @@ public static class ServiceCollectionExtensions
                     sp.GetRequiredService<ITelemetryDebugLog>()),
                 sp.GetRequiredService<ClientIdeContext>()))
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
-            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "UnhandledException"
+            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "Error.UnhandledException"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server
             // has no equivalent of). A NullLspTelemetryService here would silently
             // drop LSP.Core exceptions (e.g. Gherkin parse errors).

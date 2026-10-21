@@ -294,7 +294,7 @@ function extensionVersion(): string {
 
 /**
  * Sends a client-originated telemetry event directly, for the rare case where the event describes
- * something only the client knows (e.g. `doGoToHooks.ts`'s "GoToHook command executed"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
+ * something only the client knows (e.g. `doGoToHooks.ts`'s "Command.GoToHook"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
  * the classic VS CodeLens's Details-popup prefetch, so it does not claim to). Most telemetry
  * should still be server-originated and reach Application Insights via the notification forwarder
  * in `registerTelemetry` above; reach for this only when the client itself is the source of truth.

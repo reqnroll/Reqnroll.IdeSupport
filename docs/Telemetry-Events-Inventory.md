@@ -40,8 +40,8 @@ Two emission paths exist:
    `GenericEvent` and hands it to `ITelemetryTransmitter` directly. These are events that fire
    before the server starts (install/upgrade), have no server-side equivalent (wizard dialogs,
    link clicks), or describe something only the IDE client can observe (a genuine "Go to Hooks"
-   navigation). VS Code and Rider similarly originate `GoToHook command executed` and
-   `TagLink command executed` themselves.
+   navigation). VS Code and Rider similarly originate `Command.GoToHook` and
+   `Command.TagLink` themselves.
 
 Connection override (issue #889): `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`, an Application Insights
 connection string (`InstrumentationKey=...[;IngestionEndpoint=...]`), replaces the built-in
@@ -111,7 +111,58 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `ClientSessionId` | Each client generates one random GUID per IDE process (`ClientSession` in Common, `clientSession.ts`, Rider's `ClientSession`), stamps it on every event it transmits, and passes it to the server as `--client-session-id <guid>`; the server (`IdentityStampingLspTelemetryService`) stamps it on every server event, ignoring a value that is not a GUID (#1199) | not user-identifying. Unlike `SessionId` it exists before the server does and survives a server restart, so one `ClientSessionId` can span several `SessionId`s; join a client-origin `UnhandledException` to `ServerSessionStarted` on it for the IDE, OS and versions |
 | `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version (**the single source of the IDE version**), extension version |
 
-**Event names carry no extension-id prefix (issue #1256).** VS Code's telemetry logger prepends `<publisher>.<name>/` to every event name. `telemetry.ts` therefore sends usage events through its own `TelemetryLogger` (so `telemetry.telemetryLevel` is still honoured) whose sender strips that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`. Events recorded before the fix still carry the prefix; the queries under `telemetry/queries` compare names through `UnprefixedName()`.
+**Wire names (issue #1257).** Event names are hierarchical, `Category.Name` or `Category.Name.Qualifier`, PascalCase segments separated by dots. The category says what kind of thing the event reports: `Command` (a user-invoked command ran), `Lookup` (a request the server answered that is not necessarily a user action), `CodeAction` (a quick fix offered or picked), `Discovery`, `Project`, `TestRun`, `TagIndex`, `Server` (process lifecycle), `Lifecycle` (install / upgrade / usage), `Usage`, `Perf`, `Error` and `Vs` (Visual Studio-only host events). The rest of this document refers to events by their catalog constant; this table gives the name that appears in Application Insights.
+
+| Constant (`TelemetryEvents`) | Event name |
+|---|---|
+| `ReqnrollDiscoveryExecuted` | `Discovery.Executed` |
+| `UnhandledException` | `Error.UnhandledException` |
+| `CommentUncommentCommandExecuted` | `Command.CommentUncomment` |
+| `GoToMatchingScenariosCommandExecuted` | `Command.GoToMatchingScenarios` |
+| `AutoFormatDocumentCommandExecuted` | `Command.AutoFormatDocument` |
+| `ResolveTestTargetsCommandExecuted` | `Lookup.ResolveTestTargets` |
+| `ResolveContainerTestTargetsCommandExecuted` | `Lookup.ResolveContainerTestTargets` |
+| `FindHooksCommandExecuted` | `Lookup.FindHooks` |
+| `DefineStepsCommandOffered` | `CodeAction.DefineSteps.Offered` |
+| `DefineStepsCommandExecuted` | `CodeAction.DefineSteps.Executed` |
+| `InsertKeywordCommandOffered` | `CodeAction.InsertKeyword.Offered` |
+| `InsertKeywordCommandExecuted` | `CodeAction.InsertKeyword.Executed` |
+| `FindUnusedStepDefinitionsCommandExecuted` | `Command.FindUnusedStepDefinitions` |
+| `RenameStepCommandExecuted` | `Command.RenameStep` |
+| `FindStepDefinitionUsagesCommandExecuted` | `Command.FindStepDefinitionUsages` |
+| `GoToStepDefinitionCommandExecuted` | `Command.GoToStepDefinition` |
+| `FindStepDefinitionsCommandExecuted` | `Lookup.FindStepDefinitions` |
+| `OpenProjectCommandExecuted` | `Project.Opened` |
+| `PerfSample` | `Perf.Sample` |
+| `RenameTargetsResolved` | `Lookup.RenameTargets` |
+| `TestOutcomesRunCompleted` | `TestRun.Completed` |
+| `TagIndexFirstScanCompleted` | `TagIndex.FirstScanCompleted` |
+| `FeatureUsageSummary` | `Usage.Summary` |
+| `ServerSessionStarted` | `Server.SessionStarted` |
+| `ServerSessionEnded` | `Server.SessionEnded` |
+| `ProjectCharacteristics` | `Project.Characteristics` |
+| `ExtensionLoaded` | `Lifecycle.Loaded` |
+| `FeatureFileOpened` | `Vs.FeatureFileOpened` |
+| `ExtensionInstalled` | `Lifecycle.Installed` |
+| `ExtensionUpgraded` | `Lifecycle.Upgraded` |
+| `DaysOfUsage` | `Lifecycle.DaysOfUsage` |
+| `FeatureFileAdded` | `Vs.FeatureFileAdded` |
+| `ReqnrollConfigAdded` | `Vs.ReqnrollConfigAdded` |
+| `ProjectTemplateWizardStarted` | `Vs.ProjectTemplateWizardStarted` |
+| `ProjectTemplateWizardCompleted` | `Vs.ProjectTemplateWizardCompleted` |
+| `LinkClicked` | `Vs.LinkClicked` |
+| `UpgradeDialogDismissed` | `Vs.UpgradeDialogDismissed` |
+| `WelcomeDialogDismissed` | `Vs.WelcomeDialogDismissed` |
+| `VsWellKnownIdsSelfCheckMismatch` | `Vs.WellKnownIdsSelfCheckMismatch` |
+| `GoToHookCommandExecuted` | `Command.GoToHook` |
+| `TagLinkCommandExecuted` | `Command.TagLink` |
+| `ServerStartFailed` | `Server.StartFailed` |
+| `ServerExitedUnexpectedly` | `Server.ExitedUnexpectedly` |
+| `ServerRestarted` | `Server.Restarted` |
+
+Before #1257 the names mixed three styles (`FindStepDefinitions command executed`, `TestOutcomesRunCompleted`, `PerfSample`) and the daily heartbeat put its count in the name (`7 day usage`); it is now `Lifecycle.DaysOfUsage` with a `UsageDays` property. `telemetry/event-name-map.kql` lists every legacy name and its replacement; the files under `telemetry/queries` embed it as `CanonicalEventName()`, which also strips the VS Code prefix below, so one query covers old and new data.
+
+**Event names carry no extension-id prefix (issue #1256).** VS Code's telemetry logger prepends `<publisher>.<name>/` to every event name. `telemetry.ts` therefore sends usage events through its own `TelemetryLogger` (so `telemetry.telemetryLevel` is still honoured) whose sender strips that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`. Events recorded before the fix still carry the prefix; the queries under `telemetry/queries` compare names through `CanonicalEventName()`.
 
 Stamping never overrides a key the caller already set, and server-side stamping copies the property
 dictionary rather than mutating the caller's. `PerfSample`'s former `IDEClient` key is retired in
@@ -126,14 +177,12 @@ property dictionaries are the schema. Transmitters stringify every property valu
 become `"True"`/`"False"`, numbers their invariant string. All property names are PascalCase, including on the `telemetry/event` wire: the server sends
 properties as a JSON object whose names are never rewritten (a dictionary would be camelCased by
 the LSP serializer), and the hosts forward them verbatim (#844).
-Names are `"<PascalCaseWord> <action>"` in the legacy style for command events
-(`"FindStepUsages command executed"`) or a single PascalCase word for the two events renamed in
-#627 (`ReqnrollDiscoveryExecuted`, `UnhandledException`).
+Names are `Category.Name` (see "Wire names" above); the category prefix is what keeps a generic tail such as `Executed` or `Error` from colliding in aggregate reporting.
 
 **Renaming policy.** A rename shows up as a compile error at every call site (all names flow
 through the catalog), so it is *safe* to do — but historical Application Insights data is not
 back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExecuted` and
-`UnhandledException` (#627) as the precedent: confirm with the team before renaming any event.
+`UnhandledException` (#627) as the precedent: confirm with the team before renaming any event. #1257 is the second such rename: all events moved to the hierarchical scheme at once, with the legacy names kept in `telemetry/event-name-map.kql`. Add a row there (and a catalog constant) for every future rename; `TelemetryEventCatalogTests` fails if the map, the VS Code mirror or the Rider mirror drift from the catalog.
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
 are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
@@ -253,7 +302,7 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 | **When** | A client runs the `reqnroll.defineStepsTriggered` command that every "Define step(s)" code action carries. Clients run a code action's command after applying its edit, so this is the user picking the quick fix (any of its variants). Not sent for hand-written definitions |
 | **Properties** | none |
 
-**Analytics use.** Acceptance rate = `DefineSteps command executed` / `DefineSteps command offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, replacing the former client-side `vscode.open` command (a code action has one command slot).
+**Analytics use.** Acceptance rate = `CodeAction.DefineSteps.Executed` / `CodeAction.DefineSteps.Offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, replacing the former client-side `vscode.open` command (a code action has one command slot).
 
 ### `InsertKeywordCommandOffered`
 | | |
@@ -271,7 +320,7 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 | **When** | A client runs the `reqnroll.insertKeywordTriggered` command that every "Insert '\<keyword\>'" code action carries. Clients run a code action's command after applying its edit, so this is the user picking the quick fix (any keyword) |
 | **Properties** | none |
 
-**Analytics use.** Acceptance rate = `InsertKeyword command executed` / `InsertKeyword command offered` (offers are inflated by caret-move polling; compare trends, not absolutes).
+**Analytics use.** Acceptance rate = `CodeAction.InsertKeyword.Executed` / `CodeAction.InsertKeyword.Offered` (offers are inflated by caret-move polling; compare trends, not absolutes).
 
 ### `FindUnusedStepDefinitionsCommandExecuted`
 | | |
@@ -343,7 +392,7 @@ how many scenarios a hook typically applies to.
 | | |
 |---|---|
 | **Emitter** | `LspWorkspaceScopeManager` (server — issue #581 finding 2) |
-| **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Feature file opened` |
+| **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Vs.FeatureFileOpened` |
 | **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero); `ProjectTargetFramework` (string, the full TFM moniker); `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`, from the project-file extension — never the path). The Reqnroll version is *not* here: they are reported by the first `ReqnrollDiscoveryExecuted` (issue #846) |
 
 **Analytics use.** Active-session project counts; per-solution feature-file scale. A *sessions*
@@ -439,7 +488,7 @@ Key names live in `TelemetryProperties` (LSP.Server); bucketing in `TelemetryBuc
 
 ## 4. Lifecycle & project events (Visual Studio host)
 
-`Extension loaded`, `Extension installed`, `Extension upgraded` and `"{N} day usage"` are emitted by all
+`Lifecycle.Loaded`, `Lifecycle.Installed`, `Lifecycle.Upgraded` and `"{N} day usage"` are emitted by all
 three IDEs (see the decision below, issue #875); the remaining events in this section are VS-only. The VS
 events are all emitted by `VSSDKIntegration/Telemetry/TelemetryService.cs` (`Monitor*` methods) through
 `ITelemetryTransmitter`. Events that fire before the LSP server starts (install, upgrade) can
@@ -448,16 +497,16 @@ only originate here.
 | Event | Emitter / when | Properties |
 |---|---|---|
 | `ExtensionLoaded` | `MonitorOpenProjectSystem` — on extension activation in an IDE scope | — |
-| `Feature file opened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
-| `Extension installed` | `MonitorExtensionInstalled` — first activation after installation | — |
-| `Extension upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
+| `Vs.FeatureFileOpened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
+| `Lifecycle.Installed` | `MonitorExtensionInstalled` — first activation after installation | — |
+| `Lifecycle.Upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
 | `"{N} day usage"` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService`, right after incrementing `UsageDays`); the day count is part of the name, so each count is its own event (constant: `DaysOfUsageEventNameFormat` = `"{0} day usage"`) | — |
-| `Feature file added` | `MonitorCommandAddFeatureFile` — feature file added via command/wizard | project settings¹ |
-| `Reqnroll config added` | `MonitorCommandAddReqnrollConfigFile` — `reqnroll.json` added via command/wizard | project settings¹ |
-| `Project Template Wizard Started` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |
-| `Project Template Wizard Completed` | `MonitorProjectTemplateWizardCompleted` — wizard finishes | `SelectedDotNetFramework`, `SelectedUnitTestFramework`, `AddFluentAssertions` |
-| `Link clicked` | `MonitorLinkClicked` — a link in extension UI (welcome/upgrade dialogs) is opened | `Source` (dialog/VM name), `URL` |
-| `Welcome dialog dismissed` / `Upgrade dialog dismissed` | `MonitorWelcomeDialogDismissed` / `MonitorUpgradeDialogDismissed` — dialog closes | additional props (e.g. visited pages) |
+| `Vs.FeatureFileAdded` | `MonitorCommandAddFeatureFile` — feature file added via command/wizard | project settings¹ |
+| `Vs.ReqnrollConfigAdded` | `MonitorCommandAddReqnrollConfigFile` — `reqnroll.json` added via command/wizard | project settings¹ |
+| `Vs.ProjectTemplateWizardStarted` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |
+| `Vs.ProjectTemplateWizardCompleted` | `MonitorProjectTemplateWizardCompleted` — wizard finishes | `SelectedDotNetFramework`, `SelectedUnitTestFramework`, `AddFluentAssertions` |
+| `Vs.LinkClicked` | `MonitorLinkClicked` — a link in extension UI (welcome/upgrade dialogs) is opened | `Source` (dialog/VM name), `URL` |
+| `Vs.WelcomeDialogDismissed` / `Vs.UpgradeDialogDismissed` | `MonitorWelcomeDialogDismissed` / `MonitorUpgradeDialogDismissed` — dialog closes | additional props (e.g. visited pages) |
 
 ¹ **Project settings props** (`GetProjectSettingsProps`): `ReqnrollVersion`,
 `ProjectTargetFramework`, `SingleFileGeneratorUsed` (design-time code-behind generation on),
@@ -469,9 +518,9 @@ IDEs expose the same install -> upgrade funnel and daily-use retention signal di
 
 | Event | Fires | Properties |
 |---|---|---|
-| `Extension loaded` | every activation (VS Code: extension activation; Rider: first project startup of an IDE process) | — |
-| `Extension installed` | first activation with no stored lifecycle state | — |
-| `Extension upgraded` | stored version is lower than the running version (a downgrade sends nothing) | `OldExtensionVersion` |
+| `Lifecycle.Loaded` | every activation (VS Code: extension activation; Rider: first project startup of an IDE process) | — |
+| `Lifecycle.Installed` | first activation with no stored lifecycle state | — |
+| `Lifecycle.Upgraded` | stored version is lower than the running version (a downgrade sends nothing) | `OldExtensionVersion` |
 | `"{N} day usage"` | first activation of each new local calendar day after install (not on the install day), `N` = running count of such days | — |
 
 Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
@@ -479,7 +528,7 @@ Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` unde
 three values in the application-level `PropertiesComponent` under `net.reqnroll.idesupport.telemetry.*`
 (`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
 `WelcomeService`, and unit-tested. Because state is new, installs that predate this release report
-`Extension installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when
+`Lifecycle.Installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when
 counting true new installs. `ai.user.id` remains per IDE, so one person using two IDEs counts as two users.
 `ServerSessionStarted` (from all IDEs) stays available as a cross-check, and the VS-only events are no
 longer VS-only.
@@ -488,9 +537,9 @@ longer VS-only.
 executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` cover Reqnroll version, TFM,
 language and counts, so the VS-only duplicate (and its double-count of project opens) is gone.
 Decision (#873): reporting the Reqnroll version on discovery is sufficient; nothing was added to
-`OpenProject command executed`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available
-server-side (the connector does not expose them); they remain on the VS `Feature file opened`,
-`Feature file added` and `Reqnroll config added` events (see ¹), so they are now per-event rather than
+`Project.Opened`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available
+server-side (the connector does not expose them); they remain on the VS `Vs.FeatureFileOpened`,
+`Vs.FeatureFileAdded` and `Vs.ReqnrollConfigAdded` events (see ¹), so they are now per-event rather than
 per-project-open signals.
 
 **Analytics use.** Adoption lifecycle: install→upgrade funnel, daily-active heartbeat (rollup
@@ -554,7 +603,7 @@ the middleware re-targets each link at the internal `reqnroll.openTagLink` comma
 extension; VS and Rider request the links themselves because their generic LSP clients never send
 `textDocument/documentLink`.
 
-**Analytics use.** Tag-link adoption per IDE: `TagLink command executed` per session against
+**Analytics use.** Tag-link adoption per IDE: `Command.TagLink` per session against
 `PassiveCounts.DocumentLink` (links offered). Compare `DocumentLink` per IDE, not across IDEs: VS asks on every
 Ctrl+hover, VS Code after each `workspace/codeLens/refresh` as well as on open/edit, and Rider on open/edit and
 each inlay-hint refresh.
@@ -674,16 +723,16 @@ abrupt process death is accepted but detectable via `Sequence`.
 |---|---|
 | Binding-discovery reliability / failure rate | `ReqnrollDiscoveryExecuted` (`IsFailed`, `ErrorMessage`) |
 | Build churn (no-op rediscoveries) | `ReqnrollDiscoveryExecuted` (`HashMatched=true`) |
-| Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), discovery counts |
-| Project profile, all IDEs (Reqnroll version, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `ConnectorType`) |
+| Solution/project scale | `Project.Opened` (`FeatureFileCount`), discovery counts |
+| Project profile, all IDEs (Reqnroll version, TFM, language, connector type) | `Project.Opened` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `ConnectorType`) |
 | Command usage & adoption | all `* command executed` / `* command offered` events |
-| Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
+| Step Rename failure modes | `Command.RenameStep` (`Erroneous`, `Reason`) |
 | Picker UI trigger rate | `RenameTargetsResolved` (`TargetCount > 1` share) |
-| Go-to-hooks: lookups vs navigations | `FindHooks command executed` (server) vs `GoToHook command executed` (clients) |
-| Go-to-step-definition: lookups vs navigations | `FindStepDefinitions command executed` (server; all IDEs) vs `GoToStepDefinition command executed` (client; Visual Studio and VS Code's picker command only - F12/Ctrl+click in VS Code and Rider are not distinguishable from hover) |
+| Go-to-hooks: lookups vs navigations | `Lookup.FindHooks` (server) vs `Command.GoToHook` (clients) |
+| Go-to-step-definition: lookups vs navigations | `Lookup.FindStepDefinitions` (server; all IDEs) vs `Command.GoToStepDefinition` (client; Visual Studio and VS Code's picker command only - F12/Ctrl+click in VS Code and Rider are not distinguishable from hover) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |
 | Crash/error rates | `UnhandledException` (server; VS Code/Rider client code with `ExceptionOrigin = "Client"`) + VS `ExceptionTelemetry` |
-| Adoption lifecycle | All IDEs (#875): `Extension loaded`, `Extension installed`, `Extension upgraded`, `"{N} day usage"`; VS only: wizard events; `ServerSessionStarted` by distinct `ai.user.id` as a cross-check |
+| Adoption lifecycle | All IDEs (#875): `Lifecycle.Loaded`, `Lifecycle.Installed`, `Lifecycle.Upgraded`, `"{N} day usage"`; VS only: wizard events; `ServerSessionStarted` by distinct `ai.user.id` as a cross-check |
 | Server health: start failures, crashes, restarts, time-to-ready | `ServerStartFailed`, `ServerExitedUnexpectedly`, `ServerRestarted` (clients); `ServerSessionStarted` (`StartupMs`); Started without Ended per `SessionId` |
 | Project size snapshot (steps, hooks per type, binding classes, feature files) | `ProjectCharacteristics` |
 | Field performance (P95/P99) | `PerfSample` |
@@ -719,7 +768,7 @@ abrupt process death is accepted but detectable via `Sequence`.
   MSBuild switches (e.g. `EnableMSTestRunner`) that opt MSTest/xUnit/NUnit into MTP, so a project on MTP that still
   references the VSTest SDK reads as `VSTest`. Both properties are omitted for clients that send no package
   references (Rider today).
-- **`ReqnrollVersion` / `LegacySpecFlow` on `OpenProject command executed`** — decision (#845): the
+- **`ReqnrollVersion` / `LegacySpecFlow` on `Project.Opened`** — decision (#845): the
   first `ReqnrollDiscoveryExecuted` is the authoritative source for the Reqnroll version (the connector
   resolves it; the server's project model does not), so it is not duplicated on `OpenProject`.
   `LegacySpecFlow` is not available server-side; per #873 it stays on the VS feature-file/config events

@@ -141,10 +141,8 @@ suite('telemetry', () => {
         'Command.FindStepDefinitions',
       );
       assert.strictEqual(
-        stripExtensionIdPrefix(
-          'Reqnroll.reqnroll-ide-support/FindStepDefinitions command executed',
-        ),
-        'FindStepDefinitions command executed',
+        stripExtensionIdPrefix('Reqnroll.reqnroll-ide-support/Lookup.FindStepDefinitions'),
+        'Lookup.FindStepDefinitions',
       );
       assert.strictEqual(
         stripExtensionIdPrefix('Command.FindStepDefinitions'),
@@ -196,7 +194,7 @@ suite('telemetry', () => {
 
       await withStubbedSendTelemetryEvent(context, (calls) => {
         registerTelemetry(client, context);
-        sendTelemetryEvent('GoToHook command executed');
+        sendTelemetryEvent('Command.GoToHook');
 
         assert.strictEqual(calls[0].properties?.IdeClient, 'vscode');
         assert.strictEqual(calls[0].properties?.Ide, 'Visual Studio Code');
@@ -211,12 +209,12 @@ suite('telemetry', () => {
 
       await withStubbedSendTelemetryEvent(context, (calls) => {
         ensureTelemetryReporter(context);
-        sendTelemetryEvent('ServerStartFailed', { Reason: 'StartFailed', AttemptNumber: 1 });
+        sendTelemetryEvent('Server.StartFailed', { Reason: 'StartFailed', AttemptNumber: 1 });
         registerTelemetry(client, context);
         ensureTelemetryReporter(context);
 
         assert.strictEqual(calls.length, 1);
-        assert.strictEqual(calls[0].eventName, 'ServerStartFailed');
+        assert.strictEqual(calls[0].eventName, 'Server.StartFailed');
         assert.deepStrictEqual(withoutIdentity(calls[0].properties), {
           Reason: 'StartFailed',
           AttemptNumber: '1',
@@ -273,10 +271,10 @@ suite('telemetry', () => {
         deferTelemetryTeardownUntil(stopping);
         for (const sub of context.subscriptions) void sub.dispose();
 
-        fire({ eventName: 'ServerSessionEnded', properties: { SessionSeconds: 5 } });
+        fire({ eventName: 'Server.SessionEnded', properties: { SessionSeconds: 5 } });
         assert.deepStrictEqual(
           calls.map((c) => c.eventName),
-          ['ServerSessionEnded'],
+          ['Server.SessionEnded'],
         );
 
         releaseStop();
@@ -285,7 +283,7 @@ suite('telemetry', () => {
         fire({ eventName: 'AfterStop' });
         assert.deepStrictEqual(
           calls.map((c) => c.eventName),
-          ['ServerSessionEnded'],
+          ['Server.SessionEnded'],
           'the forwarder is detached once stop() has settled',
         );
       });
@@ -378,7 +376,7 @@ suite('telemetry', () => {
       await withStubbedSendTelemetryEvent(context, (calls) => {
         registerTelemetry(client, context);
         fire({
-          eventName: 'FeatureUsageSummary',
+          eventName: 'Usage.Summary',
           properties: { LookupCounts: lookupCounts, Sequence: 2 },
         });
 

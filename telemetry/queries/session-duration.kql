@@ -17,19 +17,69 @@
 //   shutdown, but also a session that is still running, so recent days (today in particular)
 //   overstate it. Read it as a crash proxy for days at least a day old.
 let lookback = 30d;
-// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
-// compare through UnprefixedName() to cover events sent before that was fixed.
-let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/, #1256), and the names
+// themselves were renamed to Category.Name in #1257. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "FindStepUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Loaded",
+    "Extension installed": "Lifecycle.Installed",
+    "Extension upgraded": "Lifecycle.Upgraded",
+    "Feature file opened": "Vs.FeatureFileOpened",
+    "Feature file added": "Vs.FeatureFileAdded",
+    "Reqnroll config added": "Vs.ReqnrollConfigAdded",
+    "Project Template Wizard Started": "Vs.ProjectTemplateWizardStarted",
+    "Project Template Wizard Completed": "Vs.ProjectTemplateWizardCompleted",
+    "Link clicked": "Vs.LinkClicked",
+    "Upgrade dialog dismissed": "Vs.UpgradeDialogDismissed",
+    "Welcome dialog dismissed": "Vs.WelcomeDialogDismissed",
+    "ReqnrollDiscoveryExecuted": "Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "TestRun.Completed",
+    "TagIndexFirstScanCompleted": "TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Usage.Summary",
+    "ServerSessionStarted": "Server.SessionStarted",
+    "ServerSessionEnded": "Server.SessionEnded",
+    "ServerStartFailed": "Server.StartFailed",
+    "ServerExitedUnexpectedly": "Server.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Vs.WellKnownIdsSelfCheckMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.DaysOfUsage", coalesce(tostring(LegacyEventNames[s]), s))
+};
 let started = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where UnprefixedName(Name) == "ServerSessionStarted"
+    | where CanonicalEventName(Name) == "Server.SessionStarted"
     | extend SessionId = tostring(Properties.SessionId),
              IdeClient = tostring(Properties.IdeClient)
     | where isnotempty(SessionId)
     | summarize Day = bin(min(TimeGenerated), 1d), take_any(IdeClient) by SessionId;
 let ended = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where UnprefixedName(Name) == "ServerSessionEnded"
+    | where CanonicalEventName(Name) == "Server.SessionEnded"
     | extend SessionId = tostring(Properties.SessionId),
              SessionSeconds = todouble(Properties.SessionSeconds)
     | where isnotempty(SessionId)

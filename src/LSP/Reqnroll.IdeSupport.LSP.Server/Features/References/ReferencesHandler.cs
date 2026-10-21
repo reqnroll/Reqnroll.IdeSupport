@@ -128,7 +128,7 @@ public sealed class ReferencesHandler
     }
 
     /// <summary>
-    /// Sends the same <c>"FindStepDefinitionUsages command executed"</c> event
+    /// Sends the same <c>"Command.FindStepDefinitionUsages"</c> event
     /// <see cref="Features.References.FindStepUsagesHandler"/> sends for its own
     /// <c>reqnroll/findStepUsages</c> path, with a <c>Protocol</c> field
     /// so the two paths — VS Code/Rider's native Find All References via this handler, versus

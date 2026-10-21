@@ -82,7 +82,7 @@ suite('stepNavigation', () => {
       assert.match(info ?? '', /No step definition found/);
     });
 
-    test('sends "GoToStepDefinition command executed" with the navigable LocationCount (issue #899)', async () => {
+    test('sends "Command.GoToStepDefinition" with the navigable LocationCount (issue #899)', async () => {
       const client = {
         sendRequest: () =>
           Promise.resolve({
@@ -128,7 +128,7 @@ suite('stepNavigation', () => {
         for (const sub of telemetryContext.subscriptions) sub.dispose();
       }
 
-      const events = sent.filter(([name]) => name === 'GoToStepDefinition command executed');
+      const events = sent.filter(([name]) => name === 'Command.GoToStepDefinition');
       assert.strictEqual(events.length, 1);
       assert.strictEqual(String(events[0][1]?.LocationCount), '1');
     });

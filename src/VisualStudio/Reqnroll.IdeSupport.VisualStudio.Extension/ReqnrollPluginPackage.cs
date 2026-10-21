@@ -295,7 +295,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             _logger.LogInfo("RunWelcomeServiceAsync: IVsUIShell resolved OK.");
 
             var telemetryService = ideScope.TelemetryService;
-            // Restores the legacy "Extension loaded" signal (from the legacy
+            // Restores the legacy "Lifecycle.Loaded" signal (from the legacy
             // MonitoringService.MonitorOpenProjectSystem, which also triggered the welcome flow
             // itself — here that triggering already happens explicitly
             // below via WelcomeService, so this call is telemetry-only).

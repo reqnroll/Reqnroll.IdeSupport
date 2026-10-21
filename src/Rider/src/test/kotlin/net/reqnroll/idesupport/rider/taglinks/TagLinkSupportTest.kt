@@ -89,6 +89,6 @@ class TagLinkSupportTest {
 
     @Test
     fun `telemetry event name is the catalog constant`() {
-        assertEquals("TagLink command executed", RiderTelemetryTransmitter.TAG_LINK_COMMAND_EXECUTED)
+        assertEquals("Command.TagLink", RiderTelemetryTransmitter.TAG_LINK_COMMAND_EXECUTED)
     }
 }

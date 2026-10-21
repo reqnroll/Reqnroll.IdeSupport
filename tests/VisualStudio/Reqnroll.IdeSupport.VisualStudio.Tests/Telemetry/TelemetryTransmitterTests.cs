@@ -51,9 +51,9 @@ public class TelemetryTransmitterTests
     }
 
     [Theory]
-    [InlineData("Extension loaded")]
-    [InlineData("Extension installed")]
-    [InlineData("100 day usage")]
+    [InlineData("Lifecycle.Loaded")]
+    [InlineData("Lifecycle.Installed")]
+    [InlineData("Lifecycle.DaysOfUsage")]
     public void Should_TransmitEvents(string eventName)
     {
         var sut = CreateSut();
@@ -187,7 +187,7 @@ public class TelemetryTransmitterTests
         GivenTelemetryEnabled();
         _telemetryChannel.ThrowOnSend = true;
 
-        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Lifecycle.Loaded"));
 
         // One hand-off only: a failed transmission is never re-reported as an exception event to
         // the same unreachable endpoint.
@@ -203,7 +203,7 @@ public class TelemetryTransmitterTests
         _telemetryChannel.SimulateUnreachableEndpoint = true;
 
         for (var i = 0; i < 25; i++)
-            sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+            sut.TransmitEvent(new VsGenericEvent("Lifecycle.Loaded"));
         sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
 
         // No notice: the host cannot see the failure, so it must not claim it can.
@@ -254,14 +254,14 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryDisabled();
 
-        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Lifecycle.Loaded"));
 
         // Not transmitted (opted out) but still mirrored for debugging.
         _telemetryChannel.SentTelemtries.Should().BeEmpty();
         _debugLog.Records.Should().ContainSingle();
         var rec = _debugLog.Records[0];
         rec.Source.Should().Be("host");
-        rec.Event.Should().Be("Extension loaded");
+        rec.Event.Should().Be("Lifecycle.Loaded");
         rec.Enabled.Should().BeFalse();
         rec.Transmitted.Should().BeFalse();
         rec.Error.Should().BeNull();
@@ -273,7 +273,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryEnabled();
 
-        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Lifecycle.Loaded"));
 
         _telemetryChannel.SentTelemtries.Should().HaveCount(1);
         _debugLog.Records.Should().ContainSingle();
@@ -290,7 +290,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut(client => client.Context.GlobalProperties["ClientSessionId"] = "session-x");
         GivenTelemetryEnabled();
 
-        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Lifecycle.Loaded"));
 
         var props = _debugLog.Records.Should().ContainSingle().Which.Props
             .Should().BeAssignableTo<IDictionary<string, object?>>().Which;
@@ -304,7 +304,7 @@ public class TelemetryTransmitterTests
         GivenTelemetryEnabled();
         _telemetryChannel.ThrowOnSend = true;
 
-        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Lifecycle.Loaded"));
 
         _debugLog.Records.Should().Contain(r => r.Transmitted == false && r.Error != null);
     }
@@ -349,7 +349,7 @@ public class TelemetryTransmitterTests
         var sent = _telemetryChannel.SentTelemtries.Should().ContainSingle().Subject;
         sent.Should().BeOfType<EventTelemetry>("a raw ExceptionTelemetry would serialise the full message, stack and inner exceptions");
         var evt = (EventTelemetry)sent;
-        evt.Name.Should().Be("UnhandledException");
+        evt.Name.Should().Be("Error.UnhandledException");
         evt.Properties["ExceptionType"].Should().Be(typeof(InvalidOperationException).FullName);
         evt.Properties["IsFatal"].Should().Be("True");
         evt.Properties["Message"].Should().Be("Could not load type <text> from <path>");

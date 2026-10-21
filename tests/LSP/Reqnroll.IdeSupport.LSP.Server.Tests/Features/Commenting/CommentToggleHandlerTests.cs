@@ -251,7 +251,7 @@ public class CommentToggleHandlerTests
             CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "CommentUncomment command executed",
+            "Command.CommentUncomment",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (string)p["Mode"]! == "Toggle" && (string)p["LineCountBucket"]! == "1"));
     }
@@ -276,7 +276,7 @@ public class CommentToggleHandlerTests
             CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "CommentUncomment command executed",
+            "Command.CommentUncomment",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (string)p["Mode"]! == expectedMode && (string)p["ResolvedMode"]! == expectedResolved));
     }

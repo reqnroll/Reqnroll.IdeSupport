@@ -97,7 +97,7 @@ dynamic-registration race with VS Code's restore of open `.feature` tabs. The re
   the target and "Ctrl + click to follow link" ("Cmd" on macOS); Ctrl/Cmd+hover adds the hand cursor and Ctrl/Cmd+click opens
   the link (`BrowserUtil.browse`).
 
-**Telemetry.** Following a link sends the client-originated `TagLink command executed` event from all three IDEs, with no
+**Telemetry.** Following a link sends the client-originated `Command.TagLink` event from all three IDEs, with no
 properties (see the [inventory](../Telemetry-Events-Inventory.md)).
 
 **Allowed targets.** All three IDEs open any scheme (`https:`, `file:`, `jira:`, `vscode:`, `slack:`, …) except the blocked

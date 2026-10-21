@@ -45,7 +45,7 @@ public class TelemetryEventInterceptorTests
         const string lookupCounts = "{\"CodeAction\":1,\"Completion.Step\":14}";
 
         await sut.InterceptAsync(
-            Receive(TelemetryEvent("FeatureUsageSummary", new JObject { ["LookupCounts"] = lookupCounts })),
+            Receive(TelemetryEvent("Usage.Summary", new JObject { ["LookupCounts"] = lookupCounts })),
             CancellationToken.None);
 
         transmitter.Events.Should().ContainSingle();
@@ -59,7 +59,7 @@ public class TelemetryEventInterceptorTests
         var sut = Create(transmitter);
 
         var result = await sut.InterceptAsync(
-            Receive(TelemetryEvent("GoToStepDefinition command executed", new JObject
+            Receive(TelemetryEvent("Command.GoToStepDefinition", new JObject
             {
                 ["GenerateSnippet"] = true,
                 ["Count"] = 3,
@@ -70,7 +70,7 @@ public class TelemetryEventInterceptorTests
         result.Should().Be(LspInterceptorResult.PassThrough);
         transmitter.Events.Should().ContainSingle();
         var ev = transmitter.Events[0];
-        ev.EventName.Should().Be("GoToStepDefinition command executed");
+        ev.EventName.Should().Be("Command.GoToStepDefinition");
         ev.Properties.Should().ContainKey("GenerateSnippet");
         ev.Properties["Source"].Should().Be("codeLens");
         ev.Properties["Count"].Should().Be(3L); // JSON integers surface as Int64
@@ -152,7 +152,7 @@ public class TelemetryEventInterceptorTests
         ITelemetryTransmitter? transmitter = null;
         var sut = CreateHolding(() => transmitter, new Clock());
 
-        await sut.InterceptAsync(Receive(TelemetryEvent("ServerSessionStarted")), CancellationToken.None);
+        await sut.InterceptAsync(Receive(TelemetryEvent("Server.SessionStarted")), CancellationToken.None);
         await sut.InterceptAsync(Receive(TelemetryEvent("Second")), CancellationToken.None);
         var capture = new CapturingTransmitter();
         transmitter = capture;
@@ -160,7 +160,7 @@ public class TelemetryEventInterceptorTests
 
         sut.Flush();
 
-        capture.Events.Select(e => e.EventName).Should().Equal("ServerSessionStarted", "Second");
+        capture.Events.Select(e => e.EventName).Should().Equal("Server.SessionStarted", "Second");
     }
 
     [Fact]

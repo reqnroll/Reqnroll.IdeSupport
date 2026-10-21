@@ -1,5 +1,6 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
@@ -18,8 +19,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 /// </remarks>
 public sealed class OperationDurationRecorder : IOperationDurationRecorder
 {
-    /// <summary>Telemetry event name. Listed in the public telemetry inventory.</summary>
-    public const string PerfSampleEventName = "PerfSample";
+    /// <summary>Telemetry event name; the value lives in the shared catalog (<see cref="TelemetryEvents.PerfSample"/>).</summary>
+    public const string PerfSampleEventName = TelemetryEvents.PerfSample;
 
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetry;

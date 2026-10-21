@@ -25,7 +25,7 @@ class ClientExceptionTelemetryTest {
         assertEquals("java.io.IOException", props["ExceptionType"])
         assertEquals("disk gone", props["Message"])
         assertEquals("Client", props["ExceptionOrigin"])
-        assertEquals("UnhandledException", RiderTelemetryTransmitter.UNHANDLED_EXCEPTION)
+        assertEquals("Error.UnhandledException", RiderTelemetryTransmitter.UNHANDLED_EXCEPTION)
     }
 
     @Test
@@ -100,7 +100,7 @@ class ClientExceptionTelemetryTest {
         assertFalse(r.reporter.report(IOException("same")))
 
         assertEquals(1, r.sent.size)
-        assertEquals("UnhandledException", r.sent[0].first)
+        assertEquals("Error.UnhandledException", r.sent[0].first)
     }
 
     @Test

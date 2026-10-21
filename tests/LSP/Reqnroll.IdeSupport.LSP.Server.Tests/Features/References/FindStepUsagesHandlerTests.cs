@@ -331,7 +331,7 @@ public class FindStepUsagesHandlerTests
         await CreateSut().HandleAsync(RequestAt(CsUri, 9, 0), CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["UsagesCount"]! == 0));
     }
 
@@ -344,7 +344,7 @@ public class FindStepUsagesHandlerTests
         await CreateSut().HandleAsync(RequestAt(CsUri, 9, 0), CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["UsagesCount"]! == 1));
     }
 
@@ -360,7 +360,7 @@ public class FindStepUsagesHandlerTests
         await CreateSut().HandleAsync(RequestAt(CsUri, 9, 0), CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["UsagesCount"]! == 3 && (int)p["FileCount"]! == 2
                 && (string)p["Protocol"]! == "reqnroll/findStepUsages"
@@ -377,7 +377,7 @@ public class FindStepUsagesHandlerTests
         await CreateSut().HandleAsync(RequestAt(CsUri, 9, 0), CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["FileCount"]! == 0 && p["DurationBucket"] is string));
     }

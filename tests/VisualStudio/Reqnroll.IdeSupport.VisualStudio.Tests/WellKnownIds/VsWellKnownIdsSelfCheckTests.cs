@@ -82,7 +82,7 @@ public class VsWellKnownIdsSelfCheckTests
     {
         var evt = VsWellKnownIdsSelfCheck.CreateMismatchEvent(5, new[] { "OwnerA: Cmd.A (NotFound)", "OwnerB: Cmd.B (NameMismatch)" });
 
-        evt.EventName.Should().Be("VsWellKnownIdsSelfCheckMismatch");
+        evt.EventName.Should().Be("Vs.WellKnownIdsSelfCheckMismatch");
         var props = evt.Properties.ToDictionary(p => p.Key, p => p.Value);
         props["ProblemCount"].Should().Be(2);
         props["ExpectedCount"].Should().Be(5);

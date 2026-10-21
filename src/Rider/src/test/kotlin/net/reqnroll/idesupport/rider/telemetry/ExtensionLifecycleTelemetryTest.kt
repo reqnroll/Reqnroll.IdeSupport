@@ -25,7 +25,7 @@ class ExtensionLifecycleTelemetryTest {
     fun `first start sends loaded and installed and seeds state without a usage day`() {
         sut.report(day1, "1.2.0")
 
-        assertEquals(listOf("Extension loaded", "Extension installed"), names())
+        assertEquals(listOf("Lifecycle.Loaded", "Lifecycle.Installed"), names())
         assertEquals("1.2.0", values[ExtensionLifecycleTelemetry.INSTALLED_VERSION_KEY])
         assertEquals("2026-10-03", values[ExtensionLifecycleTelemetry.LAST_USED_DATE_KEY])
         assertEquals("0", values[ExtensionLifecycleTelemetry.USAGE_DAYS_KEY])
@@ -38,7 +38,7 @@ class ExtensionLifecycleTelemetryTest {
 
         sut.report(day1, "1.2.0")
 
-        assertEquals(listOf("Extension loaded"), names())
+        assertEquals(listOf("Lifecycle.Loaded"), names())
     }
 
     @Test
@@ -49,7 +49,7 @@ class ExtensionLifecycleTelemetryTest {
         sut.report(day1.plusDays(1), "1.2.0")
         sut.report(day1.plusDays(2), "1.2.0")
 
-        assertEquals(listOf("Extension loaded", "1 day usage", "Extension loaded", "2 day usage"), names())
+        assertEquals(listOf("Lifecycle.Loaded", "Lifecycle.DaysOfUsage", "Lifecycle.Loaded", "Lifecycle.DaysOfUsage"), names())
     }
 
     @Test
@@ -59,7 +59,7 @@ class ExtensionLifecycleTelemetryTest {
 
         sut.report(day1, "1.10.0")
 
-        assertEquals(listOf("Extension loaded", "Extension upgraded"), names())
+        assertEquals(listOf("Lifecycle.Loaded", "Lifecycle.Upgraded"), names())
         assertEquals(mapOf<String, Any?>("OldExtensionVersion" to "1.2.0"), sent[1].second)
         assertEquals("1.10.0", values[ExtensionLifecycleTelemetry.INSTALLED_VERSION_KEY])
     }
@@ -71,7 +71,7 @@ class ExtensionLifecycleTelemetryTest {
 
         sut.report(day1, "1.2.0")
 
-        assertEquals(listOf("Extension loaded"), names())
+        assertEquals(listOf("Lifecycle.Loaded"), names())
     }
 
     @Test

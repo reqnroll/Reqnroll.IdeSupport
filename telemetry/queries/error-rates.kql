@@ -26,26 +26,76 @@
 // - UnhandledException stack frames are only attached for the first ~25 distinct stacks per session, but the event
 //   itself is always sent and counted, so Events is complete (subject to ingestion loss).
 let lookback = 30d;
-// Event names: VS Code used to send every name prefixed with its extension id (<publisher>.<name>/, #1256), so
-// compare through UnprefixedName() to cover events sent before that was fixed.
-let UnprefixedName = (n:string) { tostring(split(n, "/")[-1]) };
-let failureEvents = dynamic(["UnhandledException", "ServerStartFailed", "ServerExitedUnexpectedly", "ServerRestarted"]);
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/, #1256), and the names
+// themselves were renamed to Category.Name in #1257. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "FindStepUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Loaded",
+    "Extension installed": "Lifecycle.Installed",
+    "Extension upgraded": "Lifecycle.Upgraded",
+    "Feature file opened": "Vs.FeatureFileOpened",
+    "Feature file added": "Vs.FeatureFileAdded",
+    "Reqnroll config added": "Vs.ReqnrollConfigAdded",
+    "Project Template Wizard Started": "Vs.ProjectTemplateWizardStarted",
+    "Project Template Wizard Completed": "Vs.ProjectTemplateWizardCompleted",
+    "Link clicked": "Vs.LinkClicked",
+    "Upgrade dialog dismissed": "Vs.UpgradeDialogDismissed",
+    "Welcome dialog dismissed": "Vs.WelcomeDialogDismissed",
+    "ReqnrollDiscoveryExecuted": "Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "TestRun.Completed",
+    "TagIndexFirstScanCompleted": "TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Usage.Summary",
+    "ServerSessionStarted": "Server.SessionStarted",
+    "ServerSessionEnded": "Server.SessionEnded",
+    "ServerStartFailed": "Server.StartFailed",
+    "ServerExitedUnexpectedly": "Server.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Vs.WellKnownIdsSelfCheckMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.DaysOfUsage", coalesce(tostring(LegacyEventNames[s]), s))
+};
+let failureEvents = dynamic(["Error.UnhandledException", "Server.StartFailed", "Server.ExitedUnexpectedly", "Server.Restarted"]);
 let sessionsPerDay = AppEvents
     | where TimeGenerated > ago(lookback)
-    | where UnprefixedName(Name) == "ServerSessionStarted"
+    | where CanonicalEventName(Name) == "Server.SessionStarted"
     | extend IdeClient = tostring(Properties.IdeClient)
     | summarize Sessions = dcount(tostring(Properties.SessionId)) by Day = bin(TimeGenerated, 1d), IdeClient;
 AppEvents
 | where TimeGenerated > ago(lookback)
-| where UnprefixedName(Name) in (failureEvents)
+| where CanonicalEventName(Name) in (failureEvents)
 | extend IdeClient = tostring(Properties.IdeClient),
-         Origin = iff(UnprefixedName(Name) == "UnhandledException",
+         Origin = iff(CanonicalEventName(Name) == "Error.UnhandledException",
                       iff(tostring(Properties.ExceptionOrigin) == "Client", "Client", "Server"),
                       ""),
-         Reason = iff(UnprefixedName(Name) == "UnhandledException", "", tostring(Properties.Reason))
+         Reason = iff(CanonicalEventName(Name) == "Error.UnhandledException", "", tostring(Properties.Reason))
 | summarize Events = count(), AffectedUsers = dcount(UserId),
             AffectedSessions = dcount(tostring(Properties.ClientSessionId))
-        by Day = bin(TimeGenerated, 1d), IdeClient, EventName = UnprefixedName(Name), Origin, Reason
+        by Day = bin(TimeGenerated, 1d), IdeClient, EventName = CanonicalEventName(Name), Origin, Reason
 | join kind=leftouter sessionsPerDay on Day, IdeClient
 | extend Sessions = coalesce(Sessions, 0)
 | extend EventsPer100Sessions = iff(Sessions > 0, round(100.0 * Events / Sessions, 1), real(null))

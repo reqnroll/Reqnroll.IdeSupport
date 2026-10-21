@@ -91,24 +91,24 @@ object RiderTelemetryTransmitter {
      * (forwarded by [ReqnrollTelemetryEventInterceptor]) need no entries here. Keep the three
      * copies in sync.
      */
-    internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
+    internal const val GO_TO_HOOK_COMMAND_EXECUTED = "Command.GoToHook"
 
     /** A clickable tag's link was followed. No properties: the URL and tag text are never sent. */
-    internal const val TAG_LINK_COMMAND_EXECUTED = "TagLink command executed"
+    internal const val TAG_LINK_COMMAND_EXECUTED = "Command.TagLink"
 
     // Server-lifecycle events: sent by the client because a dead server cannot report
     // itself. `Reason` is always one of the SERVER_FAILURE_REASON_* values below, `AttemptNumber` the
     // 1-based start attempt in this IDE session. Mirror of ServerLifecycleTelemetry.cs.
-    internal const val SERVER_START_FAILED = "ServerStartFailed"
-    internal const val SERVER_EXITED_UNEXPECTEDLY = "ServerExitedUnexpectedly"
-    internal const val SERVER_RESTARTED = "ServerRestarted"
+    internal const val SERVER_START_FAILED = "Server.StartFailed"
+    internal const val SERVER_EXITED_UNEXPECTEDLY = "Server.ExitedUnexpectedly"
+    internal const val SERVER_RESTARTED = "Server.Restarted"
 
     internal const val SERVER_FAILURE_REASON_START_FAILED = "StartFailed"
     internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
     internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
 
     /** Exception caught in the plugin's own code; same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
-    internal const val UNHANDLED_EXCEPTION = "UnhandledException"
+    internal const val UNHANDLED_EXCEPTION = "Error.UnhandledException"
 
     /**
      * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED]: how the navigation was
@@ -122,11 +122,13 @@ object RiderTelemetryTransmitter {
     internal const val GO_TO_HOOK_SOURCE_CODE_LENS = "CodeLens"
 
     // Extension lifecycle events, parity with VS's WelcomeService. Mirror of the same
-    // constants in TelemetryEvents.cs; the "{N} day usage" name is built by [ExtensionLifecycleTelemetry].
-    internal const val EXTENSION_LOADED = "Extension loaded"
-    internal const val EXTENSION_INSTALLED = "Extension installed"
-    internal const val EXTENSION_UPGRADED = "Extension upgraded"
+    // constants in TelemetryEvents.cs.
+    internal const val EXTENSION_LOADED = "Lifecycle.Loaded"
+    internal const val EXTENSION_INSTALLED = "Lifecycle.Installed"
+    internal const val EXTENSION_UPGRADED = "Lifecycle.Upgraded"
+    internal const val DAYS_OF_USAGE = "Lifecycle.DaysOfUsage"
     internal const val OLD_EXTENSION_VERSION_PROPERTY = "OldExtensionVersion"
+    internal const val USAGE_DAYS_PROPERTY = "UsageDays"
 
     internal const val IDE_CLIENT = "rider"
 

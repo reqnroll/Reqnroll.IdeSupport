@@ -135,7 +135,7 @@ sequenceDiagram
 
 ## 8. Known limitations
 
-- "Offered" events (`DefineSteps command offered`) cannot observe acceptance, because the edit is applied client-side.
+- "Offered" events (`CodeAction.DefineSteps.Offered`) cannot observe acceptance, because the edit is applied client-side.
 - Notification shown/dismissed events from the legacy extension have no equivalent: the current extension has no
   notification system to hook.
 

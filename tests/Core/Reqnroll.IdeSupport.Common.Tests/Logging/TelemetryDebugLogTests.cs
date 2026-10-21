@@ -43,7 +43,7 @@ public class TelemetryDebugLogTests
 
             sink.Record("server", "Reqnroll Discovery executed",
                 new Dictionary<string, object> { ["DiscoverySource"] = "Connector", ["StepDefinitionCount"] = 42 });
-            sink.Record("host", "Extension loaded", null, enabled: true, transmitted: true);
+            sink.Record("host", "Lifecycle.Loaded", null, enabled: true, transmitted: true);
 
             var lines = File.ReadAllLines(path);
             lines.Should().HaveCount(2);

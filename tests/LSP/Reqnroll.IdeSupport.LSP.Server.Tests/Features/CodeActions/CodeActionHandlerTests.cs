@@ -476,7 +476,7 @@ public class CodeActionHandlerTests
             // Telemetry must reflect what was actually returned (post-cap), not the uncapped
             // count the builder produced internally.
             _telemetryService.Received(1).SendEvent(
-                "DefineSteps command offered",
+                "CodeAction.DefineSteps.Offered",
                 Arg.Is<Dictionary<string, object?>>(p => (int)p["ActionsOffered"]! == 6));
         }
         finally
@@ -495,7 +495,7 @@ public class CodeActionHandlerTests
         await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "DefineSteps command offered",
+            "CodeAction.DefineSteps.Offered",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["UndefinedStepCount"]! == 1 && (int)p["ActionsOffered"]! == 1));
     }

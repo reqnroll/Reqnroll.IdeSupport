@@ -16,8 +16,8 @@ interface LifecycleStore {
 
 /**
  * Port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
- * `Extension loaded` on every start, `Extension installed` on the first ever, `Extension upgraded`
- * when the plugin version increased, and a `"{N} day usage"` heartbeat on the first start of each
+ * `Lifecycle.Loaded` on every start, `Lifecycle.Installed` on the first ever, `Lifecycle.Upgraded`
+ * when the plugin version increased, and a `Lifecycle.DaysOfUsage` heartbeat (property `UsageDays`) on the first start of each
  * new local day (not on the install day, like VS). Pure: store and sink are injected.
  */
 class ExtensionLifecycleTelemetry(
@@ -40,7 +40,7 @@ class ExtensionLifecycleTelemetry(
             val usageDays = (store.get(USAGE_DAYS_KEY)?.toIntOrNull() ?: 0) + 1
             store.set(USAGE_DAYS_KEY, usageDays.toString())
             store.set(LAST_USED_DATE_KEY, today.toString())
-            send(daysOfUsageEventName(usageDays), emptyMap())
+            send(RiderTelemetryTransmitter.DAYS_OF_USAGE, mapOf(RiderTelemetryTransmitter.USAGE_DAYS_PROPERTY to usageDays))
         }
 
         if (compareVersions(installedVersion, currentVersion) < 0) {
@@ -56,9 +56,6 @@ class ExtensionLifecycleTelemetry(
         internal const val INSTALLED_VERSION_KEY = "net.reqnroll.idesupport.telemetry.installedVersion"
         internal const val LAST_USED_DATE_KEY = "net.reqnroll.idesupport.telemetry.lastUsedDate"
         internal const val USAGE_DAYS_KEY = "net.reqnroll.idesupport.telemetry.usageDays"
-
-        /** Mirrors `TelemetryEvents.DaysOfUsageEventNameFormat` (`"{0} day usage"`). */
-        internal fun daysOfUsageEventName(usageDays: Int) = "$usageDays day usage"
 
         /** Numeric dotted-version comparison; non-numeric segments count as 0. */
         internal fun compareVersions(a: String, b: String): Int {

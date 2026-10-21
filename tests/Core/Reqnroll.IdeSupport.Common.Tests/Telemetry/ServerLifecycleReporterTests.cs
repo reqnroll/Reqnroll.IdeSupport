@@ -13,7 +13,7 @@ public class ServerLifecycleReporterTests
         sut.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.ExecutableNotFound, 1);
 
         transmitter.Received(1).TransmitEvent(Arg.Is<ITelemetryEvent>(e =>
-            e.EventName == "ServerStartFailed"
+            e.EventName == "Server.StartFailed"
             && (string)e.Properties["Reason"] == "ExecutableNotFound"
             && (int)e.Properties["AttemptNumber"] == 1
             && e.Properties.Count == 2));
@@ -32,7 +32,7 @@ public class ServerLifecycleReporterTests
         sut.Transmitter = transmitter;
         sut.Report(TelemetryEvents.ServerExitedUnexpectedly, ServerFailureReason.ProcessExited, 2);
 
-        sent.Should().Equal("ServerStartFailed", "ServerRestarted", "ServerExitedUnexpectedly");
+        sent.Should().Equal("Server.StartFailed", "Server.Restarted", "Server.ExitedUnexpectedly");
     }
 
     [Fact]

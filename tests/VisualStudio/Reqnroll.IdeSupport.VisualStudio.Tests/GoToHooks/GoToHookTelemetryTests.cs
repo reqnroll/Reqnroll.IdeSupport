@@ -6,7 +6,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToHooks;
 
 /// <summary>
-/// The client-originated "GoToHook command executed" event carries the closed <c>Source</c>
+/// The client-originated "Command.GoToHook" event carries the closed <c>Source</c>
 /// property, shared with VS Code and Rider.
 /// </summary>
 public class GoToHookTelemetryTests
@@ -16,7 +16,7 @@ public class GoToHookTelemetryTests
     {
         var evt = GoToHookTelemetry.CreateEvent(GoToHookSources.ContextMenu);
 
-        evt.EventName.Should().Be("GoToHook command executed");
+        evt.EventName.Should().Be("Command.GoToHook");
         evt.Properties.Should().ContainSingle()
             .Which.Should().Be(new KeyValuePair<string, object>("Source", "ContextMenu"));
     }

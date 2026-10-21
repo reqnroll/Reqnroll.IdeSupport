@@ -61,7 +61,7 @@ public static class TelemetryProperties
     public const string DocumentLineBucket = "DocumentLineBucket";
     /// <summary>
     /// Event-scoped key: a class name on <c>UnhandledException</c>; on the client-originated
-    /// <c>GoToHook command executed</c> it is the <c>Command|ContextMenu|CodeLens</c> enum
+    /// <c>Command.GoToHook</c> it is the <c>Command|ContextMenu|CodeLens</c> enum
     /// (<c>GoToHookSources.PropertyName</c> in Common, mirrored in VS Code and Rider).
     /// </summary>
     /// <remarks>On <c>UnhandledException</c>: class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</remarks>

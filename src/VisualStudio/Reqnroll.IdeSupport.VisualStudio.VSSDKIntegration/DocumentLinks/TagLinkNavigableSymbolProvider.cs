@@ -153,7 +153,7 @@ public sealed class TagLinkNavigableSymbolProvider : INavigableSymbolSourceProvi
 
     /// <summary>
     /// The navigable symbol for a clickable tag: <see cref="Navigate"/> opens the link's URL in the default
-    /// browser and reports the "TagLink command executed" telemetry event through <see cref="TagLinkRedirect.LinkOpened"/>.
+    /// browser and reports the "Command.TagLink" telemetry event through <see cref="TagLinkRedirect.LinkOpened"/>.
     /// </summary>
     internal sealed class TagLinkNavigableSymbol : INavigableSymbol
     {

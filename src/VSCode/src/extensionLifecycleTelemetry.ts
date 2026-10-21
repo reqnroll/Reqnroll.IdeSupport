@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TelemetryEvents, TelemetryProperties, daysOfUsageEventName } from './telemetryEvents';
+import { TelemetryEvents, TelemetryProperties } from './telemetryEvents';
 
 /** Persisted per-user lifecycle state; the VS Code counterpart of VS's `ReqnrollInstallationStatus`. */
 export interface LifecycleState {
@@ -35,8 +35,8 @@ export function compareVersions(a: string, b: string): number {
 
 /**
  * Pure port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
- * `Extension loaded` on every activation, `Extension installed` on the first ever, `Extension upgraded`
- * when the version increased, and a `"{N} day usage"` heartbeat on the first activation of each new day
+ * `Lifecycle.Loaded` on every activation, `Lifecycle.Installed` on the first ever, `Lifecycle.Upgraded`
+ * when the version increased, and a `Lifecycle.DaysOfUsage` heartbeat (property `UsageDays`) on the first activation of each new day
  * (not on the install day, like VS).
  */
 export function computeLifecycle(
@@ -58,7 +58,10 @@ export function computeLifecycle(
   if (state.lastUsedDate !== today) {
     next.usageDays = state.usageDays + 1;
     next.lastUsedDate = today;
-    events.push({ eventName: daysOfUsageEventName(next.usageDays) });
+    events.push({
+      eventName: TelemetryEvents.daysOfUsage,
+      properties: { [TelemetryProperties.usageDays]: String(next.usageDays) },
+    });
   }
   if (compareVersions(state.installedVersion, currentVersion) < 0) {
     events.push({
