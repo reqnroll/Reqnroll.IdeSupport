@@ -134,9 +134,13 @@ class ReqnrollLspServerDescriptor(project: Project) :
             textDocumentCapabilities.onTypeFormatting = OnTypeFormattingCapabilities(true)
         }
 
+    // Resolved while the project is alive: the platform asks for the listener again when it stops the
+    // server during project close, by which point looking the service up throws AlreadyDisposedException.
+    private val events = project.service<ReqnrollServerEvents>()
+
     /** Reports the server's handshake completion and stop to [ReqnrollServerEvents]. */
     override val lspServerListener: LspServerListener
-        get() = project.service<ReqnrollServerEvents>()
+        get() = events
 
     /**
      * Launches the server process, reporting the attempt to [ReqnrollServerEvents]. A launch that
@@ -144,7 +148,6 @@ class ReqnrollLspServerDescriptor(project: Project) :
      * [LspServerListener.serverStopped], so the failure is reported here.
      */
     override fun startServerProcess(): OSProcessHandler {
-        val events = project.service<ReqnrollServerEvents>()
         events.serverStarting()
         try {
             return super.startServerProcess()
