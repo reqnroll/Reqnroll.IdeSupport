@@ -1,9 +1,11 @@
 package net.reqnroll.idesupport.rider.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.Lsp4jClient
+import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
 import com.intellij.platform.lsp.api.customization.LspCommandsSupport
@@ -131,8 +133,13 @@ class ReqnrollLspServerDescriptor(project: Project) :
             textDocumentCapabilities.onTypeFormatting = OnTypeFormattingCapabilities(true)
         }
 
+    /** Reports the server's handshake completion and stop to [ReqnrollServerEvents]. */
+    override val lspServerListener: LspServerListener
+        get() = project.service<ReqnrollServerEvents>()
+
     /** Resolves the bundled server executable and builds the launch command line, with the log level chosen per [resolveLogLevel]. */
     override fun createCommandLine(): GeneralCommandLine {
+        project.service<ReqnrollServerEvents>().serverStarting()
         val serverPath = try {
             ReqnrollServerPathResolver.resolve()
         } catch (ex: Exception) {
