@@ -1,4 +1,7 @@
+using MediatR;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
@@ -20,12 +23,13 @@ public class ReqnrollConfigChangedHandlerTests
     private readonly IFeatureDocumentReparser _reparser = Substitute.For<IFeatureDocumentReparser>();
     private readonly IParseCoordinator _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
 
     private static readonly DocumentUri InScopeUri = DocumentUri.FromFileSystemPath("/workspace/proj/a.feature");
     private static readonly DocumentUri OutOfScopeUri = DocumentUri.FromFileSystemPath("/workspace/other/b.feature");
 
     private ReqnrollConfigChangedHandler CreateSut() =>
-        new(_bufferService, _reparser, _parseCoordinator, _logger);
+        new(_bufferService, _reparser, _parseCoordinator, _logger, mediator: _mediator);
 
     private Task WaitForScheduledWorkAsync(DocumentUri uri) =>
         _parseCoordinator.WaitForReadyAsync(uri, CancellationToken.None);
@@ -150,5 +154,33 @@ public class ReqnrollConfigChangedHandlerTests
         // Exactly the same reparse, run twice with identical arguments -- not doubled, not
         // corrupted, not throwing on the second call.
         await _reparser.Received(2).ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>());
+    }
+
+    // A project's configuration (for example language.feature) changes how every one of its feature files
+    // parses, so the open files and the closed-file match sets are reconciled through the same pipeline a
+    // binding-registry change uses, which selects open files by owning project and rescans closed ones.
+    [Fact]
+    public async Task Handle_reconciles_the_changed_project_through_the_registry_pipeline()
+    {
+        var project = new LspReqnrollProject(
+            new ReqnrollProjectLoadedParams
+            {
+                WorkspaceFolder = "/workspace",
+                ProjectFile = "/workspace/proj/My.csproj",
+                ProjectFolder = "/workspace/proj",
+                OutputAssemblyPath = "/workspace/proj/bin/My.dll",
+                TargetFrameworkMoniker = "net10.0"
+            },
+            Substitute.For<IIdeScope>());
+        _bufferService.Update(InScopeUri, version: 1, "Feature: F\n");
+
+        await CreateSut().Handle(
+            new ReqnrollConfigChangedNotification("/workspace/proj", project), CancellationToken.None);
+
+        await _mediator.Received(1).Publish(
+            Arg.Is<BindingRegistryPatchedNotification>(n => ReferenceEquals(n.Project, project)),
+            Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 }

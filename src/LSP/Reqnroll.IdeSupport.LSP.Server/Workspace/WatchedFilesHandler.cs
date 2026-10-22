@@ -153,7 +153,7 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
         provider?.Reload();
 
         await _mediator.Publish(
-            new ReqnrollConfigChangedNotification(project.ProjectFolder), ct)
+            new ReqnrollConfigChangedNotification(project.ProjectFolder, project), ct)
             .ConfigureAwait(false);
 
         // Config change can affect discovery inputs — trigger a re-run.

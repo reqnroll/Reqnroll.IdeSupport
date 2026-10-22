@@ -38,6 +38,7 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
     private readonly IParseCoordinator _parseCoordinator;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IMediator? _mediator;
 
     /// <summary>Initializes a new instance of the <see cref="ReqnrollConfigChangedHandler"/> class.</summary>
     public ReqnrollConfigChangedHandler(
@@ -45,8 +46,10 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         IFeatureDocumentReparser reparser,
         IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IMediator? mediator = null)
     {
+        _mediator = mediator;
         _documentBufferService = documentBufferService;
         _reparser = reparser;
         _parseCoordinator = parseCoordinator;
@@ -55,8 +58,20 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
     }
 
     /// <summary>Handles an internal <see cref="ReqnrollConfigChangedNotification"/> (a <c>reqnroll.json</c> edit) by scheduling a reparse of every open feature-file buffer under the affected workspace root.</summary>
-    public Task Handle(ReqnrollConfigChangedNotification notification, CancellationToken cancellationToken)
+    public async Task Handle(ReqnrollConfigChangedNotification notification, CancellationToken cancellationToken)
     {
+        // A project's configuration decides how all of its feature files parse, including closed ones and
+        // linked ones outside the project folder. The registry pipeline already reconciles exactly that
+        // set (open files by owning project, closed files by rescan), so a project-level change goes
+        // through it instead of a second, folder-based selection.
+        if (notification.Project is { } project && _mediator is not null)
+        {
+            _logger.LogInfo($"ReqnrollConfigChanged for project '{project.ProjectName}' — reconciling its feature files.");
+            await _mediator.Publish(new BindingRegistryPatchedNotification(project), cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         // Performance Verification (Layer 4): time the reqnroll.json-change reconciliation. Now
         // measures only the (near-instant) scheduling of each reparse, not the reparses
         // themselves -- mirrors BindingRegistryChangedHandler.ReparseOpenFilesAsync's equivalent
@@ -70,7 +85,7 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         if (affectedBuffers.Count == 0)
         {
             _logger.LogVerbose($"ReqnrollConfigChanged for '{notification.WorkspaceRootPath}' — no open feature files to reparse.");
-            return Task.CompletedTask;
+            return;
         }
 
         _logger.LogInfo($"ReqnrollConfigChanged for '{notification.WorkspaceRootPath}' — scheduling reparse of {affectedBuffers.Count} feature file(s).");
@@ -82,8 +97,6 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
             var version = buffer.Version;
             _parseCoordinator.Schedule(uri, ct => _reparser.ReparseOpenDocumentAsync(uri, version, ct));
         }
-
-        return Task.CompletedTask;
     }
 
     private static bool IsUnderWorkspaceRoot(DocumentUri uri, string workspaceRootPath)

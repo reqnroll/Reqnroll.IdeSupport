@@ -111,6 +111,28 @@ public class FeatureTagIndexTests : IDisposable
     private static string FeatureWithTags(string tags)
         => $"{tags}\nFeature: F\nScenario: S\n    Given a step\n";
 
+    // ── Feature language ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Cached_counts_are_discarded_when_the_projects_feature_language_changes()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        var project = RegisterOwner(uri, _root, hasBaseline: false);
+        WriteFeature(_root, "A.feature",
+            "Fonctionnalité: F\n@wip\nScénario: S\n    Etant donné une étape\n");
+        var provider = CreateProvider();
+
+        var beforeConfig = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        File.WriteAllText(Path.Combine(_root, "reqnroll.json"), "{ \"language\": { \"feature\": \"fr\" } }");
+        ((ProjectScopeIdeSupportConfigurationProvider)project.GetIdeSupportConfigurationProvider()).Reload();
+        var afterConfig = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        beforeConfig.Select(t => t.Sample).Should().NotContain("@wip",
+            "the file is not understood under the english default");
+        afterConfig.Select(t => t.Sample).Should().Contain("@wip");
+    }
+
     // ── Disk indexing (pre-baseline fallback) ────────────────────────────────
 
     [Fact]
