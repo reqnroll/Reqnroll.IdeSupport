@@ -1,6 +1,5 @@
 ﻿#nullable disable
 using System;
-using System.Xml.XPath;
 using System.Xml.Linq;
 using System.Collections.Generic;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -8,10 +7,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.Common.Configuration;
 using System.Linq;
 using System.IO;
-using System.Collections;
 using Newtonsoft.Json;
-using System.Text.RegularExpressions;
-using Newtonsoft.Json.Linq;
 
 namespace Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
@@ -19,15 +15,15 @@ namespace Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurationProvider, IDisposable
 {
     /// <summary>File name of the modern Reqnroll JSON configuration file.</summary>
-    public const string ReqnrollJsonConfigFileName = "reqnroll.json";
+    public const string ReqnrollJsonConfigFileName = ConfigurationFiles.ReqnrollJson;
     /// <summary>File name of the legacy SpecFlow JSON configuration file.</summary>
-    public const string SpecFlowJsonConfigFileName = "specflow.json";
+    public const string SpecFlowJsonConfigFileName = ConfigurationFiles.SpecFlowJson;
     /// <summary>File name of the legacy SpecFlow XML application configuration file.</summary>
-    public const string SpecFlowAppConfigFileName = "App.config";
+    public const string SpecFlowAppConfigFileName = ConfigurationFiles.SpecFlowAppConfig;
     /// <summary>File name of the SpecSync JSON configuration file.</summary>
-    public const string SpecSyncJsonConfigFileName = "specsync.json";
+    public const string SpecSyncJsonConfigFileName = ConfigurationFiles.SpecSyncJson;
     /// <summary>File name of the legacy Deveroom JSON configuration file.</summary>
-    public const string IdeSupportConfigFileName = "deveroom.json";
+    public const string IdeSupportConfigFileName = ConfigurationFiles.IdeSupportJson;
 
     private readonly IProjectScope _projectScope;
     private ConfigCache _configCache;
@@ -83,33 +79,14 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
 
     private IEnumerable<ConfigSource> GetConfigSources()
     {
-        var jsonSource = GetProjectConfigFilePath(ReqnrollJsonConfigFileName);
-        if (jsonSource != null)
+        foreach (var group in ConfigurationFiles.Groups)
         {
-            yield return jsonSource;
+            var source = group
+                .Select(definition => GetProjectConfigFilePath(definition.FileName))
+                .FirstOrDefault(candidate => candidate != null);
+            if (source != null)
+                yield return source;
         }
-        else
-        {
-            var specFlowJsonSource = GetProjectConfigFilePath(SpecFlowJsonConfigFileName);
-            if (specFlowJsonSource != null)
-            {
-                yield return specFlowJsonSource;
-            }
-            else
-            {
-                var appConfigSource = GetProjectConfigFilePath(SpecFlowAppConfigFileName);
-                if (appConfigSource != null)
-                    yield return appConfigSource;
-            }
-        }
-
-        var specSyncConfigSource = GetProjectConfigFilePath(SpecSyncJsonConfigFileName);
-        if (specSyncConfigSource != null)
-            yield return specSyncConfigSource;
-
-        var deveroomConfigSource = GetProjectConfigFilePath(IdeSupportConfigFileName);
-        if (deveroomConfigSource != null)
-            yield return deveroomConfigSource;
     }
 
     private ConfigSource GetProjectConfigFilePath(string fileName)
@@ -160,21 +137,11 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
                 // Each source is applied to a copy and committed only once it has loaded and validated, so a
                 // failing source can neither leave partial changes behind nor invalidate the other sources.
                 var candidate = CloneConfiguration(configuration);
-                var fileName = Path.GetFileName(configSource.FilePath);
-                if (ReqnrollJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromReqnrollJsonConfig(configSource.FilePath, candidate);
-
-                if (SpecFlowAppConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromSpecFlowXmlConfig(configSource.FilePath, candidate);
-
-                if (SpecFlowJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromSpecFlowJsonConfig(configSource.FilePath, candidate);
-
-                if (SpecSyncJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromSpecSyncJsonConfig(configSource.FilePath, candidate);
-
-                if (IdeSupportConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromIdeSupportConfig(configSource.FilePath, candidate);
+                if (ConfigurationFiles.TryGetDefinition(configSource.FilePath, out var definition))
+                {
+                    Logger.LogVerbose($"Loading configuration from '{configSource.FilePath}'");
+                    new ConfigurationFileLoader(FileSystem).Update(candidate, definition, configSource.FilePath);
+                }
 
                 candidate.CheckConfiguration();
 
@@ -199,82 +166,6 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
     // round trip is a faithful deep copy; nulls are kept so that an explicitly null value survives the copy.
     private static IdeSupportConfiguration CloneConfiguration(IdeSupportConfiguration configuration) =>
         JsonConvert.DeserializeObject<IdeSupportConfiguration>(JsonConvert.SerializeObject(configuration));
-
-    private void LoadFromIdeSupportConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
-    {
-        Logger.LogVerbose($"Loading Deveroom config from '{configSourceFilePath}'");
-        var loader = IdeSupportConfigurationLoader.CreateIdeSupportJsonConfigurationLoader(FileSystem);
-        loader.Update(configuration, configSourceFilePath);
-    }
-
-    private string XPathEvaluateAttribute(XDocument doc, string xpath) => (doc.XPathEvaluate(xpath) as IEnumerable)
-        ?.OfType<XAttribute>().FirstOrDefault()?.Value;
-
-    private void LoadFromSpecFlowXmlConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
-    {
-        var fileContent = FileSystem.File.ReadAllText(configSourceFilePath);
-        var configDoc = XDocument.Parse(fileContent);
-        var featureLang = XPathEvaluateAttribute(configDoc, "/configuration/specFlow/language/@feature");
-        if (featureLang != null)
-            configuration.DefaultFeatureLanguage = featureLang;
-        var bindingCulture = XPathEvaluateAttribute(configDoc, "/configuration/specFlow/bindingCulture/@name");
-        if (bindingCulture != null)
-            configuration.ConfiguredBindingCulture = bindingCulture;
-    }
-
-    private void LoadFromReqnrollJsonConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
-    {
-        Logger.LogVerbose($"Loading configuration from '{configSourceFilePath}'");
-        var configLoader = IdeSupportConfigurationLoader.CreateReqnrollJsonConfigurationLoader(FileSystem);
-        configLoader.Update(configuration, configSourceFilePath);
-    }
-
-    private void LoadFromSpecFlowJsonConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
-    {
-        LoadFromReqnrollJsonConfig(configSourceFilePath, configuration);
-    }
-
-    private void LoadFromSpecSyncJsonConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
-    {
-        var fileContent = FileSystem.File.ReadAllText(configSourceFilePath);
-        UpdateFromSpecSyncJsonConfig(configuration, fileContent);
-    }
-
-    internal static void UpdateFromSpecSyncJsonConfig(IdeSupportConfiguration configuration, string fileContent)
-    {
-        var configDoc = JObject.Parse(fileContent);
-
-        var projectUrl = ((string) configDoc["remote"]?["projectUrl"])?.TrimEnd('/');
-        if (string.IsNullOrEmpty(projectUrl))
-            return;
-
-        var testCaseTagPrefix = (string) configDoc["synchronization"]?["testCaseTagPrefix"] ?? "tc";
-
-        var tagLinks = new List<TagLinkConfiguration>(configuration.Traceability.TagLinks);
-        AddSpecSyncTagLinkConfiguration(tagLinks, testCaseTagPrefix, projectUrl);
-
-        var linksArray = configDoc["synchronization"]?["links"] as JArray;
-        if (linksArray != null)
-            foreach (var link in linksArray)
-            {
-                var tagPrefix = (string) link["tagPrefix"];
-                if (string.IsNullOrEmpty(tagPrefix))
-                    continue;
-                AddSpecSyncTagLinkConfiguration(tagLinks, tagPrefix, projectUrl);
-            }
-
-        configuration.Traceability.TagLinks = tagLinks.ToArray();
-    }
-
-    private static void AddSpecSyncTagLinkConfiguration(List<TagLinkConfiguration> tagLinks, string tagPrefix,
-        string projectUrl)
-    {
-        tagLinks.Add(new TagLinkConfiguration
-        {
-            TagPattern = $@"{Regex.Escape(tagPrefix)}\:(?<id>\d+)",
-            UrlTemplate = projectUrl + "/_workitems/edit/{id}"
-        });
-    }
 
     /// <summary>Returns a string identifying this provider and the config sources it loaded from.</summary>
     public override string ToString() =>

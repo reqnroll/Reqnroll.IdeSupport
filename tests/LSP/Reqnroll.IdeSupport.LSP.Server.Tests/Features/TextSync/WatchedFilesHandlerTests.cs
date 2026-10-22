@@ -208,6 +208,34 @@ public class WatchedFilesHandlerTests : IDisposable
             w.GlobPattern.ToString()!.Contains("reqnroll.json"));
     }
 
+    [Theory]
+    [InlineData("specflow.json")]
+    [InlineData("App.config")]
+    [InlineData("deveroom.json")]
+    [InlineData("specsync.json")]
+    public void GetRegistrationOptions_watches_every_configuration_file_the_provider_loads(string fileName)
+    {
+        var options = CreateSut().GetRegistrationOptions(null!, null!);
+
+        options.Watchers.Should().ContainSingle(w => w.GlobPattern.ToString()!.EndsWith("/" + fileName));
+    }
+
+    [Fact]
+    public async Task Handle_reloads_and_publishes_when_a_deveroom_json_changes_the_configuration()
+    {
+        var project = MakeProject();
+        _scopeManager.GetProjectForUri(Arg.Any<DocumentUri>()).Returns(project);
+        _ = project.GetIdeSupportConfigurationProvider();
+        var configPath = Path.Combine(_projectFolder, "deveroom.json");
+        File.WriteAllText(configPath, "{ \"defaultFeatureLanguage\": \"fr\" }");
+
+        await CreateSut().Handle(MakeParams(configPath, FileChangeType.Changed), CancellationToken.None);
+
+        await _mediator.Received(1).Publish(
+            Arg.Is<ReqnrollConfigChangedNotification>(n => ReferenceEquals(n.Project, project)),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public void GetRegistrationOptions_watches_editorconfig()
     {

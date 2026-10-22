@@ -3,6 +3,7 @@
 
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using System;
+using Reqnroll.IdeSupport.Common.Configuration;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -234,12 +235,5 @@ public class ReqnrollProjectSettingsProvider
     }
 
     private static string GetConfigFileInPath(IFileSystemForIDE fileSystem, string folder)
-    {
-      return fileSystem.GetFilePathIfExists(Path.Combine(folder,
-               ProjectScopeIdeSupportConfigurationProvider.ReqnrollJsonConfigFileName)) ??
-             fileSystem.GetFilePathIfExists(Path.Combine(folder,
-               ProjectScopeIdeSupportConfigurationProvider.SpecFlowJsonConfigFileName)) ??
-             fileSystem.GetFilePathIfExists(Path.Combine(folder,
-               ProjectScopeIdeSupportConfigurationProvider.SpecFlowAppConfigFileName));
-    }
+        => ConfigurationFiles.FindPrimaryConfigFile(fileSystem, folder);
 }
