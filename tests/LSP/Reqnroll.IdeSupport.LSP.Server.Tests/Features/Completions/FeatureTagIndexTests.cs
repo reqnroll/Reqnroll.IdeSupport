@@ -281,7 +281,7 @@ public class FeatureTagIndexTests : IDisposable
         await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
 
-        _telemetry.Received(1).SendEvent(TelemetryEvents.TagIndexFirstScanCompleted, Arg.Is<Dictionary<string, object?>>(p =>
+        _telemetry.Received(1).SendEvent(TelemetryEvents.ProjectTagIndexFirstScanCompleted, Arg.Is<Dictionary<string, object?>>(p =>
             (int)p["FileCount"]! == 2 &&
             (int)p["FilesParsedFromDisk"]! == 2 &&
             (int)p["DistinctTagCount"]! == 2 &&
@@ -298,7 +298,7 @@ public class FeatureTagIndexTests : IDisposable
 
         await CreateProvider().GetTagCandidatesAsync(uri, CancellationToken.None);
 
-        _telemetry.Received(1).SendEvent(TelemetryEvents.TagIndexFirstScanCompleted, Arg.Is<Dictionary<string, object?>>(p =>
+        _telemetry.Received(1).SendEvent(TelemetryEvents.ProjectTagIndexFirstScanCompleted, Arg.Is<Dictionary<string, object?>>(p =>
             p.Values.All(v => v is int || v is long)));
     }
 
@@ -402,6 +402,6 @@ public class FeatureTagIndexTests : IDisposable
         await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
 
         _telemetry.Received(2).SendEvent(
-            TelemetryEvents.TagIndexFirstScanCompleted, Arg.Any<Dictionary<string, object?>>());
+            TelemetryEvents.ProjectTagIndexFirstScanCompleted, Arg.Any<Dictionary<string, object?>>());
     }
 }

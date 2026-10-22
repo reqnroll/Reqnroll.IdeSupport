@@ -50,7 +50,7 @@ export async function doGoToStepDefinition(client: LanguageClient): Promise<void
 
   // A genuine navigation: the server counts reqnroll/findStepDefinitions as a lookup.
   // LocationCount is the navigable rows, 0 when there is nowhere to go.
-  sendTelemetryEvent(TelemetryEvents.goToStepDefinitionCommandExecuted, {
+  sendTelemetryEvent(TelemetryEvents.commandGoToStepDefinition, {
     [TelemetryProperties.locationCount]: bindings.filter(isNavigable).length,
   });
 

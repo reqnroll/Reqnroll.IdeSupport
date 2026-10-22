@@ -29,15 +29,15 @@ public static class TelemetryProperties
     /// Project registries scanned by Find Unused Step Definitions (one per discovered project).
     /// </summary>
     public const string ScannedProjects = "ScannedProjects";
-    /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
+    /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>Lifecycle.Usage.SummaryReported</c> window.</summary>
     public const string LookupCounts = "LookupCounts";
-    /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
+    /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>Lifecycle.Usage.SummaryReported</c> window.</summary>
     public const string PassiveCounts = "PassiveCounts";
-    /// <summary>Seconds covered by a <c>FeatureUsageSummary</c> window.</summary>
+    /// <summary>Seconds covered by a <c>Lifecycle.Usage.SummaryReported</c> window.</summary>
     public const string WindowSeconds = "WindowSeconds";
     /// <summary><c>true</c> for the best-effort flush at graceful shutdown.</summary>
     public const string IsFinal = "IsFinal";
-    /// <summary>Per-<c>SessionId</c> monotonically increasing number of emitted <c>FeatureUsageSummary</c> events; a gap marks a lost flush.</summary>
+    /// <summary>Per-<c>SessionId</c> monotonically increasing number of emitted <c>Lifecycle.Usage.SummaryReported</c> events; a gap marks a lost flush.</summary>
     public const string Sequence = "Sequence";
     /// <summary>Seconds since the flush service started (≈ server uptime), the denominator for a window's counts.</summary>
     public const string SessionSeconds = "SessionSeconds";
@@ -61,7 +61,7 @@ public static class TelemetryProperties
     public const string DocumentLineBucket = "DocumentLineBucket";
     /// <summary>
     /// Event-scoped key: a class name on <c>UnhandledException</c>; on the client-originated
-    /// <c>GoToHook command executed</c> it is the <c>Command|ContextMenu|CodeLens</c> enum
+    /// <c>Command.GoToHook</c> it is the <c>Command|ContextMenu|CodeLens</c> enum
     /// (<c>GoToHookSources.PropertyName</c> in Common, mirrored in VS Code and Rider).
     /// </summary>
     /// <remarks>On <c>UnhandledException</c>: class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</remarks>

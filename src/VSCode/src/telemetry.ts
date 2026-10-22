@@ -73,7 +73,7 @@ let reporter: TelemetryReporter | undefined;
 // Usage events go through our own TelemetryLogger (created with the reporter) rather than straight
 // into `reporter.sendTelemetryEvent`. Both are VS Code TelemetryLoggers, so both honour
 // `telemetry.telemetryLevel`, but VS Code prefixes every event name with the extension id
-// (`<publisher>.<name>/`), which the other IDE clients do not do (#1256). Our logger's sender strips
+// (`<publisher>.<name>/`), which the other IDE clients do not do. Our logger's sender strips
 // that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`
 // (safe: the opt-out has already been applied by *our* logger), so one event has one name in all IDEs.
 let logger: vscode.TelemetryLogger | undefined;
@@ -82,7 +82,7 @@ let lastSendError: string | undefined;
 
 const EXTENSION_ID_PREFIX = /^[^/\s]+\.[^/\s]+\//;
 
-/** Removes the `<publisher>.<name>/` extension-id prefix VS Code adds to event names (#1256). */
+/** Removes the `<publisher>.<name>/` extension-id prefix VS Code adds to event names. */
 export function stripExtensionIdPrefix(eventName: string): string {
   return eventName.replace(EXTENSION_ID_PREFIX, '');
 }
@@ -125,7 +125,7 @@ function createUnprefixingLogger(target: TelemetryReporter): vscode.TelemetryLog
   );
 }
 
-// The server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
+// The server emits its final events (`Lifecycle.Usage.SummaryReported`, `Server.Session.Ended`) while
 // handling the LSP `shutdown` request, i.e. during `client.stop()`. VS Code disposes
 // `context.subscriptions` as soon as `deactivate()` has been *called* (it does not wait for the returned
 // promise), which would detach the notification forwarder and the reporter before those events arrive.
@@ -198,7 +198,7 @@ function disposeReporterBounded(r: TelemetryReporter): Thenable<void> {
 /**
  * Creates the shared `TelemetryReporter` if telemetry is enabled and it does not exist yet. Called by
  * `extension.ts` *before* `client.start()` so that client-originated server-lifecycle events
- * (`ServerStartFailed`) can be sent when the server never comes up, and again (as a
+ * (`Server.Process.StartFailed`) can be sent when the server never comes up, and again (as a
  * no-op) by `registerTelemetry` once it has.
  */
 export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {
@@ -294,7 +294,7 @@ function extensionVersion(): string {
 
 /**
  * Sends a client-originated telemetry event directly, for the rare case where the event describes
- * something only the client knows (e.g. `doGoToHooks.ts`'s "GoToHook command executed"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
+ * something only the client knows (e.g. `doGoToHooks.ts`'s "Command.GoToHook"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
  * the classic VS CodeLens's Details-popup prefetch, so it does not claim to). Most telemetry
  * should still be server-originated and reach Application Insights via the notification forwarder
  * in `registerTelemetry` above; reach for this only when the client itself is the source of truth.

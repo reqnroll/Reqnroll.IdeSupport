@@ -214,7 +214,7 @@ suite('clientExceptionTelemetry (#621)', () => {
       assert.strictEqual(reporter.report('Activation', new Error('same')), false);
 
       assert.strictEqual(sent.length, 1);
-      assert.strictEqual(sent[0].name, 'UnhandledException');
+      assert.strictEqual(sent[0].name, 'Error.UnhandledException');
     });
 
     test('treats a different source or message as distinct', () => {
@@ -455,7 +455,7 @@ suite('clientExceptionTelemetry (#621)', () => {
         reportClientException('Activation', new RangeError('transmission-test-1'));
 
         assert.strictEqual(calls.length, 1);
-        assert.strictEqual(calls[0].name, 'UnhandledException');
+        assert.strictEqual(calls[0].name, 'Error.UnhandledException');
         assert.strictEqual(calls[0].props.ExceptionType, 'RangeError');
         assert.strictEqual(calls[0].props.Source, 'Activation');
         assert.strictEqual(calls[0].props.ExceptionOrigin, 'Client');

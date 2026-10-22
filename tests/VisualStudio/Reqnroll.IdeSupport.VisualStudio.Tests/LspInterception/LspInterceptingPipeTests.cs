@@ -783,7 +783,7 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     public async Task A_stdin_write_failure_does_not_mark_the_connection_terminated()
     {
         // ServerTerminated == true tells LspServerConnectionService the server was *asked* to go, which
-        // suppresses the ServerExitedUnexpectedly report for a crash. A failed write is
+        // suppresses the Server.Process.ExitedUnexpectedly report for a crash. A failed write is
         // evidence of a crash, not of an orderly exit, so it must leave that flag alone.
         var serverSide = new FaultingServerPipe();
         _pipe = new LspInterceptingPipe(

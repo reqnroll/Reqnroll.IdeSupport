@@ -7,9 +7,9 @@ import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
  * Turns the Reqnroll language server's [LspServerState] transitions into the client-originated
  * server-lifecycle telemetry events, because a dead server cannot report itself:
  *
- * - `ServerStartFailed`: [LspServerState.ShutdownUnexpectedly] before the server ever reached [LspServerState.Running].
- * - `ServerExitedUnexpectedly`: [LspServerState.ShutdownUnexpectedly] after it had been running.
- * - `ServerRestarted`: a new [LspServerState.Initializing] after a failure or exit (`Reason` says which),
+ * - `Server.Process.StartFailed`: [LspServerState.ShutdownUnexpectedly] before the server ever reached [LspServerState.Running].
+ * - `Server.Process.ExitedUnexpectedly`: [LspServerState.ShutdownUnexpectedly] after it had been running.
+ * - `Server.Process.Restarted`: a new [LspServerState.Initializing] after a failure or exit (`Reason` says which),
  *   or after a normal shutdown (`SessionEnded`; the platform does not say whether the user or the IDE initiated it).
  *
  * `AttemptNumber` is the 1-based start attempt in this IDE session. Each attempt reports at most one
@@ -32,7 +32,7 @@ class ReqnrollServerLifecycleTelemetry(
                 failureReported = false
                 if (attempt > 1) {
                     send(
-                        RiderTelemetryTransmitter.SERVER_RESTARTED,
+                        RiderTelemetryTransmitter.SERVER_PROCESS_RESTARTED,
                         properties(lastFailureReason ?: RiderTelemetryTransmitter.SERVER_FAILURE_REASON_SESSION_ENDED),
                     )
                     lastFailureReason = null
@@ -45,11 +45,11 @@ class ReqnrollServerLifecycleTelemetry(
                 if (reachedRunning) {
                     val reason = RiderTelemetryTransmitter.SERVER_FAILURE_REASON_PROCESS_EXITED
                     lastFailureReason = reason
-                    send(RiderTelemetryTransmitter.SERVER_EXITED_UNEXPECTEDLY, properties(reason))
+                    send(RiderTelemetryTransmitter.SERVER_PROCESS_EXITED_UNEXPECTEDLY, properties(reason))
                 } else {
                     val reason = RiderTelemetryTransmitter.SERVER_FAILURE_REASON_START_FAILED
                     lastFailureReason = reason
-                    send(RiderTelemetryTransmitter.SERVER_START_FAILED, properties(reason))
+                    send(RiderTelemetryTransmitter.SERVER_PROCESS_START_FAILED, properties(reason))
                 }
                 reachedRunning = false
             }

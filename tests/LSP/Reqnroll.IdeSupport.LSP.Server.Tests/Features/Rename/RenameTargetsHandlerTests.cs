@@ -107,7 +107,7 @@ public class RenameTargetsHandlerTests
             CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "RenameTargets resolved",
+            "Lookup.RenameTargets",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["TargetCount"]! == 0));
     }
 

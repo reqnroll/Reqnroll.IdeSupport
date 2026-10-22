@@ -15,8 +15,8 @@ interface LifecycleStore {
 
 /**
  * Port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
- * `Extension loaded` on every start, `Extension installed` on the first ever, `Extension upgraded`
- * when the plugin version increased, and a `"{N} day usage"` heartbeat on the first start of each
+ * `Lifecycle.Extension.Loaded` on every start, `Lifecycle.Extension.Installed` on the first ever, `Lifecycle.Extension.Upgraded`
+ * when the plugin version increased, and a `Lifecycle.Usage.Recorded` heartbeat (property `UsageDays`) on the first start of each
  * new local day (not on the install day, like VS). Pure: store and sink are injected.
  */
 class ExtensionLifecycleTelemetry(
@@ -24,11 +24,11 @@ class ExtensionLifecycleTelemetry(
     private val send: (eventName: String, properties: Map<String, Any?>) -> Unit,
 ) {
     fun report(today: LocalDate, currentVersion: String) {
-        send(RiderTelemetryTransmitter.EXTENSION_LOADED, emptyMap())
+        send(RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_LOADED, emptyMap())
 
         val installedVersion = store.get(INSTALLED_VERSION_KEY)
         if (installedVersion.isNullOrEmpty()) {
-            send(RiderTelemetryTransmitter.EXTENSION_INSTALLED, emptyMap())
+            send(RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_INSTALLED, emptyMap())
             store.set(INSTALLED_VERSION_KEY, currentVersion)
             store.set(LAST_USED_DATE_KEY, today.toString())
             store.set(USAGE_DAYS_KEY, "0")
@@ -39,12 +39,12 @@ class ExtensionLifecycleTelemetry(
             val usageDays = (store.get(USAGE_DAYS_KEY)?.toIntOrNull() ?: 0) + 1
             store.set(USAGE_DAYS_KEY, usageDays.toString())
             store.set(LAST_USED_DATE_KEY, today.toString())
-            send(daysOfUsageEventName(usageDays), emptyMap())
+            send(RiderTelemetryTransmitter.LIFECYCLE_USAGE_RECORDED, mapOf(RiderTelemetryTransmitter.USAGE_DAYS_PROPERTY to usageDays))
         }
 
         if (compareVersions(installedVersion, currentVersion) < 0) {
             send(
-                RiderTelemetryTransmitter.EXTENSION_UPGRADED,
+                RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_UPGRADED,
                 mapOf(RiderTelemetryTransmitter.OLD_EXTENSION_VERSION_PROPERTY to installedVersion),
             )
             store.set(INSTALLED_VERSION_KEY, currentVersion)
@@ -55,9 +55,6 @@ class ExtensionLifecycleTelemetry(
         internal const val INSTALLED_VERSION_KEY = "net.reqnroll.idesupport.telemetry.installedVersion"
         internal const val LAST_USED_DATE_KEY = "net.reqnroll.idesupport.telemetry.lastUsedDate"
         internal const val USAGE_DAYS_KEY = "net.reqnroll.idesupport.telemetry.usageDays"
-
-        /** Mirrors `TelemetryEvents.DaysOfUsageEventNameFormat` (`"{0} day usage"`). */
-        internal fun daysOfUsageEventName(usageDays: Int) = "$usageDays day usage"
 
         /** Numeric dotted-version comparison; non-numeric segments count as 0. */
         internal fun compareVersions(a: String, b: String): Int {

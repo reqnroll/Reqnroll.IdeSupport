@@ -45,7 +45,10 @@ suite('ServerLifecycleTelemetry', () => {
     move(State.Starting);
     move(State.Stopped);
     assert.deepStrictEqual(sent, [
-      { eventName: 'ServerStartFailed', properties: { Reason: 'StartFailed', AttemptNumber: 1 } },
+      {
+        eventName: 'Server.Process.StartFailed',
+        properties: { Reason: 'StartFailed', AttemptNumber: 1 },
+      },
     ]);
   });
 
@@ -61,7 +64,10 @@ suite('ServerLifecycleTelemetry', () => {
     const { sut, sent } = setup();
     sut.reportStartRejected();
     assert.deepStrictEqual(sent, [
-      { eventName: 'ServerStartFailed', properties: { Reason: 'StartFailed', AttemptNumber: 1 } },
+      {
+        eventName: 'Server.Process.StartFailed',
+        properties: { Reason: 'StartFailed', AttemptNumber: 1 },
+      },
     ]);
   });
 
@@ -74,10 +80,13 @@ suite('ServerLifecycleTelemetry', () => {
     move(State.Running);
     assert.deepStrictEqual(sent, [
       {
-        eventName: 'ServerExitedUnexpectedly',
+        eventName: 'Server.Process.ExitedUnexpectedly',
         properties: { Reason: 'ProcessExited', AttemptNumber: 1 },
       },
-      { eventName: 'ServerRestarted', properties: { Reason: 'ProcessExited', AttemptNumber: 2 } },
+      {
+        eventName: 'Server.Process.Restarted',
+        properties: { Reason: 'ProcessExited', AttemptNumber: 2 },
+      },
     ]);
   });
 
@@ -90,9 +99,9 @@ suite('ServerLifecycleTelemetry', () => {
     assert.deepStrictEqual(
       sent.map((s) => [s.eventName, s.properties.AttemptNumber]),
       [
-        ['ServerStartFailed', 1],
-        ['ServerRestarted', 2],
-        ['ServerStartFailed', 2],
+        ['Server.Process.StartFailed', 1],
+        ['Server.Process.Restarted', 2],
+        ['Server.Process.StartFailed', 2],
       ],
     );
   });

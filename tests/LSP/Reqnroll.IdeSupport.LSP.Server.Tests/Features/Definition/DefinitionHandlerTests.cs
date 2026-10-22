@@ -550,7 +550,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitions command executed",
+            "Lookup.FindStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 1
                 && (string)p["Status"]! == "Bound"
@@ -572,7 +572,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitions command executed",
+            "Lookup.FindStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 0 && (string)p["Status"]! == "Unresolved"));
     }
@@ -589,7 +589,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitions command executed",
+            "Lookup.FindStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 2 && (string)p["Status"]! == "Ambiguous"));
     }
@@ -608,7 +608,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitions command executed",
+            "Lookup.FindStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 0 && (string)p["Status"]! == "Undefined"));
     }
@@ -640,13 +640,13 @@ public class DefinitionHandlerTests
         await CreateSutWithTelemetry(telemetry, new ClientIdeContext("vscode")).Handle(
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
-        telemetry.Received(1).SendEvent("FindStepDefinitions command executed", Arg.Any<Dictionary<string, object?>>());
+        telemetry.Received(1).SendEvent("Lookup.FindStepDefinitions", Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]
     public async Task Handle_cursor_not_on_step_emits_no_telemetry()
     {
-        // A guard rejection (no step resolved at all) is not a "command executed" -- mirrors
+        // A guard rejection (no step resolved at all) is not an executed command -- mirrors
         // ReferencesHandler/FindStepUsagesHandler not telemetering their "not a binding" case.
         _matchService.Store(new FeatureBindingMatchSet(
             FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, Array.Empty<StepBindingMatch>()));

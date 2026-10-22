@@ -15,7 +15,10 @@ suite('extensionLifecycleTelemetry (#875)', () => {
   suite('computeLifecycle', () => {
     test('first activation sends loaded + installed and seeds state without a usage day', () => {
       const { state, events } = computeLifecycle({ usageDays: 0 }, '2026-10-03', '1.2.0');
-      assert.deepStrictEqual(names(events), ['Extension loaded', 'Extension installed']);
+      assert.deepStrictEqual(names(events), [
+        'Lifecycle.Extension.Loaded',
+        'Lifecycle.Extension.Installed',
+      ]);
       assert.deepStrictEqual(state, {
         installedVersion: '1.2.0',
         lastUsedDate: '2026-10-03',
@@ -30,18 +33,22 @@ suite('extensionLifecycleTelemetry (#875)', () => {
         usageDays: 4,
       };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.2.0');
-      assert.deepStrictEqual(names(events), ['Extension loaded']);
+      assert.deepStrictEqual(names(events), ['Lifecycle.Extension.Loaded']);
       assert.deepStrictEqual(state, stored);
     });
 
-    test('a new day increments usage days and names the count in the event', () => {
+    test('a new day increments usage days and carries the count as UsageDays', () => {
       const stored: LifecycleState = {
         installedVersion: '1.2.0',
         lastUsedDate: '2026-10-02',
         usageDays: 6,
       };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.2.0');
-      assert.deepStrictEqual(names(events), ['Extension loaded', '7 day usage']);
+      assert.deepStrictEqual(names(events), [
+        'Lifecycle.Extension.Loaded',
+        'Lifecycle.Usage.Recorded',
+      ]);
+      assert.deepStrictEqual(events[1].properties, { UsageDays: '7' });
       assert.strictEqual(state.usageDays, 7);
       assert.strictEqual(state.lastUsedDate, '2026-10-03');
     });
@@ -53,7 +60,10 @@ suite('extensionLifecycleTelemetry (#875)', () => {
         usageDays: 2,
       };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.10.0');
-      assert.deepStrictEqual(names(events), ['Extension loaded', 'Extension upgraded']);
+      assert.deepStrictEqual(names(events), [
+        'Lifecycle.Extension.Loaded',
+        'Lifecycle.Extension.Upgraded',
+      ]);
       assert.deepStrictEqual(events[1].properties, { OldExtensionVersion: '1.2.0' });
       assert.strictEqual(state.installedVersion, '1.10.0');
     });
@@ -65,7 +75,7 @@ suite('extensionLifecycleTelemetry (#875)', () => {
         usageDays: 2,
       };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.2.0');
-      assert.deepStrictEqual(names(events), ['Extension loaded']);
+      assert.deepStrictEqual(names(events), ['Lifecycle.Extension.Loaded']);
       assert.strictEqual(state.installedVersion, '1.3.0');
     });
   });
@@ -103,7 +113,7 @@ suite('extensionLifecycleTelemetry (#875)', () => {
       const { context, store } = fakeContext('1.2.0');
       const sent: string[] = [];
       await reportExtensionLifecycle(context, (name) => sent.push(name), new Date(2026, 9, 3));
-      assert.deepStrictEqual(sent, ['Extension loaded', 'Extension installed']);
+      assert.deepStrictEqual(sent, ['Lifecycle.Extension.Loaded', 'Lifecycle.Extension.Installed']);
       assert.deepStrictEqual(store.get(LIFECYCLE_STATE_KEY), {
         installedVersion: '1.2.0',
         lastUsedDate: '2026-10-03',

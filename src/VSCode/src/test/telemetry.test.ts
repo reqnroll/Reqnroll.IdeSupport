@@ -134,23 +134,24 @@ suite('telemetry', () => {
   // The activated extension owns a module-level reporter (ensureTelemetryReporter); start clean.
   setup(() => resetTelemetryReporterForTests());
 
-  suite('event names carry no extension-id prefix (#1256)', () => {
+  suite('event names carry no extension-id prefix', () => {
     test('stripExtensionIdPrefix removes a <publisher>.<name>/ prefix and nothing else', () => {
       assert.strictEqual(
         stripExtensionIdPrefix('Reqnroll.reqnroll-ide-support-vscode/Command.FindStepDefinitions'),
         'Command.FindStepDefinitions',
       );
       assert.strictEqual(
-        stripExtensionIdPrefix(
-          'Reqnroll.reqnroll-ide-support/FindStepDefinitions command executed',
-        ),
-        'FindStepDefinitions command executed',
+        stripExtensionIdPrefix('Reqnroll.reqnroll-ide-support/Lookup.FindStepDefinitions'),
+        'Lookup.FindStepDefinitions',
       );
       assert.strictEqual(
         stripExtensionIdPrefix('Command.FindStepDefinitions'),
         'Command.FindStepDefinitions',
       );
-      assert.strictEqual(stripExtensionIdPrefix('Server.StartFailed'), 'Server.StartFailed');
+      assert.strictEqual(
+        stripExtensionIdPrefix('Server.Process.StartFailed'),
+        'Server.Process.StartFailed',
+      );
     });
 
     test('an event reaches the reporter under its own name, whatever prefix the host adds', async () => {
@@ -196,7 +197,7 @@ suite('telemetry', () => {
 
       await withStubbedSendTelemetryEvent(context, (calls) => {
         registerTelemetry(client, context);
-        sendTelemetryEvent('GoToHook command executed');
+        sendTelemetryEvent('Command.GoToHook');
 
         assert.strictEqual(calls[0].properties?.IdeClient, 'vscode');
         assert.strictEqual(calls[0].properties?.Ide, 'Visual Studio Code');
@@ -211,12 +212,15 @@ suite('telemetry', () => {
 
       await withStubbedSendTelemetryEvent(context, (calls) => {
         ensureTelemetryReporter(context);
-        sendTelemetryEvent('ServerStartFailed', { Reason: 'StartFailed', AttemptNumber: 1 });
+        sendTelemetryEvent('Server.Process.StartFailed', {
+          Reason: 'StartFailed',
+          AttemptNumber: 1,
+        });
         registerTelemetry(client, context);
         ensureTelemetryReporter(context);
 
         assert.strictEqual(calls.length, 1);
-        assert.strictEqual(calls[0].eventName, 'ServerStartFailed');
+        assert.strictEqual(calls[0].eventName, 'Server.Process.StartFailed');
         assert.deepStrictEqual(withoutIdentity(calls[0].properties), {
           Reason: 'StartFailed',
           AttemptNumber: '1',
@@ -273,10 +277,10 @@ suite('telemetry', () => {
         deferTelemetryTeardownUntil(stopping);
         for (const sub of context.subscriptions) void sub.dispose();
 
-        fire({ eventName: 'ServerSessionEnded', properties: { SessionSeconds: 5 } });
+        fire({ eventName: 'Server.Session.Ended', properties: { SessionSeconds: 5 } });
         assert.deepStrictEqual(
           calls.map((c) => c.eventName),
-          ['ServerSessionEnded'],
+          ['Server.Session.Ended'],
         );
 
         releaseStop();
@@ -285,7 +289,7 @@ suite('telemetry', () => {
         fire({ eventName: 'AfterStop' });
         assert.deepStrictEqual(
           calls.map((c) => c.eventName),
-          ['ServerSessionEnded'],
+          ['Server.Session.Ended'],
           'the forwarder is detached once stop() has settled',
         );
       });
@@ -378,7 +382,7 @@ suite('telemetry', () => {
       await withStubbedSendTelemetryEvent(context, (calls) => {
         registerTelemetry(client, context);
         fire({
-          eventName: 'FeatureUsageSummary',
+          eventName: 'Lifecycle.Usage.SummaryReported',
           properties: { LookupCounts: lookupCounts, Sequence: 2 },
         });
 

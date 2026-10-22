@@ -70,7 +70,7 @@ public sealed class RenameTargetsHandler
         // picker UI is actually triggered (TargetCount > 1) versus a rename resolving
         // unambiguously (TargetCount <= 1) -- independent of whether the eventual rename itself
         // (see RenameHandler.SendRenameTelemetry) succeeds.
-        _telemetryService?.SendEvent(TelemetryEvents.RenameTargetsResolved, new()
+        _telemetryService?.SendEvent(TelemetryEvents.LookupRenameTargets, new()
         {
             ["TargetCount"] = response?.Targets.Count ?? 0,
         });

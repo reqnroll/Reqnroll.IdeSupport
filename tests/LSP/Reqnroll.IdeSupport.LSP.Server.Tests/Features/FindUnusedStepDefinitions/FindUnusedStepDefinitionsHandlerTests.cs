@@ -179,7 +179,7 @@ public class FindUnusedStepDefinitionsHandlerTests
         await CreateSutWithTelemetry(telemetry).HandleAsync(CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindUnusedStepDefinitions command executed",
+            "Command.FindUnusedStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(d =>
                 1.Equals(d["UnusedStepDefinitions"]) &&
                 1.Equals(d["ScannedProjects"]) &&
@@ -210,7 +210,7 @@ public class FindUnusedStepDefinitionsHandlerTests
         await CreateSutWithTelemetry(telemetry).HandleAsync(CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindUnusedStepDefinitions command executed",
+            "Command.FindUnusedStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["TotalStepDefinitions"]) && 2.Equals(d["ScannedProjects"])));
     }
 
@@ -232,7 +232,7 @@ public class FindUnusedStepDefinitionsHandlerTests
         await CreateSutWithTelemetry(telemetry).HandleAsync(CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindUnusedStepDefinitions command executed",
+            "Command.FindUnusedStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["ScannedProjects"])));
     }
 
@@ -253,7 +253,7 @@ public class FindUnusedStepDefinitionsHandlerTests
         await CreateSutWithTelemetry(telemetry).HandleAsync(cancelled);
 
         telemetry.Received(1).SendEvent(
-            "FindUnusedStepDefinitions command executed",
+            "Command.FindUnusedStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsCancellationRequested"])));
     }
 }

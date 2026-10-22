@@ -171,7 +171,7 @@ internal sealed class GoToHooksCommand : Command
 }
 
 /// <summary>
-/// Builds the client-originated "GoToHook command executed" event. Kept on a plain
+/// Builds the client-originated "Command.GoToHook" event. Kept on a plain
 /// static class for the same unit-testability reason as <see cref="HookLocationsMapper"/>.
 /// </summary>
 /// <remarks>
@@ -183,7 +183,7 @@ internal sealed class GoToHooksCommand : Command
 internal static class GoToHookTelemetry
 {
     public static GenericEvent CreateEvent(string source) =>
-        new(TelemetryEvents.GoToHookCommandExecuted,
+        new(TelemetryEvents.CommandGoToHook,
             [new KeyValuePair<string, object>(GoToHookSources.PropertyName, source)]);
 }
 

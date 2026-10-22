@@ -147,7 +147,7 @@ public class FindStepDefinitionsHandlerTests
         await CreateSut(telemetry).HandleAsync(RequestAt(2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitions command executed",
+            "Lookup.FindStepDefinitions",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 1
                 && (string)p["Status"]! == "Ambiguous"));
@@ -161,6 +161,6 @@ public class FindStepDefinitionsHandlerTests
 
         await CreateSut(telemetry).HandleAsync(RequestAt(2, 10), CancellationToken.None);
 
-        telemetry.DidNotReceive().SendEvent("GoToStepDefinition command executed", Arg.Any<Dictionary<string, object?>>());
+        telemetry.DidNotReceive().SendEvent("Command.GoToStepDefinition", Arg.Any<Dictionary<string, object?>>());
     }
 }

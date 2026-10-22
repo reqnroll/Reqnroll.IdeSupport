@@ -179,7 +179,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var defineActionsOffered = actions.Count(isDefineAction.Contains);
         if (defineActionsOffered > 0)
         {
-            _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandOffered, new()
+            _telemetryService?.SendEvent(TelemetryEvents.CodeActionDefineStepsOffered, new()
             {
                 ["UndefinedStepCount"] = matchSet.Undefined.Count(),
                 ["ActionsOffered"] = defineActionsOffered,
@@ -189,7 +189,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var insertKeywordActionsOffered = actions.Count(isInsertKeywordAction.Contains);
         if (insertKeywordActionsOffered > 0)
         {
-            _telemetryService?.SendEvent(TelemetryEvents.InsertKeywordCommandOffered, new()
+            _telemetryService?.SendEvent(TelemetryEvents.CodeActionInsertKeywordOffered, new()
             {
                 ["ActionsOffered"] = insertKeywordActionsOffered,
             });

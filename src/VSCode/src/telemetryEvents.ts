@@ -10,31 +10,28 @@
  */
 export const TelemetryEvents = {
   /** A genuine "Go to Step Definition" navigation via `doGoToStepDefinition`; `LocationCount`. F12/Ctrl+click use `textDocument/definition`, which also fires on hover, so they are not reported (the server counts them as lookups). */
-  goToStepDefinitionCommandExecuted: 'GoToStepDefinition command executed',
+  commandGoToStepDefinition: 'Command.GoToStepDefinition',
   /** A genuine "Go to Hooks" navigation via `doGoToHooks` — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
-  goToHookCommandExecuted: 'GoToHook command executed',
+  commandGoToHook: 'Command.GoToHook',
   /** A clickable tag's link was followed, via `openTagLink`. No properties: the URL and tag text are never sent. */
-  tagLinkCommandExecuted: 'TagLink command executed',
+  commandTagLink: 'Command.TagLink',
   /** The language server failed to start or complete its handshake. `Reason`, `AttemptNumber`. */
-  serverStartFailed: 'ServerStartFailed',
+  serverProcessStartFailed: 'Server.Process.StartFailed',
   /** A running language server stopped without the client asking it to. `Reason`, `AttemptNumber`. */
-  serverExitedUnexpectedly: 'ServerExitedUnexpectedly',
+  serverProcessExitedUnexpectedly: 'Server.Process.ExitedUnexpectedly',
   /** The client started the language server again after a failure or exit. `Reason`, `AttemptNumber`. */
-  serverRestarted: 'ServerRestarted',
+  serverProcessRestarted: 'Server.Process.Restarted',
   /** An exception thrown in this extension's own code: the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
-  unhandledException: 'UnhandledException',
-  /** Extension activated (VS's `Extension loaded`). */
-  extensionLoaded: 'Extension loaded',
+  errorUnhandledException: 'Error.UnhandledException',
+  /** Extension activated (VS's `Lifecycle.Extension.Loaded`). */
+  lifecycleExtensionLoaded: 'Lifecycle.Extension.Loaded',
   /** First activation ever for this user. */
-  extensionInstalled: 'Extension installed',
+  lifecycleExtensionInstalled: 'Lifecycle.Extension.Installed',
   /** First activation after the version increased. `OldExtensionVersion`. */
-  extensionUpgraded: 'Extension upgraded',
+  lifecycleExtensionUpgraded: 'Lifecycle.Extension.Upgraded',
+  /** Daily-active heartbeat on the first activation of each new day after install. `UsageDays`. */
+  lifecycleUsageRecorded: 'Lifecycle.Usage.Recorded',
 } as const;
-
-/** Daily-active heartbeat name; mirrors `TelemetryEvents.DaysOfUsageEventNameFormat` (`"{0} day usage"`). */
-export function daysOfUsageEventName(usageDays: number): string {
-  return `${usageDays} day usage`;
-}
 
 /**
  * Closed set of `Reason` values for the server-lifecycle events; mirrors `ServerFailureReason` in
@@ -53,19 +50,21 @@ export const ServerFailureReason = {
  */
 export const TelemetryProperties = {
   /**
-   * Event-scoped key: on "GoToHook command executed" it is the enum below; the server's
+   * Event-scoped key: on "Command.GoToHook" it is the enum below; the server's
    * `TelemetryProperties.Source` (same literal) is a class name on `UnhandledException`. Keep the
    * literal in step with `GoToHookSources.PropertyName` (C#) and Rider's `GO_TO_HOOK_SOURCE_PROPERTY`.
    * How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}.
    */
   source: 'Source',
-  /** On "GoToStepDefinition command executed": navigable bindings offered (0 when there was nowhere to go); same key as VS. */
+  /** On "Command.GoToStepDefinition": navigable bindings offered (0 when there was nowhere to go); same key as VS. */
   locationCount: 'LocationCount',
-  /** On "Extension upgraded": the version the user upgraded from (same key as VS). */
+  /** On "Lifecycle.Extension.Upgraded": the version the user upgraded from (same key as VS). */
   oldExtensionVersion: 'OldExtensionVersion',
+  /** On "Lifecycle.Usage.Recorded": the running count of days of use (same key as VS). */
+  usageDays: 'UsageDays',
 } as const;
 
-/** Closed set of `Source` values on "GoToHook command executed"; identical in VS, VS Code and Rider. */
+/** Closed set of `Source` values on "Command.GoToHook"; identical in VS, VS Code and Rider. */
 export const GoToHookSource = {
   /** Command palette, keybinding or menu command with no editor-menu context. */
   command: 'Command',

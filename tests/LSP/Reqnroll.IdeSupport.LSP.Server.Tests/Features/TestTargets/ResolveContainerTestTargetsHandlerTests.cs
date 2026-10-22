@@ -206,7 +206,7 @@ public class ResolveContainerTestTargetsHandlerTests
             RequestAt(FeatureUri, 0, 0, 4, 0), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "ResolveContainerTestTargets command executed",
+            "Lookup.ResolveContainerTestTargets",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["TargetCount"]! == 0 && (string)p["Kind"]! == "Feature"));
     }
 }

@@ -2,7 +2,7 @@ using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
-/// <summary>How a counted feature is triggered; reported in separate <c>FeatureUsageSummary</c> properties.</summary>
+/// <summary>How a counted feature is triggered; reported in separate <c>Lifecycle.Usage.SummaryReported</c> properties.</summary>
 public enum FeatureUsageKind
 {
     /// <summary>Requested by the editor on a user gesture or typing (completion, lightbulb evaluation).</summary>

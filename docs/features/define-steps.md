@@ -44,11 +44,11 @@ sequenceDiagram
     H->>S: build skeletons for undefined steps
     S-->>H: snippets rendered into create-file or append edits
     H-->>IDE: CodeAction[] (WorkspaceEdit + reqnroll.defineStepsTriggered [fileUri])
-    H-)G: telemetry "DefineSteps command offered"
+    H-)G: telemetry "CodeAction.DefineSteps.Offered"
     U->>IDE: picks an action
     IDE->>IDE: apply WorkspaceEdit (create or append to binding .cs)
     IDE->>D: workspace/executeCommand reqnroll.defineStepsTriggered
-    D-)G: telemetry "DefineSteps command executed"
+    D-)G: telemetry "CodeAction.DefineSteps.Executed"
     opt VS Code
         D->>IDE: window/showDocument (reveal the file)
     end
@@ -87,8 +87,8 @@ sequenceDiagram
 - **Reveal the file.** For clients with `HonorsShowDocumentRequests` the server uses `window/showDocument`. Clients that do
   not run `vscode.open` locally would forward it to the server, where it has no handler, so a code action must not carry
   only that command.
-- **Telemetry.** `DefineSteps command offered` (each time the action is offered, not a count of lightbulb opens, since
-  Visual Studio and Rider may request code actions on every caret move) and `DefineSteps command executed` (no properties).
+- **Telemetry.** `CodeAction.DefineSteps.Offered` (each time the action is offered, not a count of lightbulb opens, since
+  Visual Studio and Rider may request code actions on every caret move) and `CodeAction.DefineSteps.Executed` (no properties).
   See [../Telemetry-Events-Inventory.md](../Telemetry-Events-Inventory.md).
 - **Expression escaping.** Generated bindings escape special characters for the chosen style and for the C# string
   literal; async style files import `System.Threading.Tasks` when the project has implicit usings disabled.

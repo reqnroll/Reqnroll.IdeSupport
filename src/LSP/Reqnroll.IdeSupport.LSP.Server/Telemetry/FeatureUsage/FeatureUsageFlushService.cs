@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 /// <see cref="ResolveInterval"/> from <see cref="FlushIntervalEnvVar"/> (seconds) and the
 /// <see cref="EnabledByDefault"/>/<see cref="DefaultInterval"/> constants (on, every 10 minutes, unless
 /// overridden); a <c>null</c> interval disables the periodic flush entirely — counting stays in-memory only and no
-/// <c>FeatureUsageSummary</c> event is ever sent (counting
+/// <c>Lifecycle.Usage.SummaryReported</c> event is ever sent (counting
 /// itself is a few <c>Interlocked</c> adds and stays always-on).
 /// </summary>
 /// <remarks>
@@ -168,7 +168,7 @@ public sealed class FeatureUsageFlushService : IFeatureUsageFlushService
         if (lookup is not null) properties[TelemetryProperties.LookupCounts] = lookup;
         if (passive is not null) properties[TelemetryProperties.PassiveCounts] = passive;
 
-        _telemetry?.SendEvent(TelemetryEvents.FeatureUsageSummary, properties);
+        _telemetry?.SendEvent(TelemetryEvents.LifecycleUsageSummaryReported, properties);
     }
 
     /// <summary>

@@ -235,7 +235,7 @@ public class StepReferencesHandlerTests
             RequestAt(CsUri, 9, 0), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["UsagesCount"]! == 0 && (string)p["Protocol"]! == "textDocument/references"
                 && (int)p["FileCount"]! == 0 && p["DurationBucket"] is string));
@@ -253,7 +253,7 @@ public class StepReferencesHandlerTests
             RequestAt(CsUri, 9, 0), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["UsagesCount"]! == 3 && (int)p["FileCount"]! == 2));
     }
 
@@ -272,7 +272,7 @@ public class StepReferencesHandlerTests
         // directly comparable instead of the custom-request path silently being the only one
         // with a usage-count signal.
         telemetry.Received(1).SendEvent(
-            "FindStepDefinitionUsages command executed",
+            "Command.FindStepDefinitionUsages",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["UsagesCount"]! == 1 && (string)p["Protocol"]! == "textDocument/references"
                 && (int)p["FileCount"]! == 1 && p["DurationBucket"] is string));

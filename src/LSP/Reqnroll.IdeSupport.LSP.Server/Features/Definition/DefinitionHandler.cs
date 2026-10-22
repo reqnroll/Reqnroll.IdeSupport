@@ -97,7 +97,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         // LocationCount is 0 for the undefined/ambiguous/unresolved cases below.
         if (_clientIde?.Behaviours.NavigatesStepsViaFindStepDefinitions != true)
         {
-            _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionsCommandExecuted, new()
+            _telemetryService?.SendEvent(TelemetryEvents.LookupFindStepDefinitions, new()
             {
                 ["LocationCount"] = locations.Length,
                 [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, locations.Length),

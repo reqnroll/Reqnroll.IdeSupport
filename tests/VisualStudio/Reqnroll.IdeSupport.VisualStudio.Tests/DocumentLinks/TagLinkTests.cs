@@ -50,7 +50,7 @@ public class TagLinkTests
     {
         var evt = TagLinkTelemetry.CreateEvent();
 
-        evt.EventName.Should().Be("TagLink command executed");
+        evt.EventName.Should().Be("Command.TagLink");
         evt.Properties.Should().BeEmpty();
     }
 

@@ -29,7 +29,7 @@ internal sealed class GoToStepDefinitionPresenter
     /// <summary>
     /// Creates the presenter over the definition service and the shared step-definitions renderer.
     /// <paramref name="goToDefinitionRun"/> is called with the navigable row count each time the user runs
-    /// Go To Definition; the extension turns it into the "GoToStepDefinition command executed" event.
+    /// Go To Definition; the extension turns it into the "Command.GoToStepDefinition" event.
     /// </summary>
     public GoToStepDefinitionPresenter(
         FindStepDefinitionsService service,

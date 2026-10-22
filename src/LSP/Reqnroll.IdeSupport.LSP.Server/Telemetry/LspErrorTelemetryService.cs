@@ -87,7 +87,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
         if (ResolveStackFramesOnce(exception, captured) is { } stackFrames)
             properties[TelemetryProperties.StackFrames] = stackFrames;
 
-        _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
+        _lspTelemetryService.SendEvent(TelemetryEvents.ErrorUnhandledException, properties);
     }
 
     /// <summary>
@@ -123,7 +123,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     /// <summary>No-op: the LSP server does not track project-template-wizard-started telemetry.</summary>
     public void MonitorProjectTemplateWizardStarted() { }
     /// <summary>No-op: the LSP server does not track project-template-wizard-completed telemetry.</summary>
-    public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework, bool addFluentAssertions) { }
+    public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework) { }
     /// <summary>No-op: the LSP server does not track link-click telemetry.</summary>
     public void MonitorLinkClicked(string source, string url, Dictionary<string, object> additionalProps = null) { }
     /// <summary>No-op: the LSP server does not track upgrade-dialog-dismissed telemetry.</summary>

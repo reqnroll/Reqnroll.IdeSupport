@@ -121,8 +121,8 @@ public class Program
             // which would drop the telemetry/event notification.
             using var usageFlushOnShutdown = FeatureUsageFlushService.FlushOnShutdown(usageFlushService, server.Shutdown);
 
-            // ServerSessionEnded, subscribed after the flush above so the final
-            // FeatureUsageSummary precedes it. Once-only, so the post-exit fallback below cannot double-send.
+            // Server.Session.Ended, subscribed after the flush above so the final
+            // Lifecycle.Usage.SummaryReported precedes it. Once-only, so the post-exit fallback below cannot double-send.
             var sessionTelemetry = server.Services.GetRequiredService<ServerSessionTelemetry>();
             using var sessionEndedOnShutdown = sessionTelemetry.EndOnShutdown(server.Shutdown);
 

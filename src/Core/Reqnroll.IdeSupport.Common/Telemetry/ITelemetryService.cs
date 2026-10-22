@@ -14,8 +14,8 @@ public interface ITelemetryService : IErrorTelemetryService
     /// <summary>Records that a project system was opened.</summary>
     void MonitorOpenProjectSystem(IIdeScope ideScope);
     // MonitorOpenProject(ProjectSettings, int?) — retired: the "Project loaded" event it sent
-    // duplicated the LSP server's "OpenProject command executed" (which carries FeatureFileCount) and
-    // "ReqnrollDiscoveryExecuted" / "ProjectCharacteristics" events, which are identical across IDEs.
+    // duplicated the LSP server's "Project.Opened" (which carries FeatureFileCount) and
+    // "Project.Discovery.Executed" / "Project.Characteristics.Reported" events, which are identical across IDEs.
     /// <summary>Records that a feature file was opened.</summary>
     void MonitorOpenFeatureFile(ProjectSettings projectSettings);
     // MonitorParserParse(ProjectSettings, Dictionary<string, object>) — retired, not just unwired:
@@ -58,8 +58,7 @@ public interface ITelemetryService : IErrorTelemetryService
     void MonitorProjectTemplateWizardStarted();
 
     /// <summary>Records that the "add new Reqnroll project" wizard completed with the given choices.</summary>
-    void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework,
-        bool addFluentAssertions);
+    void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework);
 
     //void MonitorNotificationShown(NotificationData notification);
     //void MonitorNotificationDismissed(NotificationData notification);

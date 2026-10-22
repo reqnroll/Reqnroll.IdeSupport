@@ -68,7 +68,7 @@ public sealed class FindUnusedStepDefinitionsHandler
             StepDefinitionType = StepDefinitionItem.ToWireType(u.StepDefinitionType),
         }).ToList();
 
-        _telemetryService?.SendEvent(TelemetryEvents.FindUnusedStepDefinitionsCommandExecuted, new()
+        _telemetryService?.SendEvent(TelemetryEvents.CommandFindUnusedStepDefinitions, new()
         {
             ["UnusedStepDefinitions"] = items.Count,
             [TelemetryProperties.ScannedProjects] = allRegistries.Count,

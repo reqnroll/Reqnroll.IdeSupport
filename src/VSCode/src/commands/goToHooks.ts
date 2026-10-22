@@ -71,7 +71,7 @@ export async function doGoToHooks(
   // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
   // caller and every invocation (palette, keybinding, or a lens click) really is one.
   // `source` is mandatory: every caller states how the navigation started (see sourceForArgs).
-  sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted, {
+  sendTelemetryEvent(TelemetryEvents.commandGoToHook, {
     [TelemetryProperties.source]: source,
   });
 

@@ -511,7 +511,7 @@ public class FindHooksHandlerTests
             RequestAt(FeatureUri, 1, 4), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "FindHooks command executed",
+            "Lookup.FindHooks",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["HookCount"]! == result.Hooks.Count && result.Hooks.Count > 0));
     }
 }

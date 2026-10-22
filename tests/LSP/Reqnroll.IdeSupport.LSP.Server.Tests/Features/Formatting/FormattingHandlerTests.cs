@@ -65,7 +65,7 @@ public class FormattingHandlerTests
         exception.Which.Message.Should().Contain("not open");
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (bool)p["IsSelectionFormatting"]! == false
                 && (bool)p["Erroneous"]! == true
@@ -87,7 +87,7 @@ public class FormattingHandlerTests
         exception.Which.Message.Should().Contain("no Feature could be parsed");
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (bool)p["IsSelectionFormatting"]! == false
                 && (bool)p["Erroneous"]! == true
@@ -113,7 +113,7 @@ public class FormattingHandlerTests
         exception.Which.Code.Should().Be(EditRejected.Code);
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (bool)p["IsSelectionFormatting"]! == true
                 && (bool)p["Erroneous"]! == true
@@ -163,7 +163,7 @@ public class FormattingHandlerTests
         await CreateSut().Handle(request, CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (bool)p["IsSelectionFormatting"]! == false
                 && (int)p["EditCount"]! == 1
@@ -183,7 +183,7 @@ public class FormattingHandlerTests
         await CreateSut().Handle(request, CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (bool)p["IsSelectionFormatting"]! == true && p.ContainsKey("EditCount")));
     }
@@ -213,7 +213,7 @@ public class FormattingHandlerTests
         }, CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["EditCount"]! == 0));
     }
 
@@ -235,7 +235,7 @@ public class FormattingHandlerTests
         }, CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            "AutoFormatDocument command executed",
+            "Command.AutoFormatDocument",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["EditCount"]! == 1));
     }
 

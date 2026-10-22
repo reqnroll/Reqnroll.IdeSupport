@@ -528,7 +528,7 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
       },
       // Second argument of then(), not a trailing catch(): only a rejected start() is a server start
       // failure. A throw in the success handler above (CodeLens registration etc.) happens after a
-      // successful start and must not be reported as ServerStartFailed.
+      // successful start and must not be reported as Server.Process.StartFailed.
       (err: unknown) => {
         serverLifecycle?.reportStartRejected();
         throw err;
@@ -550,7 +550,7 @@ export function deactivate(): Thenable<void> | undefined {
   serverLifecycle?.markIntentionalStop();
   const stopping = client?.stop();
   if (!stopping) return undefined;
-  // The server's shutdown-time telemetry (final FeatureUsageSummary, ServerSessionEnded) arrives while
+  // The server's shutdown-time telemetry (final Lifecycle.Usage.SummaryReported, Server.Session.Ended) arrives while
   // stop() is in flight, but VS Code disposes the subscriptions holding the telemetry forwarder and
   // reporter as soon as this function returns; hold their disposal until stop() has settled.
   deferTelemetryTeardownUntil(stopping);
