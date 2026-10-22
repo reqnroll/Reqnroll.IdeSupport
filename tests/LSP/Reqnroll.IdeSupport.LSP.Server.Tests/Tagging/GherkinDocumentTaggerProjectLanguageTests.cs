@@ -172,7 +172,8 @@ public sealed class GherkinDocumentTaggerProjectLanguageTests : IDisposable
 
         public IReadOnlyCollection<IdeSupportTag> Parse(
             Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot fileSnapshot,
-            ProjectBindingRegistry bindingRegistry)
-            => LastTags = inner.Parse(fileSnapshot, bindingRegistry);
+            ProjectBindingRegistry bindingRegistry,
+            string defaultFeatureLanguage)
+            => LastTags = inner.Parse(fileSnapshot, bindingRegistry, defaultFeatureLanguage);
     }
 }

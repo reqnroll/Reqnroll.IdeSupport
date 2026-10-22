@@ -5,7 +5,9 @@ using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using OmniSharp.Extensions.JsonRpc;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -17,7 +19,7 @@ public class FormattingHandlerTests
 
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider = Substitute.For<IEditorConfigOptionsProvider>();
-    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
+    private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ILspTelemetryService _telemetryService = Substitute.For<ILspTelemetryService>();
 
@@ -31,13 +33,12 @@ public class FormattingHandlerTests
                 x[1] = new DocumentBuffer(FeatureUri, 1, FeatureText);
                 return true;
             });
-        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
         _editorConfigOptionsProvider.GetEditorConfigOptionsByPath(Arg.Any<string>())
             .Returns(Substitute.For<IEditorConfigOptions>());
     }
 
     private FormattingHandler CreateSut() =>
-        new(_bufferService, _editorConfigOptionsProvider, _configProvider, _logger, _telemetryService);
+        new(_bufferService, _editorConfigOptionsProvider, _scopeManager, _logger, _telemetryService);
 
     private static FormattingOptions Options() => new() { TabSize = 4, InsertSpaces = true };
 
@@ -51,6 +52,39 @@ public class FormattingHandlerTests
                 x[1] = new DocumentBuffer(uri, 1, text);
                 return true;
             });
+
+    [Fact]
+    public async Task Handle_document_formatting_parses_with_the_owning_projects_feature_language()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "rnr-fmt-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, "reqnroll.json"),
+                "{ \"language\": { \"feature\": \"fr\" } }");
+            var project = new LspReqnrollProject(
+                new ReqnrollProjectLoadedParams
+                {
+                    WorkspaceFolder = folder,
+                    ProjectFile = Path.Combine(folder, "My.csproj"),
+                    ProjectFolder = folder,
+                    OutputAssemblyPath = Path.Combine(folder, "bin", "My.dll"),
+                    TargetFrameworkMoniker = "net10.0"
+                },
+                new LspIdeScope(_logger));
+            var uri = DocumentUri.FromFileSystemPath(Path.Combine(folder, "a.feature"));
+            _scopeManager.ResolvePrimaryOwner(uri).Returns(project);
+            SetupBuffer(uri, "Fonctionnalité: F\nScénario: S\n      Etant donné une précondition\n");
+
+            var edits = await CreateSut().Handle(FormatRequest(uri), CancellationToken.None);
+
+            edits!.Single().NewText.Should().Contain("Etant donné une précondition").And.NotContain("      Etant");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); } catch (IOException) { }
+        }
+    }
 
     [Fact]
     public async Task Handle_document_formatting_rejects_a_document_unknown_to_the_server()

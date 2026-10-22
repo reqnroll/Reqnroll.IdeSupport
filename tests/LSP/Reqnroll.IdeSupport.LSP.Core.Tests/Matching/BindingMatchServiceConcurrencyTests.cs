@@ -46,8 +46,8 @@ public class BindingMatchServiceConcurrencyTests
 
     private FeatureBindingMatchSet BuildSet(ProjectBindingRegistry registry, int version)
     {
-        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
-        var tags = parser.Parse(new StubGherkinTextSnapshot(DefinedFeature), registry);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService);
+        var tags = parser.Parse(new StubGherkinTextSnapshot(DefinedFeature), registry, "en-US");
         return FeatureBindingMatchSet.FromTags(Uri, version, registry.Version, tags, OwnerA);
     }
 

@@ -46,8 +46,8 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var telemetry = Substitute.For<ITelemetryService>();
         var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
         configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
-        var parser = new IdeSupportTagParser(logger, telemetry, configProvider);
-        return parser.Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid);
+        var parser = new IdeSupportTagParser(logger, telemetry);
+        return parser.Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid, "en-US");
     }
 
     private Uri WriteGeneratedFixture(string generatedCsContent)

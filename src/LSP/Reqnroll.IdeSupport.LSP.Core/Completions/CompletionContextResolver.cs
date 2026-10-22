@@ -35,7 +35,7 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
         ProjectBindingRegistry registry,
         string                 fallbackLanguage)
     {
-        var tags = _tagParser.Parse(snapshot, registry);
+        var tags = _tagParser.Parse(snapshot, registry, fallbackLanguage);
 
         var docTag     = tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.Document);
         var gherkinDoc = docTag?.Data as IdeSupportGherkinDocument;

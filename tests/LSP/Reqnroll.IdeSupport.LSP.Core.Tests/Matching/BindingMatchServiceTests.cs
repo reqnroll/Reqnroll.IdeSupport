@@ -33,8 +33,8 @@ public class BindingMatchServiceTests
 
     private IReadOnlyCollection<IdeSupportTag> ParseTags(string text, ProjectBindingRegistry registry)
     {
-        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
-        return parser.Parse(new StubGherkinTextSnapshot(text), registry);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService);
+        return parser.Parse(new StubGherkinTextSnapshot(text), registry, "en-US");
     }
 
     private FeatureBindingMatchSet BuildSet(

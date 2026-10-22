@@ -39,8 +39,8 @@ public class BindingMatchServiceBranchSwitchTests
     private FeatureBindingMatchSet Match(
         string uri, string text, ProjectBindingRegistry registry, int version, ProjectOwner? owner = null)
     {
-        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
-        var tags = parser.Parse(new StubGherkinTextSnapshot(text), registry);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService);
+        var tags = parser.Parse(new StubGherkinTextSnapshot(text), registry, "en-US");
         return FeatureBindingMatchSet.FromTags(uri, version, registry.Version, tags, owner ?? Owner);
     }
 

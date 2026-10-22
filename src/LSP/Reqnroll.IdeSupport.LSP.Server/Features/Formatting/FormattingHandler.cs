@@ -1,4 +1,5 @@
-﻿using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
+﻿using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Configuration;
@@ -7,11 +8,13 @@ using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Formatting;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 
@@ -24,7 +27,9 @@ public sealed class FormattingHandler
 {
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider;
-    private readonly IIdeSupportConfigurationProvider _configurationProvider;
+    private readonly ILspWorkspaceScopeManager _scopeManager;
+    // Formatting settings are not project-specific yet: only the feature language is.
+    private readonly IdeSupportConfiguration _defaultFormatConfiguration = new();
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
@@ -43,7 +48,7 @@ public sealed class FormattingHandler
     public FormattingHandler(
         IDocumentBufferService documentBufferService,
         IEditorConfigOptionsProvider editorConfigOptionsProvider,
-        IIdeSupportConfigurationProvider configurationProvider,
+        ILspWorkspaceScopeManager scopeManager,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService = null,
         IOperationDurationRecorder? recorder = null,
@@ -51,7 +56,7 @@ public sealed class FormattingHandler
     {
         _documentBufferService = documentBufferService;
         _editorConfigOptionsProvider = editorConfigOptionsProvider;
-        _configurationProvider = configurationProvider;
+        _scopeManager = scopeManager;
         _logger = logger;
         _formatter = formatter ?? new GherkinDocumentFormatter();
         _telemetryService = telemetryService;
@@ -147,7 +152,7 @@ public sealed class FormattingHandler
         if (tableRange is null)
             return Task.FromResult<TextEditContainer?>(new TextEditContainer());
 
-        var configuration = _configurationProvider.GetConfiguration();
+        var configuration = _defaultFormatConfiguration;
         var formatSettings = GherkinFormatSettings.FromLspOptions(
             (int)request.Options.TabSize,
             request.Options.InsertSpaces,
@@ -155,7 +160,7 @@ public sealed class FormattingHandler
             filePath ?? string.Empty,
             configuration);
 
-        var gherkinDocument = ParseDocument(text);
+        var gherkinDocument = ParseDocument(request.TextDocument.Uri, text);
         var tableNode = GherkinTableLocator.FindTableAtLine(gherkinDocument, tableRange.Value.Start);
         if (tableNode is null)
             return Task.FromResult<TextEditContainer?>(new TextEditContainer());
@@ -229,7 +234,7 @@ public sealed class FormattingHandler
         if (allLines.Length == 0 || string.IsNullOrWhiteSpace(text))
             return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, 0));
 
-        var configuration = _configurationProvider.GetConfiguration();
+        var configuration = _defaultFormatConfiguration;
         var formatSettings = GherkinFormatSettings.FromLspOptions(
             (int)lspOptions.TabSize,
             lspOptions.InsertSpaces,
@@ -237,7 +242,7 @@ public sealed class FormattingHandler
             filePath ?? string.Empty,
             configuration);
 
-        var gherkinDocument = ParseDocument(text);
+        var gherkinDocument = ParseDocument(uri, text);
         if (gherkinDocument?.Feature == null)
         {
             // Only a .feature file is ours to reject; any other document is simply not formattable.
@@ -281,9 +286,9 @@ public sealed class FormattingHandler
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private IdeSupportGherkinDocument ParseDocument(string text)
+    private IdeSupportGherkinDocument ParseDocument(DocumentUri uri, string text)
     {
-        var language = _configurationProvider.GetConfiguration().DefaultFeatureLanguage ?? "en";
+        var language = ProjectFeatureLanguage.For(_scopeManager.ResolvePrimaryOwner(uri));
         var dialectProvider = ReqnrollGherkinDialectProvider.Get(language);
         var parser = new IdeSupportGherkinParser(dialectProvider, NullLspTelemetryService.Instance);
         parser.ParseAndCollectErrors(text, _logger, out var gherkinDocument, out _);

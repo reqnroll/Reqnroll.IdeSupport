@@ -30,8 +30,10 @@ public class IdeSupportConfiguration
     public ProcessorArchitectureSetting ProcessorArchitecture { get; set; } = ProcessorArchitectureSetting.AutoDetect;
     /// <summary>Gets or sets the debug connector.</summary>
     public bool DebugConnector { get; set; }
+    /// <summary>The feature language used when no configuration source sets one.</summary>
+    public const string FallbackFeatureLanguage = "en-US";
     /// <summary>Gets or sets the default feature language.</summary>
-    public string DefaultFeatureLanguage { get; set; } = "en-US";
+    public string DefaultFeatureLanguage { get; set; } = FallbackFeatureLanguage;
     /// <summary>Gets or sets the configured binding culture.</summary>
     public string ConfiguredBindingCulture { get; set; } = null;
     /// <summary>Gets the effective binding culture: the configured culture if set, otherwise the default feature language.</summary>

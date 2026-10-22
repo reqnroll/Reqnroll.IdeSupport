@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Threading;
 using Gherkin.Ast;
-using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -17,34 +16,31 @@ namespace Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 public class IdeSupportTagParser : IIdeSupportTagParser
 {
     internal static readonly Regex NewLineRe = new(@"\r\n|\n|\r");
-    private readonly IIdeSupportConfigurationProvider _deveroomConfigurationProvider;
     private readonly IIdeSupportLogger _logger;
     private readonly IErrorTelemetryService _telemetryService;
 
     /// <summary>Initializes a new instance of the <see cref="IdeSupportTagParser"/> class.</summary>
     public IdeSupportTagParser(
         IIdeSupportLogger logger,
-        IErrorTelemetryService telemetryService,
-        IIdeSupportConfigurationProvider deveroomConfigurationProvider
+        IErrorTelemetryService telemetryService
     )
     {
         _logger = logger;
         _telemetryService = telemetryService;
-        _deveroomConfigurationProvider = deveroomConfigurationProvider;
     }
 
     /// <inheritdoc/>
     public IReadOnlyCollection<IdeSupportTag> Parse(
         IGherkinTextSnapshot fileSnapshot,
-        ProjectBindingRegistry bindingRegistry)
+        ProjectBindingRegistry bindingRegistry,
+        string defaultFeatureLanguage)
     {
         var stopwatch = new Stopwatch();
         stopwatch.Start();
 
         try
         {
-            var configuration = _deveroomConfigurationProvider.GetConfiguration();
-            return ParseInternal(fileSnapshot, bindingRegistry, configuration);
+            return ParseInternal(fileSnapshot, bindingRegistry, defaultFeatureLanguage);
         }
         catch (Exception ex)
         {
@@ -61,9 +57,9 @@ public class IdeSupportTagParser : IIdeSupportTagParser
 
     private IReadOnlyCollection<IdeSupportTag> ParseInternal(IGherkinTextSnapshot fileSnapshot,
         ProjectBindingRegistry bindingRegistry,
-        IdeSupportConfiguration deveroomConfiguration)
+        string defaultFeatureLanguage)
     {
-        var dialectProvider = ReqnrollGherkinDialectProvider.Get(deveroomConfiguration.DefaultFeatureLanguage);
+        var dialectProvider = ReqnrollGherkinDialectProvider.Get(defaultFeatureLanguage);
         var parser = new IdeSupportGherkinParser(dialectProvider, _telemetryService);
 
         parser.ParseAndCollectErrors(fileSnapshot.GetText(), _logger,

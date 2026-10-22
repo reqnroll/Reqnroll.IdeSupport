@@ -73,8 +73,8 @@ public class HookMatchCountCodeLensHandlerTests
 
     private FeatureBindingMatchSet BuildMatchSet(string text, ProjectBindingRegistry registry, string docId)
     {
-        var parser = new IdeSupportTagParser(_parserLogger, _parserTelemetry, _configProvider);
-        var tags   = parser.Parse(new LspTextSnapshot(docId, 1, text), registry);
+        var parser = new IdeSupportTagParser(_parserLogger, _parserTelemetry);
+        var tags   = parser.Parse(new LspTextSnapshot(docId, 1, text), registry, "en-US");
         return FeatureBindingMatchSet.FromTags(docId, 1, registry.Version, tags);
     }
 

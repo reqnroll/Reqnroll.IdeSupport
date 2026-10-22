@@ -43,9 +43,9 @@ public class InlayHintServiceTests
 
     private FeatureBindingMatchSet MatchSetFor(string text, ProjectBindingRegistry? registry = null)
     {
-        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService);
         var reg = registry ?? RegistryWith();
-        var tags = parser.Parse(Snap(text), reg);
+        var tags = parser.Parse(Snap(text), reg, "en-US");
         return FeatureBindingMatchSet.FromTags(DocumentId, 1, reg.Version, tags);
     }
 

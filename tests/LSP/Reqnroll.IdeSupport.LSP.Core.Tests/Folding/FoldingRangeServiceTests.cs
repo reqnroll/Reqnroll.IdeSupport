@@ -13,8 +13,8 @@ public class FoldingRangeServiceTests
         var monitoring = Substitute.For<ITelemetryService>();
         var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
         configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
-        var parser = new IdeSupportTagParser(logger, monitoring, configProvider);
-        return parser.Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid);
+        var parser = new IdeSupportTagParser(logger, monitoring);
+        return parser.Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid, "en-US");
     }
 
     private static FoldingRangeService CreateSut() => new();

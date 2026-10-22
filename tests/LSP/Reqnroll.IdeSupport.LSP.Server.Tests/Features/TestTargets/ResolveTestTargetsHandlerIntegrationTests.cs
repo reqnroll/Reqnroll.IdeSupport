@@ -81,8 +81,8 @@ public class ResolveTestTargetsHandlerIntegrationTests : IDisposable
         var parserTelemetry = Substitute.For<ITelemetryService>();
         var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
         configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
-        var parser = new IdeSupportTagParser(parserLogger, parserTelemetry, configProvider);
-        var tags = parser.Parse(new LspTextSnapshot(uri.ToString(), 1, text), Core.Bindings.ProjectBindingRegistry.Invalid);
+        var parser = new IdeSupportTagParser(parserLogger, parserTelemetry);
+        var tags = parser.Parse(new LspTextSnapshot(uri.ToString(), 1, text), Core.Bindings.ProjectBindingRegistry.Invalid, "en-US");
 
         var buffer = new DocumentBuffer(uri, 1, text, tags);
         DocumentBuffer? ignored;
