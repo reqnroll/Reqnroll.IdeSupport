@@ -1,0 +1,99 @@
+// Server operation latency by Operation and IdeClient: sample count, P50, P95 and max milliseconds.
+//
+// Table: customEvents (classic / Application Insights resource-scoped Logs). This is the legacy
+// form of the query in ../operation-latency.kql, which targets AppEvents (workspace-based). Keep the two in step.
+// Column mapping applied: AppEvents -> customEvents, TimeGenerated -> timestamp, Properties -> customDimensions,
+// UserId -> user_Id, Name -> name.
+//
+// Status: verified 2026-10-16 in the dev resource using this form (customEvents) with
+// REQNROLL_PERF_TELEMETRY_SAMPLE=1, Rider and Visual Studio: 43 rows, Category assigned as described, ingestRun
+// excluded. The AppEvents form has not been run yet. VS Code not yet seen.
+// Known quirk: textDocument/publishDiagnostics is server-pushed, not a client request, but lands in "Request".
+//
+// Source: PerfSample events from OperationDurationRecorder. Properties: Operation, DurationMs (whole ms, so
+// sub-millisecond work reads as 0), DurationBucket.
+//
+// Reading the numbers
+// - PerfSample is SAMPLED: ~5% by default (REQNROLL_PERF_TELEMETRY_SAMPLE overrides; dev runs use 1). Samples is a
+//   confidence measure for the percentiles, NOT a usage count. For usage use the `Command.*` / `Lookup.*` events and
+//   FeatureUsageSummary. With few samples P95 equals the max, so raise minSamples in production.
+// - Category is derived from the operation name, for grouping tiles:
+//     DocumentSync  textDocument/did*, workspace/did*  (the cost of the server ingesting an edit/open)
+//     Internal      internal/*                        (reconcile / apply work, not a client request)
+//     TestOutcomes  reqnroll/testOutcomes/*           (high-volume Run CodeLens lookups)
+//     Request       everything else                   (completion, hover, definition, rename, CodeLens, ...)
+// - reqnroll/testOutcomes/ingestRun is excluded: it records the duration of a whole test run, not server latency.
+let lookback = 7d;
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Extension.Loaded",
+    "Extension installed": "Lifecycle.Extension.Installed",
+    "Extension upgraded": "Lifecycle.Extension.Upgraded",
+    "Feature file opened": "Project.FeatureFile.Opened",
+    "Feature file added": "Project.FeatureFile.Added",
+    "Reqnroll config added": "Project.ReqnrollConfig.Added",
+    "Project Template Wizard Started": "Project.Creation.Started",
+    "Project Template Wizard Completed": "Project.Creation.Completed",
+    "Link clicked": "Lifecycle.Link.Clicked",
+    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialog.Dismissed",
+    "Welcome dialog dismissed": "Lifecycle.WelcomeDialog.Dismissed",
+    "ReqnrollDiscoveryExecuted": "Project.Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "Project.TestRun.Completed",
+    "TagIndexFirstScanCompleted": "Project.TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Lifecycle.Usage.SummaryReported",
+    "ServerSessionStarted": "Server.Session.Started",
+    "ServerSessionEnded": "Server.Session.Ended",
+    "ServerStartFailed": "Server.Process.StartFailed",
+    "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Process.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics.Reported",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Error.VsWellKnownIdsMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
+};
+let minSamples = 1;
+customEvents
+| where timestamp > ago(lookback)
+| where CanonicalEventName(name) == "Perf.Sample"
+| extend Operation = tostring(customDimensions.Operation),
+         IdeClient = tostring(customDimensions.IdeClient),
+         DurationMs = todouble(customDimensions.DurationMs)
+| where isnotempty(Operation) and isnotnull(DurationMs)
+| where Operation != "reqnroll/testOutcomes/ingestRun"
+| extend Category = case(
+            Operation startswith "internal/", "Internal",
+            Operation startswith "reqnroll/testOutcomes/", "TestOutcomes",
+            Operation matches regex @"^(textDocument|workspace)/did", "DocumentSync",
+            "Request")
+| summarize Samples = count(),
+            P50Ms = percentile(DurationMs, 50),
+            P95Ms = percentile(DurationMs, 95),
+            MaxMs = max(DurationMs)
+        by Category, Operation, IdeClient
+| where Samples >= minSamples
+| order by P95Ms desc, Samples desc

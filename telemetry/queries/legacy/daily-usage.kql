@@ -1,0 +1,104 @@
+// Daily usage by IdeClient, OperatingSystem and RID: active users, sessions started, sessions per user.
+//
+// Table: customEvents (classic / Application Insights resource-scoped Logs). This is the legacy
+// form of the query in ../daily-usage.kql, which targets AppEvents (workspace-based). Keep the two in step.
+// Column mapping applied: AppEvents -> customEvents, TimeGenerated -> timestamp, Properties -> customDimensions,
+// UserId -> user_Id, Name -> name.
+//
+// Status: verified 2026-10-15 in the dev resource using this form: rows came back for
+// IdeClient = rider / visualstudio, OperatingSystem = Windows, Rid = win-x64, with Sessions and
+// SessionsPerUser populated. The AppEvents form has not been run yet. VS Code not yet seen.
+//
+// Definitions
+// - DailyActiveUsers: distinct user_Id with any lifecycle event that day. ServerSessionStarted fires once per
+//   server process, so an IDE left open across days would drop out of a start-only count; FeatureUsageSummary
+//   is flushed periodically during a session, so it keeps that user active.
+// - Sessions: distinct server sessions that STARTED that day (ServerSessionStarted). A session running past
+//   midnight is counted in Sessions only on its start day but its user stays in DailyActiveUsers.
+// - SessionsPerUser: Sessions / DailyActiveUsers. Above 1 means several IDE/solution launches or restarts per
+//   user; compare with ServerStartFailed / ServerExitedUnexpectedly before reading a rise as heavier use.
+//
+// IdeClient/OperatingSystem/Architecture are only on ServerSessionStarted, so they are looked up per SessionId.
+// RID is derived (<os>-<arch>, e.g. win-x64, osx-arm64, linux-x64); the client never sends a RID and it has
+// no distro/libc detail (no linux-musl-x64).
+//
+// Known gap: a session that started before the lookback window has no ServerSessionStarted row in range, so
+// its later activity is dropped.
+let lookback = 30d;
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Extension.Loaded",
+    "Extension installed": "Lifecycle.Extension.Installed",
+    "Extension upgraded": "Lifecycle.Extension.Upgraded",
+    "Feature file opened": "Project.FeatureFile.Opened",
+    "Feature file added": "Project.FeatureFile.Added",
+    "Reqnroll config added": "Project.ReqnrollConfig.Added",
+    "Project Template Wizard Started": "Project.Creation.Started",
+    "Project Template Wizard Completed": "Project.Creation.Completed",
+    "Link clicked": "Lifecycle.Link.Clicked",
+    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialog.Dismissed",
+    "Welcome dialog dismissed": "Lifecycle.WelcomeDialog.Dismissed",
+    "ReqnrollDiscoveryExecuted": "Project.Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "Project.TestRun.Completed",
+    "TagIndexFirstScanCompleted": "Project.TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Lifecycle.Usage.SummaryReported",
+    "ServerSessionStarted": "Server.Session.Started",
+    "ServerSessionEnded": "Server.Session.Ended",
+    "ServerStartFailed": "Server.Process.StartFailed",
+    "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Process.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics.Reported",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Error.VsWellKnownIdsMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
+};
+let sessions = customEvents
+    | where timestamp > ago(lookback)
+    | where CanonicalEventName(name) == "Server.Session.Started"
+    | extend SessionId = tostring(customDimensions.SessionId),
+             IdeClient = tostring(customDimensions.IdeClient),
+             OperatingSystem = tostring(customDimensions.OperatingSystem),
+             Architecture = tolower(tostring(customDimensions.Architecture))
+    | extend OsPrefix = case(
+                OperatingSystem == "Windows", "win",
+                OperatingSystem == "macOS", "osx",
+                OperatingSystem == "Linux", "linux",
+                "other")
+    | extend Rid = strcat(OsPrefix, "-", Architecture)
+    | summarize take_any(IdeClient, OperatingSystem, Rid) by SessionId;
+customEvents
+| where timestamp > ago(lookback)
+| where CanonicalEventName(name) in ("Server.Session.Started", "Lifecycle.Usage.SummaryReported", "Server.Session.Ended")
+| extend SessionId = tostring(customDimensions.SessionId)
+| where isnotempty(SessionId) and isnotempty(user_Id)
+| join kind=inner sessions on SessionId
+| summarize DailyActiveUsers = dcount(user_Id),
+            Sessions = dcountif(SessionId, CanonicalEventName(name) == "Server.Session.Started")
+        by Day = bin(timestamp, 1d), IdeClient, OperatingSystem, Rid
+| extend SessionsPerUser = round(todouble(Sessions) / DailyActiveUsers, 2)
+| order by Day asc, IdeClient asc, OperatingSystem asc, Rid asc

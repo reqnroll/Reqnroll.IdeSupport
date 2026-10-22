@@ -94,12 +94,44 @@ public class TelemetryEventCatalogTests
     public void Every_kql_query_embeds_the_same_legacy_name_map_as_the_shared_file()
     {
         var map = ReadRepoFile("telemetry/event-name-map.kql").ReplaceLineEndings("\n").TrimEnd();
-        var queries = Directory.GetFiles(Path.Combine(RepoRoot(), "telemetry", "queries"), "*.kql");
+        var queries = Directory.GetFiles(Path.Combine(RepoRoot(), "telemetry", "queries"), "*.kql", SearchOption.AllDirectories);
 
         queries.Should().NotBeEmpty();
         foreach (var query in queries)
             File.ReadAllText(query).ReplaceLineEndings("\n").Should()
                 .Contain(map, $"{Path.GetFileName(query)} must embed telemetry/event-name-map.kql verbatim");
+    }
+
+    [Fact]
+    public void Every_legacy_customEvents_query_matches_its_AppEvents_query_apart_from_table_and_column_names()
+    {
+        var queriesDir = Path.Combine(RepoRoot(), "telemetry", "queries");
+        var workspaceQueries = Directory.GetFiles(queriesDir, "*.kql");
+
+        workspaceQueries.Should().NotBeEmpty();
+        foreach (var workspaceQuery in workspaceQueries)
+        {
+            var legacyQuery = Path.Combine(queriesDir, "legacy", Path.GetFileName(workspaceQuery));
+            File.Exists(legacyQuery).Should().BeTrue($"{Path.GetFileName(workspaceQuery)} needs a legacy customEvents form");
+
+            ExpectedLegacyBody(File.ReadAllText(workspaceQuery)).Should()
+                .Be(QueryBody(File.ReadAllText(legacyQuery)),
+                    $"legacy/{Path.GetFileName(workspaceQuery)} must be the AppEvents query with only the table and column names swapped");
+        }
+    }
+
+    // The query without its leading header comment block, normalized to LF.
+    private static string QueryBody(string kql) =>
+        string.Join("\n", kql.ReplaceLineEndings("\n").Split('\n').SkipWhile(l => l.StartsWith("//"))).TrimEnd();
+
+    private static string ExpectedLegacyBody(string workspaceKql)
+    {
+        var body = QueryBody(workspaceKql);
+        body = Regex.Replace(body, @"\bAppEvents\b", "customEvents");
+        body = Regex.Replace(body, @"\bTimeGenerated\b", "timestamp");
+        body = Regex.Replace(body, @"\bProperties\b", "customDimensions");
+        body = Regex.Replace(body, @"\bUserId\b", "user_Id");
+        return Regex.Replace(body, @"(?<![\w.])Name\b", "name");
     }
 
     private static string ReadRepoFile(string relativePath) =>

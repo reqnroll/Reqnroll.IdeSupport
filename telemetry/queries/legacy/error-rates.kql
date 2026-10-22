@@ -1,0 +1,103 @@
+// Error and exception rates by day and IdeClient: unhandled exceptions and language-server failure events,
+// with the number of sessions started that day so the counts can be read as a rate.
+//
+// Table: customEvents (classic / Application Insights resource-scoped Logs). This is the legacy
+// form of the query in ../error-rates.kql, which targets AppEvents (workspace-based). Keep the two in step.
+// Column mapping applied: AppEvents -> customEvents, TimeGenerated -> timestamp, Properties -> customDimensions,
+// UserId -> user_Id, Name -> name.
+//
+// Status: verified 2026-10-16 in the dev resource using this form (customEvents): returned Rider
+// client-origin UnhandledException rows with Sessions and EventsPer100Sessions populated. The
+// ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted paths and the AppEvents form have not
+// been run yet.
+//
+// Sources
+// - UnhandledException: exceptions are sent as EVENTS (not to the Application Insights exceptions table), by the
+//   server and by the VS Code / Rider clients. Origin is "Client" when ExceptionOrigin = "Client", else "Server".
+//   Other properties available for drill-down: ExceptionType, Source (component), IsFatal, StackFrames.
+//   Client-origin rows carry ClientSessionId (not SessionId; #1199), the same property every server event carries.
+// - ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted: sent by each IDE client; Reason is a closed enum.
+//
+// Reading the numbers
+// - Events: how many were sent. AffectedUsers: distinct user_Id, so one user in a failure loop is one affected user.
+// - AffectedSessions: distinct ClientSessionId (IDE sessions) with at least one such event; 0 for events from a client
+//   that predates #1199.
+// - Sessions: ServerSessionStarted that day for the same IdeClient. EventsPer100Sessions = Events / Sessions * 100.
+//   For ServerStartFailed this is relative to sessions that DID start, so it understates the true failure rate.
+// - UnhandledException stack frames are only attached for the first ~25 distinct stacks per session, but the event
+//   itself is always sent and counted, so Events is complete (subject to ingestion loss).
+let lookback = 30d;
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Extension.Loaded",
+    "Extension installed": "Lifecycle.Extension.Installed",
+    "Extension upgraded": "Lifecycle.Extension.Upgraded",
+    "Feature file opened": "Project.FeatureFile.Opened",
+    "Feature file added": "Project.FeatureFile.Added",
+    "Reqnroll config added": "Project.ReqnrollConfig.Added",
+    "Project Template Wizard Started": "Project.Creation.Started",
+    "Project Template Wizard Completed": "Project.Creation.Completed",
+    "Link clicked": "Lifecycle.Link.Clicked",
+    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialog.Dismissed",
+    "Welcome dialog dismissed": "Lifecycle.WelcomeDialog.Dismissed",
+    "ReqnrollDiscoveryExecuted": "Project.Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "Project.TestRun.Completed",
+    "TagIndexFirstScanCompleted": "Project.TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Lifecycle.Usage.SummaryReported",
+    "ServerSessionStarted": "Server.Session.Started",
+    "ServerSessionEnded": "Server.Session.Ended",
+    "ServerStartFailed": "Server.Process.StartFailed",
+    "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Process.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics.Reported",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Error.VsWellKnownIdsMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
+};
+let failureEvents = dynamic(["Error.UnhandledException", "Server.Process.StartFailed", "Server.Process.ExitedUnexpectedly", "Server.Process.Restarted"]);
+let sessionsPerDay = customEvents
+    | where timestamp > ago(lookback)
+    | where CanonicalEventName(name) == "Server.Session.Started"
+    | extend IdeClient = tostring(customDimensions.IdeClient)
+    | summarize Sessions = dcount(tostring(customDimensions.SessionId)) by Day = bin(timestamp, 1d), IdeClient;
+customEvents
+| where timestamp > ago(lookback)
+| where CanonicalEventName(name) in (failureEvents)
+| extend IdeClient = tostring(customDimensions.IdeClient),
+         Origin = iff(CanonicalEventName(name) == "Error.UnhandledException",
+                      iff(tostring(customDimensions.ExceptionOrigin) == "Client", "Client", "Server"),
+                      ""),
+         Reason = iff(CanonicalEventName(name) == "Error.UnhandledException", "", tostring(customDimensions.Reason))
+| summarize Events = count(), AffectedUsers = dcount(user_Id),
+            AffectedSessions = dcount(tostring(customDimensions.ClientSessionId))
+        by Day = bin(timestamp, 1d), IdeClient, EventName = CanonicalEventName(name), Origin, Reason
+| join kind=leftouter sessionsPerDay on Day, IdeClient
+| extend Sessions = coalesce(Sessions, 0)
+| extend EventsPer100Sessions = iff(Sessions > 0, round(100.0 * Events / Sessions, 1), real(null))
+| project Day, IdeClient, EventName, Origin, Reason, Events, AffectedUsers, AffectedSessions, Sessions, EventsPer100Sessions
+| order by Day desc, Events desc
