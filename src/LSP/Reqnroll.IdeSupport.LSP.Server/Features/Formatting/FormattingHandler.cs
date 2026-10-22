@@ -28,8 +28,6 @@ public sealed class FormattingHandler
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider;
     private readonly ILspWorkspaceScopeManager _scopeManager;
-    // Formatting settings are not project-specific yet: only the feature language is.
-    private readonly IdeSupportConfiguration _defaultFormatConfiguration = new();
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
@@ -152,7 +150,7 @@ public sealed class FormattingHandler
         if (tableRange is null)
             return Task.FromResult<TextEditContainer?>(new TextEditContainer());
 
-        var configuration = _defaultFormatConfiguration;
+        var configuration = ConfigurationFor(request.TextDocument.Uri);
         var formatSettings = GherkinFormatSettings.FromLspOptions(
             (int)request.Options.TabSize,
             request.Options.InsertSpaces,
@@ -234,7 +232,7 @@ public sealed class FormattingHandler
         if (allLines.Length == 0 || string.IsNullOrWhiteSpace(text))
             return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, 0));
 
-        var configuration = _defaultFormatConfiguration;
+        var configuration = ConfigurationFor(uri);
         var formatSettings = GherkinFormatSettings.FromLspOptions(
             (int)lspOptions.TabSize,
             lspOptions.InsertSpaces,
@@ -285,6 +283,9 @@ public sealed class FormattingHandler
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private IdeSupportConfiguration ConfigurationFor(DocumentUri uri) =>
+        _scopeManager.ResolvePrimaryOwner(uri)?.GetIdeSupportConfiguration() ?? new IdeSupportConfiguration();
 
     private IdeSupportGherkinDocument ParseDocument(DocumentUri uri, string text)
     {
