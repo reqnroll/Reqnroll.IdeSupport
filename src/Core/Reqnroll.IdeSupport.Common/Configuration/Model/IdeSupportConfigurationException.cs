@@ -1,6 +1,6 @@
 using System;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>IdeSupportConfigurationException</summary>
 public class IdeSupportConfigurationException : Exception

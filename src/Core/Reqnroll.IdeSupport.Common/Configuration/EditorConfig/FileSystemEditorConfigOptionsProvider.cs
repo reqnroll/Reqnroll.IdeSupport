@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 /// <summary>
 /// Reads <c>.editorconfig</c> files from the file system and resolves the merged settings

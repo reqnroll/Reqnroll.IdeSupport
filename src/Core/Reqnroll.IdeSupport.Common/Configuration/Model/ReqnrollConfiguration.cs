@@ -6,7 +6,7 @@ using Reqnroll;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using System.Text.RegularExpressions;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>ReqnrollConfiguration</summary>
 public class ReqnrollConfiguration

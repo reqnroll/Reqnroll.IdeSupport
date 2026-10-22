@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>ProcessorArchitectureSetting</summary>
 public enum ProcessorArchitectureSetting

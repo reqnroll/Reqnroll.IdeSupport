@@ -1,6 +1,6 @@
 using System;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 /// <summary>
 /// Specifies the <c>.editorconfig</c> setting name that maps to this property.

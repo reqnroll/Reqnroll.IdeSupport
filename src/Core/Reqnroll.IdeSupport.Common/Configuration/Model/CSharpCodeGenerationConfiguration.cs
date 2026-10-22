@@ -1,6 +1,7 @@
 using System;
+using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>CSharpCodeGenerationConfiguration</summary>
 public class CSharpCodeGenerationConfiguration

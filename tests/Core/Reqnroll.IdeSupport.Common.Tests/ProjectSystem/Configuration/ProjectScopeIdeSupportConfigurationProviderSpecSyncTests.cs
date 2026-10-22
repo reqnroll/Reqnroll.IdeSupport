@@ -1,6 +1,7 @@
 namespace Reqnroll.IdeSupport.Common.Tests.ProjectSystem.Configuration;
 
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.Loading;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
 /// <summary>

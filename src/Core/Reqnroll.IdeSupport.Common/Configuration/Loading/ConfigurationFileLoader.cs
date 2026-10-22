@@ -7,8 +7,9 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using System.Xml.XPath;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Loading;
 
 /// <summary>Reads a configuration file of any supported <see cref="ConfigurationFileFormat"/> onto an <see cref="IdeSupportConfiguration"/>.</summary>
 public sealed class ConfigurationFileLoader

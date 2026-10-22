@@ -1,4 +1,6 @@
-namespace Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
+
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>GherkinFormatConfiguration</summary>
 public class GherkinFormatConfiguration

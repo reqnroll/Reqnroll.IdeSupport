@@ -3,8 +3,9 @@
 using System;
 using System.IO;
 using System.Linq.Expressions;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Loading;
 
 /// <summary>IdeSupportConfigurationLoader</summary>
 public class IdeSupportConfigurationLoader

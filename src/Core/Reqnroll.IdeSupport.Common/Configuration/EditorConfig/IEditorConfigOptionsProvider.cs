@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 /// <summary>
 /// Resolves the EditorConfig options that apply to a given file-system path.

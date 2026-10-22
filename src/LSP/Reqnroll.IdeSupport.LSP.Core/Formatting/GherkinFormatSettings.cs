@@ -1,4 +1,5 @@
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Formatting;

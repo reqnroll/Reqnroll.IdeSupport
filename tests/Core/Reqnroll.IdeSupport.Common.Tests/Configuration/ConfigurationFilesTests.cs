@@ -1,5 +1,5 @@
 using AwesomeAssertions;
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.Loading;
 using Xunit;
 
 namespace Reqnroll.IdeSupport.Common.Tests.Configuration;

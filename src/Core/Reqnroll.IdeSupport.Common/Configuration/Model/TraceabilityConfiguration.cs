@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>TraceabilityConfiguration</summary>
 public class TraceabilityConfiguration
