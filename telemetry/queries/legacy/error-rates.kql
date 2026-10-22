@@ -1,0 +1,51 @@
+// Error and exception rates by day and IdeClient: unhandled exceptions and language-server failure events,
+// with the number of sessions started that day so the counts can be read as a rate.
+//
+// Table: customEvents (classic / Application Insights resource-scoped Logs). This is the legacy
+// form of the query in ../error-rates.kql, which targets AppEvents (workspace-based). Keep the two in step.
+// Column mapping applied: AppEvents -> customEvents, TimeGenerated -> timestamp, Properties -> customDimensions,
+// UserId -> user_Id, Name -> name.
+//
+// Status: verified 2026-10-16 in the dev resource using this form (customEvents): returned Rider
+// client-origin UnhandledException rows with Sessions and EventsPer100Sessions populated. The
+// ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted paths and the AppEvents form have not
+// been run yet.
+//
+// Sources
+// - UnhandledException: exceptions are sent as EVENTS (not to the Application Insights exceptions table), by the
+//   server and by the VS Code / Rider clients. Origin is "Client" when ExceptionOrigin = "Client", else "Server".
+//   Other properties available for drill-down: ExceptionType, Source (component), IsFatal, StackFrames.
+//   Client-origin rows carry ClientSessionId (not SessionId; #1199), the same property every server event carries.
+// - ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted: sent by each IDE client; Reason is a closed enum.
+//
+// Reading the numbers
+// - Events: how many were sent. AffectedUsers: distinct user_Id, so one user in a failure loop is one affected user.
+// - AffectedSessions: distinct ClientSessionId (IDE sessions) with at least one such event; 0 for events from a client
+//   that predates #1199.
+// - Sessions: ServerSessionStarted that day for the same IdeClient. EventsPer100Sessions = Events / Sessions * 100.
+//   For ServerStartFailed this is relative to sessions that DID start, so it understates the true failure rate.
+// - UnhandledException stack frames are only attached for the first ~25 distinct stacks per session, but the event
+//   itself is always sent and counted, so Events is complete (subject to ingestion loss).
+let lookback = 30d;
+let failureEvents = dynamic(["UnhandledException", "ServerStartFailed", "ServerExitedUnexpectedly", "ServerRestarted"]);
+let sessionsPerDay = customEvents
+    | where timestamp > ago(lookback)
+    | where name == "ServerSessionStarted"
+    | extend IdeClient = tostring(customDimensions.IdeClient)
+    | summarize Sessions = dcount(tostring(customDimensions.SessionId)) by Day = bin(timestamp, 1d), IdeClient;
+customEvents
+| where timestamp > ago(lookback)
+| where name in (failureEvents)
+| extend IdeClient = tostring(customDimensions.IdeClient),
+         Origin = iff(name == "UnhandledException",
+                      iff(tostring(customDimensions.ExceptionOrigin) == "Client", "Client", "Server"),
+                      ""),
+         Reason = iff(name == "UnhandledException", "", tostring(customDimensions.Reason))
+| summarize Events = count(), AffectedUsers = dcount(user_Id),
+            AffectedSessions = dcount(tostring(customDimensions.ClientSessionId))
+        by Day = bin(timestamp, 1d), IdeClient, EventName = name, Origin, Reason
+| join kind=leftouter sessionsPerDay on Day, IdeClient
+| extend Sessions = coalesce(Sessions, 0)
+| extend EventsPer100Sessions = iff(Sessions > 0, round(100.0 * Events / Sessions, 1), real(null))
+| project Day, IdeClient, EventName, Origin, Reason, Events, AffectedUsers, AffectedSessions, Sessions, EventsPer100Sessions
+| order by Day desc, Events desc

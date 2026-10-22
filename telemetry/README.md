@@ -7,7 +7,9 @@ Insights resource per environment (dev / prod), with the event name as its ident
 
 ## Queries
 
-All files are in `queries/`. Each one starts with a header comment that lists its assumptions, definitions and
+All files are in `queries/` (workspace form, `AppEvents`). The same queries are kept in `queries/legacy/` in the
+classic `customEvents` form for the Application Insights resource-scoped **Logs** view; both forms are maintained for
+now, so change them together. Each one starts with a header comment that lists its assumptions, definitions and
 **verification status**.
 
 | File | What it reports | Source events |
@@ -25,7 +27,7 @@ All files are in `queries/`. Each one starts with a header comment that lists it
 - **Exceptions are events, not rows in the Application Insights `exceptions` table.** Client-side exceptions
   (`ExceptionOrigin = "Client"`) carry no `SessionId` but do carry `ClientSessionId` (#1199), which every server event carries too: join on it to attribute a client exception to a session; see the error-rates header.
 - **Verification status.** All four queries were run on 2026-10-15/16 against the dev resource using the *classic*
-  table and column names (see below) with Visual Studio and Rider data on Windows. Not yet verified: the `AppEvents`
+  table and column names (now `queries/legacy/`; see below) with Visual Studio and Rider data on Windows. Not yet verified: the `AppEvents`
   (workspace) forms, VS Code, macOS/Linux, and the `ServerStartFailed` / `ServerExitedUnexpectedly` / `ServerRestarted` paths.
 
 ## Two table-name flavours
@@ -37,8 +39,8 @@ The same data has two names depending on where you open **Logs**:
 | Log Analytics **workspace** (the files in `queries/` use these) | `AppEvents` | `TimeGenerated` | `Properties` | `UserId` |
 | Application Insights **resource** (Monitoring > Logs) | `customEvents` | `timestamp` | `customDimensions` | `user_Id` |
 
-To run a file in the resource-scoped view, replace `AppEvents` with `customEvents`, `TimeGenerated` with `timestamp`,
-`Properties` with `customDimensions`, `UserId` with `user_Id` and `Name` with `name`.
+The files in `queries/legacy/` are the `customEvents` forms: `AppEvents` -> `customEvents`, `TimeGenerated` -> `timestamp`,
+`Properties` -> `customDimensions`, `UserId` -> `user_Id` and `Name` -> `name`. Use them as-is in the resource-scoped view.
 
 ## Trying a query against the dev resource group
 
@@ -71,7 +73,7 @@ move around a little between releases, so treat the labels as a guide.
 7. To chart a result, run the query and switch to the **Chart** tab, or pin it to an Azure dashboard or workbook.
 
 If you only have access to the Application Insights resource (not the workspace), use **Monitoring > Logs** on the
-resource instead and apply the column swaps above. Queries saved there live with that resource.
+resource instead and use the files in `queries/legacy/`. Queries saved there live with that resource.
 
 The longer-term plan under #1190 is to deploy these (plus workbooks and alerts) from this repository with Bicep and a
 GitHub Actions workflow using a federated identity scoped to the two IdeSupport resource groups, so the manual steps above
