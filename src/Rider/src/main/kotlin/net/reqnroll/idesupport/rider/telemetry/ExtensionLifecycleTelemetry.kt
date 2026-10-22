@@ -1,8 +1,7 @@
 package net.reqnroll.idesupport.rider.telemetry
 
-import com.intellij.ide.plugins.PluginManagerCore
+import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import com.intellij.ide.util.PropertiesComponent
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import java.time.LocalDate
@@ -78,7 +77,7 @@ class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         if (!reported.compareAndSet(false, true)) return
         try {
-            val version = PluginManagerCore.getPlugin(PluginId.getId("net.reqnroll.idesupport"))?.version ?: return
+            val version = ReqnrollPlugin.descriptor()?.version ?: return
             val properties = PropertiesComponent.getInstance()
             val store = object : LifecycleStore {
                 override fun get(key: String): String? = properties.getValue(key)

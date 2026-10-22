@@ -1,7 +1,8 @@
 import * as assert from 'assert';
 import { EXTERNAL_PLACEHOLDER, MAX_FRAMES, MAX_LENGTH, sanitizeStack } from '../stackSanitizer';
 
-const ROOT = 'C:\\Users\\John Smith\\.vscode\\extensions\\reqnroll.reqnroll-ide-support-1.2.3';
+const ROOT =
+  'C:\\Users\\John Smith\\.vscode\\extensions\\reqnroll.reqnroll-ide-support-vscode-1.2.3';
 const OWN = `${ROOT}\\dist\\extension.js`;
 
 suite('stackSanitizer (#1199)', () => {

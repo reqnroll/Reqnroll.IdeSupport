@@ -2,7 +2,7 @@ package net.reqnroll.idesupport.rider.lsp.project
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.rd.createLifetime
-import com.intellij.openapi.rd.util.RdCoroutineHost
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.AsyncFileListener
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -19,6 +19,7 @@ import net.reqnroll.idesupport.rider.lsp.protocol.ProjectFileEntry
 import net.reqnroll.idesupport.rider.lsp.protocol.ProjectFileRole
 import net.reqnroll.idesupport.rider.lsp.protocol.ProjectFilesKind
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectFilesParams
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.concurrent.thread
@@ -63,9 +64,8 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         val lifetime = project.createLifetime()
 
         // See ReqnrollRunnableProjectsListener's identical wrapping for why: RD reactive
-        // properties assert an RD-recognized thread, which a plain background ProjectActivity
-        // coroutine is not.
-        withContext(RdCoroutineHost.instance.uiDispatcher) {
+        // properties assert the UI thread, which a plain background ProjectActivity coroutine is not.
+        withContext(Dispatchers.EDT) {
             project.solution.runnableProjectsModel.projects.advise(lifetime) { runnableProjects ->
                 val projects = runnableProjects.orEmpty()
                 projectFolders.set(

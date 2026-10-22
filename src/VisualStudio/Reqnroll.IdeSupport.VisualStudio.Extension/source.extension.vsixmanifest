@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="Reqnroll.IdeSupport.VisualStudio" Version="|%CurrentProject%;GetVsixVersion|" Language="en-US" Publisher="Reqnroll" />
+    <Identity Id="reqnroll-ide-support-vs" Version="|%CurrentProject%;GetVsixVersion|" Language="en-US" Publisher="Reqnroll" />
     <DisplayName>Reqnroll Extension for Visual Studio (Preview)</DisplayName>
     <Description xml:space="preserve">[Preview] Support for Reqnroll &amp; Gherkin — syntax highlighting, navigation, completion, and more.</Description>
     <MoreInfo>https://reqnroll.net</MoreInfo>

@@ -1,7 +1,6 @@
 package net.reqnroll.idesupport.rider.lsp
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
+import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import java.nio.file.Path
 
 /**
@@ -15,13 +14,12 @@ import java.nio.file.Path
  * every platform.
  */
 object ReqnrollTestLoggerPathResolver {
-    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
 
     const val ASSEMBLY_FILE_NAME = "Reqnroll.IdeSupport.TestLogger.dll"
 
     /** Locates the bundled logger's directory under this plugin's own install directory; returns null (not thrown — a missing logger degrades to the TRX-only path, never a hard failure) if it isn't there. */
     fun resolve(): Path? {
-        val plugin = PluginManagerCore.getPlugin(PLUGIN_ID) ?: return null
+        val plugin = ReqnrollPlugin.descriptor() ?: return null
         val candidate = plugin.pluginPath.resolve("testlogger")
         return candidate.takeIf { it.resolve(ASSEMBLY_FILE_NAME).toFile().exists() }
     }

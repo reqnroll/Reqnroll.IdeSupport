@@ -1,5 +1,7 @@
 # [vNext]
 
+# v2026.1 - 2026-10-21
+
 ## Improvements:
 * VS Code now sends telemetry event names exactly as the other IDEs do. VS Code prefixed every event name with the extension id (for example `Reqnroll.reqnroll-ide-support-vscode/FindStepDefinitions command executed`), which split one event into two names in aggregate reporting; the prefix is now removed before sending, and the user's `telemetry.telemetryLevel` opt-out is still honoured. Events already recorded keep their prefixed name: the `telemetry/queries` files now compare names through `CanonicalEventName()` so they cover both (VS Code) - see #1256
 * Telemetry event names now follow one scheme, `Category.Thing.Action`: for example `FindStepDefinitions command executed` is `Lookup.FindStepDefinitions`, `GoToHook command executed` is `Command.GoToHook`, `PerfSample` is `Perf.Sample`, `ServerSessionStarted` is `Server.Session.Started`, `Extension loaded` is `Lifecycle.Extension.Loaded` and `UnhandledException` is `Error.UnhandledException`. The daily-use heartbeat is now one event, `Lifecycle.Usage.Recorded` with a `UsageDays` property, instead of one event name per day count. Data already collected keeps its old names; `telemetry/event-name-map.kql` lists every old name and the queries under `telemetry/queries` use it (`CanonicalEventName()`) to read both. The full list is in `docs/Telemetry-Events-Inventory.md` (all IDEs, LSP server) - see #1257

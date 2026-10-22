@@ -91,6 +91,10 @@ kotlin {
     compilerOptions {
         apiVersion.set(KotlinVersion.KOTLIN_2_0)
         languageVersion.set(KotlinVersion.KOTLIN_2_0)
+        // The platform's interfaces declare real default methods; without this Kotlin generates
+        // bridge overrides for every one of them in each implementing class, which makes plugin
+        // classes "override" internal and deprecated platform methods they never mention.
+        freeCompilerArgs.add("-Xjvm-default=all")
     }
 }
 
@@ -126,15 +130,14 @@ intellijPlatform {
     // bytecode-level early warning if one of those APIs changes or disappears somewhere in the
     // declared range.
     pluginVerification {
-        // IntelliJ Platform Gradle Plugin 2.15+ added INTERNAL_API_USAGES and
-        // OVERRIDE_ONLY_API_USAGES to the default failureLevel alongside COMPATIBILITY_PROBLEMS
-        // (previously the only one that failed the build) -- picked up here via the 2.2.1 -> 2.18.1
-        // bump. This plugin has always had internal/override-only API usages (30 and 1 respectively,
-        // unchanged by this bump) that were never gating before; restoring the pre-2.15 failureLevel
-        // keeps that established baseline instead of a dependency bump silently making verifyPlugin
-        // stricter. COMPATIBILITY_PROBLEMS -- the check that catches real "this API doesn't exist on
-        // this IDE version" regressions -- stays enforced.
-        failureLevel = listOf(VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS)
+        // The JetBrains Marketplace rejects a plugin that uses @ApiStatus.Internal API, so any such
+        // usage fails the build here instead of at publish time. Spelled out rather than relying on
+        // the Gradle plugin's default, which has changed between releases.
+        failureLevel = listOf(
+            VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+            VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
+            VerifyPluginTask.FailureLevel.OVERRIDE_ONLY_API_USAGES,
+        )
 
         ides {
             recommended()

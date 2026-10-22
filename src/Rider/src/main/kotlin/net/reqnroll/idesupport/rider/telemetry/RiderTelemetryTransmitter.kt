@@ -1,9 +1,8 @@
 package net.reqnroll.idesupport.rider.telemetry
 
-import com.intellij.ide.plugins.PluginManagerCore
+import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationInfo
-import com.intellij.openapi.extensions.PluginId
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import java.net.URI
 import java.net.http.HttpClient
@@ -132,7 +131,6 @@ object RiderTelemetryTransmitter {
 
     internal const val IDE_CLIENT = "rider"
 
-    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
     private const val USER_ID_PROPERTY_KEY = "net.reqnroll.idesupport.telemetry.userId"
 
     // Bounded timeouts: without them a black-holed endpoint leaves one pending request and
@@ -316,7 +314,7 @@ object RiderTelemetryTransmitter {
 
     private fun ideVersion(): String = ApplicationInfo.getInstance().fullVersion
 
-    private fun extensionVersion(): String = PluginManagerCore.getPlugin(PLUGIN_ID)?.version ?: "unknown"
+    private fun extensionVersion(): String = ReqnrollPlugin.descriptor()?.version ?: "unknown"
 
     /**
      * Pure/parameterized so the opt-out check is testable without mutating real environment state

@@ -1,10 +1,6 @@
-# vNext
+# [vNext]
 
-## Improvements:
-
-## Bug fixes:
-
-# v2026.0.1 - 2026-06-16
+# v2026.1 - 2026-10-21
 
 ## Initial release of Reqnroll IDE Support
 
