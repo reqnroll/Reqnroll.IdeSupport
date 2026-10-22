@@ -51,9 +51,6 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
     {
     }
 
-    /// <summary>Raised after the configuration is reloaded and found to have changed.</summary>
-    public event EventHandler ConfigurationChanged;
-
     private void InitializeConfiguration()
     {
         var configSources = _projectScope is VoidProjectScope
@@ -62,26 +59,24 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
         _configCache = LoadConfiguration(configSources);
     }
 
-    /// <summary>Forces a re-check of configuration sources, raising <see cref="ConfigurationChanged"/> if anything changed.</summary>
-    public void Reload() => CheckConfiguration(triggerChanged: true);
-
-    private void CheckConfiguration(bool triggerChanged)
+    /// <summary>Re-reads the configuration sources and returns whether the resolved configuration changed.</summary>
+    public bool Reload()
     {
         Logger.LogVerbose("Checking configuration...");
 
         var configSources = GetConfigSources().ToArray();
         if (_configCache.ConfigSources.SequenceEqual(configSources))
-            return; // no source changed
+            return false; // no source changed
 
         var oldConfiguration = _configCache.Configuration;
         _configCache = LoadConfiguration(configSources);
         Logger.LogVerbose("Configuration loaded");
 
-        if (triggerChanged && !oldConfiguration.Equals(_configCache.Configuration))
-        {
-            Logger.LogInfo("Configuration changed");
-            ConfigurationChanged?.Invoke(this, EventArgs.Empty);
-        }
+        if (oldConfiguration.Equals(_configCache.Configuration))
+            return false;
+
+        Logger.LogInfo("Configuration changed");
+        return true;
     }
 
     private IdeSupportConfiguration GetDefaultConfiguration() => new();

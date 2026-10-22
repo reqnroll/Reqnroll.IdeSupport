@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿using Reqnroll.IdeSupport.Common.Configuration;
+using MediatR;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -121,8 +122,10 @@ public class LspWorkspaceScopeManagerTests : IDisposable
     public void GetConfigurationProviderForUri_returns_fallback_when_no_workspace_covers_uri()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "a.feature"));
-        // No workspace opened — should fall back to ProjectSystemIdeSupportConfigurationProvider
-        _sut.GetConfigurationProviderForUri(uri).Should().NotBeNull();
+        // No workspace opened: the built-in defaults apply.
+        var configuration = _sut.GetConfigurationProviderForUri(uri).GetConfiguration();
+
+        configuration.DefaultFeatureLanguage.Should().Be(IdeSupportConfiguration.FallbackFeatureLanguage);
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────

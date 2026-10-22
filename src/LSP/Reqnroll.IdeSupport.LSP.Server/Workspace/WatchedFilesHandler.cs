@@ -150,7 +150,12 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
 
         var provider = project.GetIdeSupportConfigurationProvider()
             as ProjectScopeIdeSupportConfigurationProvider;
-        provider?.Reload();
+        if (provider is not null && !provider.Reload())
+        {
+            _logger.LogVerbose(
+                $"reqnroll.json {changeType}: configuration of project '{project.ProjectName}' is unchanged.");
+            return;
+        }
 
         await _mediator.Publish(
             new ReqnrollConfigChangedNotification(project.ProjectFolder, project), ct)
