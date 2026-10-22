@@ -2,7 +2,7 @@ package net.reqnroll.idesupport.rider.lsp.project
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.rd.createLifetime
-import com.intellij.openapi.rd.util.RdCoroutineHost
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.startup.ProjectActivity
 import com.jetbrains.rider.model.runnableProjectsModel
 import com.jetbrains.rider.projectView.solution
@@ -10,6 +10,7 @@ import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollNotificationSender
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectLoadedParams
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectUnloadedParams
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
@@ -44,12 +45,10 @@ class ReqnrollRunnableProjectsListener : ProjectActivity {
         val lifetime = project.createLifetime()
         val tracker = ProjectLoadedTracker()
 
-        // RD reactive properties assert they're advised from the UI thread or a scheduler the RD
-        // dispatcher itself recognizes — a plain background ProjectActivity coroutine is neither,
-        // and .advise() throws IllegalStateException("Wrong thread ...") without this. Confirmed
-        // by decompiling Rider 2024.3.5's actual RdCoroutineHost class that .uiDispatcher is the
-        // correct RD-aware context for exactly this.
-        withContext(RdCoroutineHost.instance.uiDispatcher) {
+        // RD reactive properties assert they're advised from the UI thread — a plain background
+        // ProjectActivity coroutine isn't, and .advise() throws IllegalStateException("Wrong thread
+        // ...") without hopping onto the EDT first.
+        withContext(Dispatchers.EDT) {
             project.solution.runnableProjectsModel.projects.advise(lifetime) { runnableProjects ->
                 val current = runnableProjects.orEmpty()
                 val currentFiles = current.map { it.projectFilePath }.toSet()

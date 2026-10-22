@@ -1,20 +1,17 @@
 package net.reqnroll.idesupport.rider.lsp.project
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
-import com.intellij.platform.lsp.api.LspServer
-import com.intellij.platform.lsp.api.LspServerManager
-import com.intellij.platform.lsp.api.LspServerManagerListener
 import com.intellij.platform.lsp.api.LspServerState
-import net.reqnroll.idesupport.rider.lsp.ReqnrollLspServerSupportProvider
+import net.reqnroll.idesupport.rider.lsp.ReqnrollServerEvents
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Runs [action] once the Reqnroll LSP server reaches [LspServerState.Running] — immediately if
- * it's already there, otherwise deferred via [LspServerManagerListener].
+ * it's already there, otherwise deferred until [ReqnrollServerEvents] reports it.
  *
  * Sending any custom `reqnroll`-prefixed notification before the server completes its LSP
  * initialize/initialized handshake gets it dropped and logged as an "Unexpected notification" by
@@ -26,16 +23,12 @@ import java.util.concurrent.atomic.AtomicReference
  * always races ahead of server startup. Route every such push through this gate rather than
  * sending directly from an `advise`/model-change callback.
  *
- * Registers the deferred listener against a fresh, per-call [com.intellij.openapi.Disposable] (a
- * child of [Project], not the project itself) and disposes it immediately once the action runs —
- * confirmed by decompiling `LspServerManager` that there is no `removeLspServerManagerListener` at
- * all; the *only* way to deregister is via the parent `Disposable` passed at registration. Without
- * this, a listener registered here would stay subscribed for the rest of the project's lifetime
- * even after firing once, and would fire `action` again on every later "Running" transition —
- * including after a manual LSP server restart (a real, user-reachable action via the status-bar
- * widget), silently turning "run once when ready" into "run every time the server (re)starts."
+ * A deferred action subscribes to [ReqnrollServerEvents] and unsubscribes as soon as it has run.
+ * Without that, it would fire again on every later "Running" transition — including after a manual
+ * LSP server restart (a real, user-reachable action via the status-bar widget), silently turning
+ * "run once when ready" into "run every time the server (re)starts."
  *
- * A deferred action runs on the thread that moves the server to Running — in Rider 2024.3.5 that's
+ * A deferred action runs on the thread that completes the LSP handshake — in Rider 2024.3.5 that's
  * the `whenComplete` of the LSP `initialize` request's future, i.e. a platform background thread,
  * not the EDT. See [ServerReadinessGate] for the check-then-register race and the optional
  * per-project coalescing of pending actions.
@@ -50,37 +43,18 @@ object ReqnrollLspServerReadiness {
     private fun gateFor(project: Project): ServerReadinessGate =
         project.getUserData(GATE_KEY) ?: synchronized(this) {
             project.getUserData(GATE_KEY)
-                ?: ServerReadinessGate(LspServerManagerStateSource(project)).also { project.putUserData(GATE_KEY, it) }
+                ?: ServerReadinessGate(ServerEventsStateSource(project)).also { project.putUserData(GATE_KEY, it) }
         }
 
-    /** The real [ServerStateSource]: the Reqnroll server's state as [LspServerManager] reports it. */
-    private class LspServerManagerStateSource(private val project: Project) : ServerStateSource {
-        private val manager get() = LspServerManager.getInstance(project)
+    /** The real [ServerStateSource]: the Reqnroll server's state as [ReqnrollServerEvents] tracks it. */
+    private class ServerEventsStateSource(project: Project) : ServerStateSource {
+        private val events = project.service<ReqnrollServerEvents>()
 
-        override fun isRunning(): Boolean =
-            manager.getServersForProvider(ReqnrollLspServerSupportProvider::class.java).firstOrNull()?.state ==
-                LspServerState.Running
+        override fun isRunning(): Boolean = events.isRunning
 
-        override fun subscribe(onRunning: () -> Unit): () -> Unit {
-            val listenerLifetime = Disposer.newDisposable(project, "ReqnrollLspServerReadiness.runWhenRunning")
-            manager.addLspServerManagerListener(
-                object : LspServerManagerListener {
-                    override fun serverStateChanged(lspServer: LspServer) {
-                        if (lspServer.providerClass == ReqnrollLspServerSupportProvider::class.java &&
-                            lspServer.state == LspServerState.Running
-                        ) {
-                            onRunning()
-                        }
-                    }
-                },
-                listenerLifetime,
-                // `true` would not help: decompiled, it replays only a ShutdownUnexpectedly state
-                // (never Running) plus fileOpened events, and through the multicaster to every
-                // registered listener, not just this one. ServerReadinessGate re-checks instead.
-                false,
-            )
-            return { Disposer.dispose(listenerLifetime) }
-        }
+        // The platform never replays a Running state to a late subscriber; ServerReadinessGate
+        // re-checks isRunning() after subscribing instead.
+        override fun subscribe(onRunning: () -> Unit): () -> Unit = events.subscribeRunning(onRunning)
     }
 }
 

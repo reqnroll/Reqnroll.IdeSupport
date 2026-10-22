@@ -1,9 +1,12 @@
 package net.reqnroll.idesupport.rider.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.Lsp4jClient
+import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
 import com.intellij.platform.lsp.api.customization.LspCommandsSupport
@@ -130,6 +133,29 @@ class ReqnrollLspServerDescriptor(project: Project) :
             textDocumentCapabilities.rangeFormatting = RangeFormattingCapabilities(true)
             textDocumentCapabilities.onTypeFormatting = OnTypeFormattingCapabilities(true)
         }
+
+    // Resolved while the project is alive: the platform asks for the listener again when it stops the
+    // server during project close, by which point looking the service up throws AlreadyDisposedException.
+    private val events = project.service<ReqnrollServerEvents>()
+
+    /** Reports the server's handshake completion and stop to [ReqnrollServerEvents]. */
+    override val lspServerListener: LspServerListener
+        get() = events
+
+    /**
+     * Launches the server process, reporting the attempt to [ReqnrollServerEvents]. A launch that
+     * throws (server binary missing, process cannot be spawned) never reaches the platform's
+     * [LspServerListener.serverStopped], so the failure is reported here.
+     */
+    override fun startServerProcess(): OSProcessHandler {
+        events.serverStarting()
+        try {
+            return super.startServerProcess()
+        } catch (ex: Exception) {
+            events.serverStartFailed()
+            throw ex
+        }
+    }
 
     /** Resolves the bundled server executable and builds the launch command line, with the log level chosen per [resolveLogLevel]. */
     override fun createCommandLine(): GeneralCommandLine {

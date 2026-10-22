@@ -1,7 +1,6 @@
 package net.reqnroll.idesupport.rider.lsp
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
+import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -15,14 +14,13 @@ import java.nio.file.Path
  * `obj/<Project>.csproj.reqnroll-ide.targets` stub as an `Import` (see `MtpProjectStubs`).
  */
 object ReqnrollMtpReporterPathResolver {
-    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
 
     const val BUNDLE_TARGETS_FILE_NAME = "Reqnroll.IdeSupport.TestReporter.MTP.targets"
     const val SOURCE_DIRECTORY_NAME = "ReporterSource"
 
     /** Returns null (not thrown) if the plugin or a complete bundle can't be found — degrades to exit-code-only outcomes for MTP-mode projects, never a hard failure. */
     fun resolve(): Path? {
-        val plugin = PluginManagerCore.getPlugin(PLUGIN_ID) ?: return null
+        val plugin = ReqnrollPlugin.descriptor() ?: return null
         return resolveIn(plugin.pluginPath.resolve("mtpreporter"))
     }
 
