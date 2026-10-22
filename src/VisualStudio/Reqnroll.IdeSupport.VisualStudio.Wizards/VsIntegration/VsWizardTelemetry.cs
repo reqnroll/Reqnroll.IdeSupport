@@ -36,7 +36,7 @@ public class VsWizardTelemetry : IWizardTelemetry, IWizardTelemetryLogger
 
     /// <summary>Reports that the project template wizard completed with the chosen frameworks.</summary>
     public void OnProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework) =>
-        _telemetryService.MonitorProjectTemplateWizardCompleted(dotNetFramework, unitTestFramework, false);
+        _telemetryService.MonitorProjectTemplateWizardCompleted(dotNetFramework, unitTestFramework);
 
     /// <summary>Reports an error to telemetry.</summary>
     public void MonitorError(Exception exception, bool? isFatal = null) =>

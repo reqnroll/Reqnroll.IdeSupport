@@ -70,7 +70,62 @@ function isTelemetryEnabledByEnv(): boolean {
 // that never call registerTelemetry at all).
 let reporter: TelemetryReporter | undefined;
 
-// The server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
+// Usage events go through our own TelemetryLogger (created with the reporter) rather than straight
+// into `reporter.sendTelemetryEvent`. Both are VS Code TelemetryLoggers, so both honour
+// `telemetry.telemetryLevel`, but VS Code prefixes every event name with the extension id
+// (`<publisher>.<name>/`), which the other IDE clients do not do. Our logger's sender strips
+// that prefix and hands the event to the reporter's logger-bypassing `sendDangerousTelemetryEvent`
+// (safe: the opt-out has already been applied by *our* logger), so one event has one name in all IDEs.
+let logger: vscode.TelemetryLogger | undefined;
+// Set by the sender when the reporter throws, because the logger swallows sender errors.
+let lastSendError: string | undefined;
+
+const EXTENSION_ID_PREFIX = /^[^/\s]+\.[^/\s]+\//;
+
+/** Removes the `<publisher>.<name>/` extension-id prefix VS Code adds to event names. */
+export function stripExtensionIdPrefix(eventName: string): string {
+  return eventName.replace(EXTENSION_ID_PREFIX, '');
+}
+
+type TelemetryLoggerFactory = (
+  sender: vscode.TelemetrySender,
+  options?: vscode.TelemetryLoggerOptions,
+) => vscode.TelemetryLogger;
+
+let createTelemetryLogger: TelemetryLoggerFactory = (sender, options) =>
+  vscode.env.createTelemetryLogger(sender, options);
+
+/**
+ * Test hook: replaces `vscode.env.createTelemetryLogger`. The Extension Development Host used by the
+ * tests has telemetry disabled, so the real logger never calls its sender; a fake that forwards
+ * (and prefixes, like the host) lets the tests exercise the sender. Not used in production code.
+ */
+export function setTelemetryLoggerFactoryForTests(
+  factory: TelemetryLoggerFactory | undefined,
+): void {
+  createTelemetryLogger =
+    factory ?? ((sender, options) => vscode.env.createTelemetryLogger(sender, options));
+}
+
+function createUnprefixingLogger(target: TelemetryReporter): vscode.TelemetryLogger {
+  return createTelemetryLogger(
+    {
+      sendEventData: (eventName, data) => {
+        try {
+          const properties = (data?.properties ?? data) as Record<string, string> | undefined;
+          target.sendDangerousTelemetryEvent(stripExtensionIdPrefix(eventName), properties);
+        } catch (err) {
+          lastSendError = err instanceof Error ? err.message : String(err);
+        }
+      },
+      // Usage telemetry only: client exceptions are sent as ordinary events (UnhandledException).
+      sendErrorData: () => undefined,
+    },
+    { ignoreUnhandledErrors: true },
+  );
+}
+
+// The server emits its final events (`Lifecycle.Usage.SummaryReported`, `Server.Session.Ended`) while
 // handling the LSP `shutdown` request, i.e. during `client.stop()`. VS Code disposes
 // `context.subscriptions` as soon as `deactivate()` has been *called* (it does not wait for the returned
 // promise), which would detach the notification forwarder and the reporter before those events arrive.
@@ -143,7 +198,7 @@ function disposeReporterBounded(r: TelemetryReporter): Thenable<void> {
 /**
  * Creates the shared `TelemetryReporter` if telemetry is enabled and it does not exist yet. Called by
  * `extension.ts` *before* `client.start()` so that client-originated server-lifecycle events
- * (`ServerStartFailed`) can be sent when the server never comes up, and again (as a
+ * (`Server.Process.StartFailed`) can be sent when the server never comes up, and again (as a
  * no-op) by `registerTelemetry` once it has.
  */
 export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {
@@ -157,14 +212,18 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
   const created = new TelemetryReporter(
     resolveConnectionString(connectionOverride, logInfo, builtIn),
   );
+  const createdLogger = createUnprefixingLogger(created);
   reporter = created;
+  logger = createdLogger;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),
   });
   context.subscriptions.push({
     dispose: () =>
       afterTeardownGate(() => {
+        createdLogger.dispose();
         reporter = undefined;
+        logger = undefined;
       }),
   });
 }
@@ -176,6 +235,7 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
  */
 export function resetTelemetryReporterForTests(): void {
   reporter = undefined;
+  logger = undefined;
 }
 
 /**
@@ -227,14 +287,14 @@ export function withClientIdentity(
 }
 
 function extensionVersion(): string {
-  const packageJson = vscode.extensions.getExtension('Reqnroll.reqnroll-ide-support')
+  const packageJson = vscode.extensions.getExtension('Reqnroll.reqnroll-ide-support-vscode')
     ?.packageJSON as { version?: unknown } | undefined;
   return typeof packageJson?.version === 'string' ? packageJson.version : 'unknown';
 }
 
 /**
  * Sends a client-originated telemetry event directly, for the rare case where the event describes
- * something only the client knows (e.g. `doGoToHooks.ts`'s "GoToHook command executed"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
+ * something only the client knows (e.g. `doGoToHooks.ts`'s "Command.GoToHook"): the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
  * the classic VS CodeLens's Details-popup prefetch, so it does not claim to). Most telemetry
  * should still be server-originated and reach Application Insights via the notification forwarder
  * in `registerTelemetry` above; reach for this only when the client itself is the source of truth.
@@ -255,7 +315,7 @@ export function sendTelemetryEvent(
   // The mirror records what would be transmitted, identity keys (IdeClient, ClientSessionId, ...) included.
   const stringProps = withClientIdentity(properties);
 
-  if (!reporter) {
+  if (!reporter || !logger) {
     debugLog.record('host', eventName, stringProps, enabled, false);
     return;
   }
@@ -272,13 +332,16 @@ export function sendTelemetryEvent(
     return;
   }
 
+  lastSendError = undefined;
   try {
-    reporter.sendTelemetryEvent(eventName, stringProps);
+    logger.logUsage(eventName, { properties: stringProps });
   } catch (err) {
+    lastSendError = err instanceof Error ? err.message : String(err);
+  }
+  if (lastSendError !== undefined) {
     // Telemetry must never surface to the user: record it, open the breaker, carry on.
-    const message = err instanceof Error ? err.message : String(err);
-    breaker.recordFailure(message);
-    debugLog.record('host', eventName, stringProps, enabled, false, message);
+    breaker.recordFailure(lastSendError);
+    debugLog.record('host', eventName, stringProps, enabled, false, lastSendError);
     return;
   }
   debugLog.record('host', eventName, stringProps, enabled, true);

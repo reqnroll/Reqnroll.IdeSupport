@@ -5,8 +5,8 @@ using Xunit;
 namespace Reqnroll.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
-/// The client-originated "GoToStepDefinition command executed" event: the genuine navigation,
-/// as opposed to the server's per-lookup "FindStepDefinitions command executed".
+/// The client-originated "Command.GoToStepDefinition" event: the genuine navigation,
+/// as opposed to the server's per-lookup "Lookup.FindStepDefinitions".
 /// </summary>
 public class GoToStepDefinitionTelemetryTests
 {
@@ -18,7 +18,7 @@ public class GoToStepDefinitionTelemetryTests
     {
         var evt = GoToStepDefinitionTelemetry.CreateEvent(count);
 
-        evt.EventName.Should().Be("GoToStepDefinition command executed");
+        evt.EventName.Should().Be("Command.GoToStepDefinition");
         evt.Properties.Should().ContainSingle()
             .Which.Should().Be(new KeyValuePair<string, object>("LocationCount", count));
     }

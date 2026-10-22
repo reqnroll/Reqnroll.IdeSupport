@@ -82,7 +82,7 @@ suite('stepNavigation', () => {
       assert.match(info ?? '', /No step definition found/);
     });
 
-    test('sends "GoToStepDefinition command executed" with the navigable LocationCount (issue #899)', async () => {
+    test('sends "Command.GoToStepDefinition" with the navigable LocationCount', async () => {
       const client = {
         sendRequest: () =>
           Promise.resolve({
@@ -107,11 +107,14 @@ suite('stepNavigation', () => {
       } as unknown as LanguageClient;
       const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+        sendDangerousTelemetryEvent: (
+          eventName: string,
+          properties?: Record<string, string>,
+        ) => void;
       };
-      const original = proto.sendTelemetryEvent;
+      const original = proto.sendDangerousTelemetryEvent;
       const sent: Array<[string, Record<string, string> | undefined]> = [];
-      proto.sendTelemetryEvent = (eventName, properties) => {
+      proto.sendDangerousTelemetryEvent = (eventName, properties) => {
         sent.push([eventName, properties]);
       };
 
@@ -121,11 +124,11 @@ suite('stepNavigation', () => {
           doGoToStepDefinition(client),
         );
       } finally {
-        proto.sendTelemetryEvent = original;
+        proto.sendDangerousTelemetryEvent = original;
         for (const sub of telemetryContext.subscriptions) sub.dispose();
       }
 
-      const events = sent.filter(([name]) => name === 'GoToStepDefinition command executed');
+      const events = sent.filter(([name]) => name === 'Command.GoToStepDefinition');
       assert.strictEqual(events.length, 1);
       assert.strictEqual(String(events[0][1]?.LocationCount), '1');
     });

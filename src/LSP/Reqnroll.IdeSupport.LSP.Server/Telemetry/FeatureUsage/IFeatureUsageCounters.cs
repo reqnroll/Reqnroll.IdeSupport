@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 /// <summary>
 /// In-process, allocation-free counters for high-volume lookup and passive feature usage,
-/// aggregated in memory and periodically flushed as one <c>FeatureUsageSummary</c> telemetry
+/// aggregated in memory and periodically flushed as one <c>Lifecycle.Usage.SummaryReported</c> telemetry
 /// event by <see cref="IFeatureUsageFlushService"/> instead of a <c>telemetry/event</c>
 /// notification per invocation. Keeps the LSP request hot path free of serialization/wire work.
 /// </summary>

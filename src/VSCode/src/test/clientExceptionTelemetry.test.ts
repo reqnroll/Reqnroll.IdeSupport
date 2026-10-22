@@ -214,7 +214,7 @@ suite('clientExceptionTelemetry (#621)', () => {
       assert.strictEqual(reporter.report('Activation', new Error('same')), false);
 
       assert.strictEqual(sent.length, 1);
-      assert.strictEqual(sent[0].name, 'UnhandledException');
+      assert.strictEqual(sent[0].name, 'Error.UnhandledException');
     });
 
     test('treats a different source or message as distinct', () => {
@@ -432,17 +432,17 @@ suite('clientExceptionTelemetry (#621)', () => {
     ): void {
       const calls: Sent[] = [];
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (name: string, props?: Record<string, string>) => void;
+        sendDangerousTelemetryEvent: (name: string, props?: Record<string, string>) => void;
       };
-      const original = proto.sendTelemetryEvent;
-      proto.sendTelemetryEvent = (name, props) => {
+      const original = proto.sendDangerousTelemetryEvent;
+      proto.sendDangerousTelemetryEvent = (name, props) => {
         calls.push({ name, props: props ?? {} });
       };
       const context = { subscriptions: [] } as unknown as vscode.ExtensionContext;
       try {
         fn(calls, context);
       } finally {
-        proto.sendTelemetryEvent = original;
+        proto.sendDangerousTelemetryEvent = original;
         for (const sub of context.subscriptions) sub.dispose();
       }
     }
@@ -455,7 +455,7 @@ suite('clientExceptionTelemetry (#621)', () => {
         reportClientException('Activation', new RangeError('transmission-test-1'));
 
         assert.strictEqual(calls.length, 1);
-        assert.strictEqual(calls[0].name, 'UnhandledException');
+        assert.strictEqual(calls[0].name, 'Error.UnhandledException');
         assert.strictEqual(calls[0].props.ExceptionType, 'RangeError');
         assert.strictEqual(calls[0].props.Source, 'Activation');
         assert.strictEqual(calls[0].props.ExceptionOrigin, 'Client');

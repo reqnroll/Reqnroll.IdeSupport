@@ -99,7 +99,7 @@ public static class ServiceCollectionExtensions
                     sp.GetRequiredService<ITelemetryDebugLog>()),
                 sp.GetRequiredService<ClientIdeContext>()))
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
-            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "UnhandledException"
+            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "Error.UnhandledException"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server
             // has no equivalent of). A NullLspTelemetryService here would silently
             // drop LSP.Core exceptions (e.g. Gherkin parse errors).
@@ -127,7 +127,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ILspTelemetryService>(),
                 FeatureUsageFlushService.ResolveIntervalFromEnvironment()))
             // Server lifecycle telemetry: ServerSessionStarted after the handshake,
-            // best-effort ServerSessionEnded at shutdown. Singleton so the session clock spans the process.
+            // best-effort Server.Session.Ended at shutdown. Singleton so the session clock spans the process.
             .AddSingleton(sp => new ServerSessionTelemetry(
                 sp.GetRequiredService<ILspTelemetryService>(),
                 sp.GetRequiredService<ClientIdeContext>(),

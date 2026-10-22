@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// Handles <c>workspace/executeCommand</c> for <see cref="CommandName"/>, the <see cref="CodeAction.Command"/>
 /// every "Define step(s)" quick fix carries. A client runs a code action's command after applying
 /// its <c>WorkspaceEdit</c>, so receiving it is the server's only exact signal that the user
-/// picked a Define Steps action — it sends <see cref="TelemetryEvents.DefineStepsCommandExecuted"/>.
+/// picked a Define Steps action — it sends <see cref="TelemetryEvents.CodeActionDefineStepsExecuted"/>.
 /// Arguments: <c>[targetFileUri]</c>.
 /// </summary>
 /// <remarks>
@@ -61,7 +61,7 @@ public sealed class DefineStepsTriggeredHandler : IExecuteCommandHandler
         if (request.Command != CommandName)
             return Unit.Value;
 
-        _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandExecuted, new());
+        _telemetryService?.SendEvent(TelemetryEvents.CodeActionDefineStepsExecuted, new());
 
         // The argument comes from the client, so treat it as untrusted: only a string is used, and
         // anything else (missing, an object, a number) just skips the reveal. Revealing the file is a

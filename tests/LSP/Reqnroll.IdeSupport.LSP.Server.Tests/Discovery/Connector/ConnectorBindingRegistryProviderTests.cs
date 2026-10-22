@@ -425,7 +425,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
@@ -448,7 +448,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "2.1".Equals(d["ReqnrollVersion"]) &&
                 !d.ContainsKey("LegacySpecFlow") &&
@@ -460,12 +460,12 @@ namespace S
                 !d.ContainsKey("Error")));
     }
 
-    // ProjectCharacteristics is sent after BindingRegistryChanged (telemetry must not delay consumers),
+    // Project.Characteristics.Reported is sent after BindingRegistryChanged (telemetry must not delay consumers),
     // so tests that assert on it wait for the event itself rather than for the registry change.
     private static TaskCompletionSource WhenProjectCharacteristicsSent(ILspTelemetryService telemetry)
     {
         var sent = new TaskCompletionSource();
-        telemetry.When(t => t.SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>()))
+        telemetry.When(t => t.SendEvent(TelemetryEvents.ProjectCharacteristicsReported, Arg.Any<Dictionary<string, object?>>()))
             .Do(_ => sent.TrySetResult());
         return sent;
     }
@@ -492,7 +492,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ProjectCharacteristics,
+            TelemetryEvents.ProjectCharacteristicsReported,
             Arg.Is<Dictionary<string, object?>>(d =>
                 1.Equals(d["StepDefinitionCount"]) &&
                 1.Equals(d["HookCount"]) &&
@@ -518,7 +518,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ProjectCharacteristics,
+            TelemetryEvents.ProjectCharacteristicsReported,
             Arg.Is<Dictionary<string, object?>>(d =>
                 d.ContainsKey("FeatureFileCount") == expectedPresent &&
                 (!expectedPresent || 5.Equals(d["FeatureFileCount"]))));
@@ -540,9 +540,9 @@ namespace S
         await Task.Delay(300);
 
         telemetry.DidNotReceive().SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsFailed"])));
-        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>());
+        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristicsReported, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]
@@ -558,7 +558,7 @@ namespace S
         sut.TriggerRefresh();
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
-        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>());
+        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristicsReported, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]
@@ -575,7 +575,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 false.Equals(d["IsFailed"]) &&
                 d.ContainsKey("ProjectTargetFramework") &&
@@ -602,7 +602,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 true.Equals(d["IsFailed"]) && d["DurationMs"] is long && d["DurationBucket"] is string));
     }
@@ -621,7 +621,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 true.Equals(d["HashMatched"])));
@@ -646,7 +646,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
@@ -708,10 +708,10 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => "projectLoad".Equals(d["TriggerContext"])));
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => "build".Equals(d["TriggerContext"])));
     }
 
@@ -734,7 +734,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
@@ -759,7 +759,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.DidNotReceive().SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            TelemetryEvents.ProjectDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsFailed"])));
     }
 

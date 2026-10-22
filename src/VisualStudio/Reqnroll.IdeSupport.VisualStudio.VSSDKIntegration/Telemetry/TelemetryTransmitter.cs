@@ -218,7 +218,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
                 // Never TrackException(new ExceptionTelemetry(exception)): that serialises the raw message,
                 // the full stack (with file names and line numbers) and inner exceptions, none of which are
                 // privacy-safe. Send the same sanitised UnhandledException event the LSP server does.
-                var eventTelemetry = new EventTelemetry(TelemetryEvents.UnhandledException) { Timestamp = DateTime.UtcNow };
+                var eventTelemetry = new EventTelemetry(TelemetryEvents.ErrorUnhandledException) { Timestamp = DateTime.UtcNow };
                 foreach (var prop in BuildSanitizedExceptionProps(exception, additionalPropsArray))
                 {
                     eventTelemetry.Properties.Add(prop.Key, prop.Value);

@@ -130,13 +130,13 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // branch below). FeatureFileCount is best-effort: the membership baseline
             // (reqnroll/projectFiles) may not have arrived yet at this exact moment -- see the
             // deferred-rescan handling below -- so null means "not yet known" rather than zero.
-            _telemetryService?.SendEvent(TelemetryEvents.OpenProjectCommandExecuted, new()
+            _telemetryService?.SendEvent(TelemetryEvents.ProjectOpened, new()
             {
                 ["FeatureFileCount"] = HasBaselineForProject(project)
                     ? GetIndexedFeatureFiles(project).Count
                     : (int?)null,
                 // The cross-IDE project profile. Reqnroll
-                // version arrives on the first ReqnrollDiscoveryExecuted event,
+                // version arrives on the first Project.Discovery.Executed event,
                 // where the connector reports them authoritatively.
                 ["ProjectTargetFramework"] = project.TargetFrameworkMonikers,
                 ["ProgrammingLanguage"] = ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),

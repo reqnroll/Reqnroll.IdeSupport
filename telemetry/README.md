@@ -22,7 +22,8 @@ now, so change them together. Each one starts with a header comment that lists i
 ### Things to know when reading the results
 
 - **`PerfSample` is sampled.** `Samples` is a confidence measure for the percentiles, not a usage count. For usage use
-  the `* command executed` events and `FeatureUsageSummary`.
+  the `Command.*` / `Lookup.*` events and `FeatureUsageSummary`.
+- **VS Code event names used to carry an extension-id prefix** (`Reqnroll.reqnroll-ide-support-vscode/...`, #1256), so older VS Code rows do not match a plain `Name == "..."`. Every query embeds `CanonicalEventName()` (from `event-name-map.kql`), which strips that prefix and maps the pre-#1257 event names to the current `Category.Thing.Action` ones; compare event names through it in new queries, and keep the embedded copy identical to `event-name-map.kql` (a unit test checks).
 - **RID is derived** from `OperatingSystem` and `Architecture`; the client never sends a RID.
 - **Exceptions are events, not rows in the Application Insights `exceptions` table.** Client-side exceptions
   (`ExceptionOrigin = "Client"`) carry no `SessionId` but do carry `ClientSessionId` (#1199), which every server event carries too: join on it to attribute a client exception to a session; see the error-rates header.

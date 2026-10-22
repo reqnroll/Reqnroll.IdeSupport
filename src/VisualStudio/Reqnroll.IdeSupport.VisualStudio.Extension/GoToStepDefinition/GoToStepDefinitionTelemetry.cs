@@ -6,9 +6,9 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 
 /// <summary>
-/// Builds the client-originated "GoToStepDefinition command executed" event: the user ran Go To
+/// Builds the client-originated "Command.GoToStepDefinition" event: the user ran Go To
 /// Definition (F12 or Ctrl+Click) in a <c>.feature</c> file. Only the client knows the command was run; the server
-/// sees every Ctrl+hover lookup as <c>FindStepDefinitions command executed</c>. Kept on a plain static class for the
+/// sees every Ctrl+hover lookup as <c>Lookup.FindStepDefinitions</c>. Kept on a plain static class for the
 /// same unit-testability reason as <c>GoToHookTelemetry</c>.
 /// </summary>
 internal static class GoToStepDefinitionTelemetry
@@ -17,6 +17,6 @@ internal static class GoToStepDefinitionTelemetry
     public const string LocationCountProperty = "LocationCount";
 
     public static GenericEvent CreateEvent(int navigableLocationCount) =>
-        new(TelemetryEvents.GoToStepDefinitionCommandExecuted,
+        new(TelemetryEvents.CommandGoToStepDefinition,
             [new KeyValuePair<string, object>(LocationCountProperty, navigableLocationCount)]);
 }

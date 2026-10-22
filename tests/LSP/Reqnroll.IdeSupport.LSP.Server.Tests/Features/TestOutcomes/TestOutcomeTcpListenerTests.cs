@@ -387,7 +387,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
             RunComplete(registration.RunId));
 
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add")?.Rows.Count == 2)).Should().BeTrue();
-        lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p =>
+        lspTelemetry.Received(1).SendEvent(TelemetryEvents.ProjectTestRunCompleted, Arg.Is<Dictionary<string, object?>>(p =>
             (int)p["ResultCount"]! == 2 &&
             (bool)p["Aborted"]! == false &&
             (bool)p["Canceled"]! == false &&
@@ -408,7 +408,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         await SendAsync(registration.Endpoint, mtpHello, Result("Add", "Add(1,2)", "Passed", registration.RunId), RunComplete(registration.RunId));
 
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
-        lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
+        lspTelemetry.Received(1).SendEvent(TelemetryEvents.ProjectTestRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
     }
 
     [Fact]
@@ -434,7 +434,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         await SendAsync(registration.Endpoint, mtpHello, Result("Add", "Add(1,2)", "Passed", registration.RunId), RunComplete(registration.RunId));
 
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
-        lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
+        lspTelemetry.Received(1).SendEvent(TelemetryEvents.ProjectTestRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
     }
 
     private static async Task<Dictionary<string, object?>> CaptureRunCompletedAsync(
@@ -445,7 +445,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (DateTime.UtcNow < deadline && !telemetry.ReceivedCalls().Any()) await Task.Delay(20);
         var call = telemetry.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(ILspTelemetryService.SendEvent));
-        call.GetArguments()[0].Should().Be(TelemetryEvents.TestOutcomesRunCompleted);
+        call.GetArguments()[0].Should().Be(TelemetryEvents.ProjectTestRunCompleted);
         return (Dictionary<string, object?>)call.GetArguments()[1]!;
     }
 

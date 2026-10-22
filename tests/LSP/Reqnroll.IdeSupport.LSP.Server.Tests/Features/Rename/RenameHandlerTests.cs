@@ -2859,7 +2859,7 @@ public class StepRenameHandlerTests
 
         result.Should().NotBeNull();
         telemetry.Received(1).SendEvent(
-            "Rename step command executed",
+            "Command.RenameStep",
             Arg.Is<Dictionary<string, object?>>(d =>
                 false.Equals(d["Erroneous"])
                 && (string)d["Origin"]! == "CSharpBinding"
@@ -2883,7 +2883,7 @@ public class StepRenameHandlerTests
 
         await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
-            "Rename step command executed",
+            "Command.RenameStep",
             Arg.Is<Dictionary<string, object?>>(d =>
                 true.Equals(d["Erroneous"]) && "InvalidRequest".Equals(d["Reason"])));
     }
@@ -2905,7 +2905,7 @@ public class StepRenameHandlerTests
 
         await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
-            "Rename step command executed",
+            "Command.RenameStep",
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Feature".Equals(d["Origin"]) && d["DurationBucket"] is string && !d.ContainsKey("OccurrenceCount")));
     }
@@ -2927,7 +2927,7 @@ public class StepRenameHandlerTests
 
         await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
-            "Rename step command executed",
+            "Command.RenameStep",
             Arg.Is<Dictionary<string, object?>>(d =>
                 true.Equals(d["Erroneous"]) && "RegistryInvalid".Equals(d["Reason"])));
     }
@@ -2951,7 +2951,7 @@ public class StepRenameHandlerTests
 
         await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
-            "Rename step command executed",
+            "Command.RenameStep",
             Arg.Is<Dictionary<string, object?>>(d =>
                 true.Equals(d["Erroneous"]) && "BindingNotResolved".Equals(d["Reason"])));
     }

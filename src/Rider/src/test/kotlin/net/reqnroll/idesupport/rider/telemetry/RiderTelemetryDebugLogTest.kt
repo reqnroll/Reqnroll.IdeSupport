@@ -42,7 +42,7 @@ class RiderTelemetryDebugLogTest {
                 "Reqnroll Discovery executed",
                 mapOf("DiscoverySource" to "Connector", "StepDefinitionCount" to 42),
             )
-            sink.record("host", "Extension loaded", null, enabled = true, transmitted = true)
+            sink.record("host", "Lifecycle.Extension.Loaded", null, enabled = true, transmitted = true)
 
             val lines = file.readLines()
             assertEquals(2, lines.size)

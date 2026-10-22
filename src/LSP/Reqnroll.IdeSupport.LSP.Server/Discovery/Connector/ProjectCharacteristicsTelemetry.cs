@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
-/// Builds the property set of the <c>ProjectCharacteristics</c> snapshot event:
+/// Builds the property set of the <c>Project.Characteristics.Reported</c> snapshot event:
 /// size counts of a project's bindings and feature files, sent once per successful connector
 /// discovery run. Counts only — no paths, class names or step text.
 /// </summary>

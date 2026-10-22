@@ -52,7 +52,7 @@ public class DefineStepsTriggeredHandlerTests
         await CreateSut(ide).Handle(Params(), CancellationToken.None);
 
         _telemetry.Received(1).SendEvent(
-            TelemetryEvents.DefineStepsCommandExecuted,
+            TelemetryEvents.CodeActionDefineStepsExecuted,
             Arg.Is<Dictionary<string, object?>>(p => p.Count == 0));
     }
 
@@ -94,7 +94,7 @@ public class DefineStepsTriggeredHandlerTests
         var act = () => CreateSut("vscode").Handle(Params(), CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        _telemetry.Received(1).SendEvent(TelemetryEvents.DefineStepsCommandExecuted, Arg.Any<Dictionary<string, object?>>());
+        _telemetry.Received(1).SendEvent(TelemetryEvents.CodeActionDefineStepsExecuted, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class DefineStepsTriggeredHandlerTests
         await CreateSut("vscode").Handle(Params(), CancellationToken.None);
 
         _ = _window.DidNotReceiveWithAnyArgs().SendRequest(Arg.Any<ShowDocumentParams>(), default);
-        _telemetry.Received(1).SendEvent(TelemetryEvents.DefineStepsCommandExecuted, Arg.Any<Dictionary<string, object?>>());
+        _telemetry.Received(1).SendEvent(TelemetryEvents.CodeActionDefineStepsExecuted, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Theory]
@@ -129,6 +129,6 @@ public class DefineStepsTriggeredHandlerTests
 
         await act.Should().NotThrowAsync();
         _ = _window.DidNotReceiveWithAnyArgs().SendRequest(Arg.Any<ShowDocumentParams>(), default);
-        _telemetry.Received(1).SendEvent(TelemetryEvents.DefineStepsCommandExecuted, Arg.Any<Dictionary<string, object?>>());
+        _telemetry.Received(1).SendEvent(TelemetryEvents.CodeActionDefineStepsExecuted, Arg.Any<Dictionary<string, object?>>());
     }
 }

@@ -131,7 +131,7 @@ public class FindMatchingScenariosHandlerTests
         await CreateSutWithTelemetry(telemetry).HandleAsync(RequestAt(CsUri, 4, 0), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "GoToMatchingScenarios command executed",
+            "Command.GoToMatchingScenarios",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["MatchCount"]! == 1));
     }
 

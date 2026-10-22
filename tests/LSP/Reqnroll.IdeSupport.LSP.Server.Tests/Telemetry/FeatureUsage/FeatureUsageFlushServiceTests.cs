@@ -43,7 +43,7 @@ public class FeatureUsageFlushServiceTests
 
         await sut.FlushFinalAsync();
 
-        telemetry.Received(1).SendEvent(TelemetryEvents.FeatureUsageSummary, Arg.Any<Dictionary<string, object?>>());
+        telemetry.Received(1).SendEvent(TelemetryEvents.LifecycleUsageSummaryReported, Arg.Any<Dictionary<string, object?>>());
         var sent = Sent(telemetry);
         sent[TelemetryProperties.IsFinal].Should().Be(true);
         sent[TelemetryProperties.Sequence].Should().Be(1L);
@@ -177,7 +177,7 @@ public class FeatureUsageFlushServiceTests
         try { await runTask; } catch (OperationCanceledException) { }
 
         telemetry.Received().SendEvent(
-            TelemetryEvents.FeatureUsageSummary,
+            TelemetryEvents.LifecycleUsageSummaryReported,
             Arg.Is<Dictionary<string, object?>>(p => false.Equals(p[TelemetryProperties.IsFinal])));
     }
 
@@ -211,7 +211,7 @@ public class FeatureUsageFlushServiceTests
         telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
         shutdown.OnNext(true);
 
-        telemetry.Received(1).SendEvent(TelemetryEvents.FeatureUsageSummary, Arg.Any<Dictionary<string, object?>>());
+        telemetry.Received(1).SendEvent(TelemetryEvents.LifecycleUsageSummaryReported, Arg.Any<Dictionary<string, object?>>());
         Sent(telemetry)[TelemetryProperties.IsFinal].Should().Be(true);
     }
 

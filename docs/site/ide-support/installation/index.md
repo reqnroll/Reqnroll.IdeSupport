@@ -5,9 +5,6 @@
 
 The extensions now have consolidated package identities, so Visual Studio, VS Code and Rider
 treat them as new packages rather than upgrades. **Uninstall any earlier preview build first.**
-The identities are `Reqnroll.IdeSupport.VisualStudio` (Visual Studio),
-`Reqnroll.reqnroll-ide-support` (VS Code, publisher `Reqnroll`) and `net.reqnroll.idesupport`
-(Rider).
 ```
 
 :::{tab-set}
@@ -31,6 +28,8 @@ The Marketplace search will also surface the existing, non-preview
 **"Reqnroll.VisualStudio"** extension. They are separate listings — install
 the one explicitly labeled **(Preview)** to get the LSP-based extension
 described in these docs.
+
+[Direct link to the preview extension](https://marketplace.visualstudio.com/items?itemName=Reqnroll.reqnroll-ide-support-vs)
 ```
 
 **Only enable one at a time.** The Preview extension and the existing
@@ -76,6 +75,19 @@ work as expected with the Reqnroll extension active.
 
 ````{tab-item} Rider
 :sync: rider
+
+```{admonition} Temporary installation from disk
+:class: warning
+
+The Rider plugin is not yet available in the JetBrains Marketplace due to technical issues. Until it is
+available, install it from disk:
+
+1. Download the `Reqnroll.IdeSupport.Rider.<version>.zip` file from the
+   [latest GitHub release](https://github.com/reqnroll/Reqnroll.IdeSupport/releases/tag/v2026.1.1494).
+2. Start Rider.
+3. Select **Configure → Plugins**.
+4. From the settings (gear) icon context menu, select **Install Plugin from Disk** and browse to the downloaded ZIP file.
+```
 
 1. In Rider, go to **Settings → Plugins → Marketplace**.
 2. Search for **"Reqnroll Extension (Preview)"** and install the plugin.

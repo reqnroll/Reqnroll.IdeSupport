@@ -458,7 +458,7 @@ public sealed class RenameHandler
     }
 
     /// <summary>
-    /// Sends the <c>"Rename step command executed"</c> telemetry event for every terminal path of
+    /// Sends the <c>"Command.RenameStep"</c> telemetry event for every terminal path of
     /// <see cref="HandleRenameAsync"/>: every failure path sends its own event with
     /// <paramref name="erroneous"/> set and a <paramref name="reason"/> distinguishing which
     /// validation/resolution step rejected the request, so <c>Erroneous</c> carries the
@@ -486,7 +486,7 @@ public sealed class RenameHandler
         if (editedFileCount != null)
             properties["EditedFileCount"] = editedFileCount;
 
-        _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, properties);
+        _telemetryService?.SendEvent(TelemetryEvents.CommandRenameStep, properties);
     }
 
     // Rejections go through the shared EditRejected contract; see its remarks.

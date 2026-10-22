@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 
 /// <summary>
 /// The closed set of values of the <see cref="PropertyName"/> property on the client-originated
-/// <see cref="TelemetryEvents.GoToHookCommandExecuted"/> event: how the user started
+/// <see cref="TelemetryEvents.CommandGoToHook"/> event: how the user started
 /// the navigation. Identical in Visual Studio, VS Code (<c>GoToHookSource</c> in
 /// <c>telemetryEvents.ts</c>) and Rider (<c>RiderTelemetryTransmitter</c>) — keep the three in sync.
 /// </summary>

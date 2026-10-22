@@ -1,7 +1,6 @@
 package net.reqnroll.idesupport.rider.lsp
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
+import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import java.io.File
 import java.nio.file.Path
 
@@ -11,14 +10,10 @@ import java.nio.file.Path
  * (see src/VSCode/src/extension.ts resolveServerPath).
  */
 object ReqnrollServerPathResolver {
-    // Marketplace plugin ID (gradle.properties' `pluginId`) — deliberately not
-    // "net.reqnroll.idesupport.rider": the Plugin Verifier rejects IDs containing "rider".
-    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
-
     /** Locates the bundled server executable for the current OS/arch under this plugin's own install directory; throws with a descriptive message if it isn't there. */
     fun resolve(): Path {
-        val plugin = PluginManagerCore.getPlugin(PLUGIN_ID)
-            ?: error("Reqnroll plugin descriptor '$PLUGIN_ID' not found")
+        val plugin = ReqnrollPlugin.descriptor()
+            ?: error("Reqnroll plugin descriptor not found")
 
         val rid = rid(System.getProperty("os.name"), System.getProperty("os.arch"))
         val binaryName = binaryName(System.getProperty("os.name"))

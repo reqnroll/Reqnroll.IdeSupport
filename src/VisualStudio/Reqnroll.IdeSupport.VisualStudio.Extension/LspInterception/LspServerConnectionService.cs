@@ -287,7 +287,7 @@ internal sealed class LspServerConnectionService : IDisposable
             DiscardDeadGeneration();
             _generation++;
             _lifecycleReporter.Report(
-                TelemetryEvents.ServerRestarted,
+                TelemetryEvents.ServerProcessRestarted,
                 wasUnexpected || _unexpectedExitReportedGeneration == previousGeneration
                     ? ServerFailureReason.ProcessExited
                     : ServerFailureReason.SessionEnded,
@@ -419,7 +419,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
     /// <summary>Reports that the server process started but VS's LSP initialize handshake with it failed.</summary>
     internal void ReportHandshakeFailed() =>
-        _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.StartFailed, _generation);
+        _lifecycleReporter.Report(TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, _generation);
 
     private void ReportUnexpectedExit(int generation)
     {
@@ -433,7 +433,7 @@ internal sealed class LspServerConnectionService : IDisposable
         }
         while (Interlocked.CompareExchange(ref _unexpectedExitReportedGeneration, generation, seen) != seen);
 
-        _lifecycleReporter.Report(TelemetryEvents.ServerExitedUnexpectedly, ServerFailureReason.ProcessExited, generation);
+        _lifecycleReporter.Report(TelemetryEvents.ServerProcessExitedUnexpectedly, ServerFailureReason.ProcessExited, generation);
     }
 
     /// <summary>
@@ -476,7 +476,7 @@ internal sealed class LspServerConnectionService : IDisposable
         if (!File.Exists(serverExe))
         {
             _logger.LogError("LspServerConnectionService: server executable not found at {ServerExe}.", serverExe);
-            _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.ExecutableNotFound, generation);
+            _lifecycleReporter.Report(TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.ExecutableNotFound, generation);
             return null;
         }
 
@@ -619,7 +619,7 @@ internal sealed class LspServerConnectionService : IDisposable
         {
             ReleaseFailedStart();
             _logger.LogError(ex, "LspServerConnectionService: failed to start server; any server process it had started was stopped.");
-            _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.StartFailed, generation);
+            _lifecycleReporter.Report(TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, generation);
             return null;
         }
     }

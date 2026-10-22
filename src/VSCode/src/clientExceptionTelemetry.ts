@@ -211,7 +211,7 @@ export class ClientExceptionReporter {
         properties.SuppressedCount = String(this._suppressed);
         this._suppressed = 0;
       }
-      this._send(TelemetryEvents.unhandledException, properties);
+      this._send(TelemetryEvents.errorUnhandledException, properties);
       return true;
     } catch {
       // Telemetry must never break the host code path it observes.

@@ -133,7 +133,7 @@ export function createTagLinkMiddleware(decorations?: TagLinkDecorations): Middl
 
 /**
  * Handler of {@link OPEN_TAG_LINK_COMMAND}: opens the URL in the registered handler for its scheme and reports the
- * "TagLink command executed" event (no properties - the URL and tag text are never sent).
+ * "Command.TagLink" event (no properties - the URL and tag text are never sent).
  * Anything that is not an openable URL is ignored, whoever invoked the command.
  */
 export async function openTagLink(
@@ -141,7 +141,7 @@ export async function openTagLink(
   openExternal: (uri: vscode.Uri) => Thenable<boolean> = (uri) => vscode.env.openExternal(uri),
 ): Promise<void> {
   if (typeof url !== 'string' || !isOpenableUrl(url)) return;
-  sendTelemetryEvent(TelemetryEvents.tagLinkCommandExecuted);
+  sendTelemetryEvent(TelemetryEvents.commandTagLink);
   await openExternal(vscode.Uri.parse(url));
 }
 

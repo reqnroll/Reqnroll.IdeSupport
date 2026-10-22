@@ -46,7 +46,7 @@ public class ConnectorDiscoveryOutcomeTelemetryTests : IDisposable
             outputAssemblyPath: _assemblyPath);
 
         _detector.IsReqnrollTestProject(Arg.Any<IProjectScope>()).Returns(true);
-        _telemetry.When(t => t.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted,
+        _telemetry.When(t => t.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted,
                 Arg.Any<Dictionary<string, object?>>()))
             .Do(call => _discoveryEvents.Enqueue(call.ArgAt<Dictionary<string, object?>>(1)));
 

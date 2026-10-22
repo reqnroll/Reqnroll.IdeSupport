@@ -9,11 +9,11 @@ type Send = (eventName: string, properties: Record<string, string | number>) => 
  * Reports the client-originated server-lifecycle events from the language client's
  * state transitions: a dead server cannot report itself, so the extension does.
  *
- * - `ServerStartFailed`: a start attempt ended (`Stopped`) before the client ever reached `Running`,
+ * - `Server.Process.StartFailed`: a start attempt ended (`Stopped`) before the client ever reached `Running`,
  *   or `client.start()` rejected.
- * - `ServerExitedUnexpectedly`: `Running` to `Stopped` that was not requested via
+ * - `Server.Process.ExitedUnexpectedly`: `Running` to `Stopped` that was not requested via
  *   {@link markIntentionalStop}.
- * - `ServerRestarted`: a new `Starting` after a failure or exit (vscode-languageclient restarts a
+ * - `Server.Process.Restarted`: a new `Starting` after a failure or exit (vscode-languageclient restarts a
  *   crashed server itself) — `Reason` says what preceded it.
  *
  * `AttemptNumber` is the 1-based start attempt in this extension session. Each attempt reports at most
@@ -56,7 +56,7 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
     // A client that already reached Running started fine: a later throw is not a start failure.
     if (this._intentionalStop || this._failureReported || this._reachedRunning) return;
     this._attempt = Math.max(this._attempt, 1);
-    this._reportFailure(TelemetryEvents.serverStartFailed, ServerFailureReason.startFailed);
+    this._reportFailure(TelemetryEvents.serverProcessStartFailed, ServerFailureReason.startFailed);
   }
 
   dispose(): void {
@@ -68,7 +68,7 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
     this._reachedRunning = false;
     this._failureReported = false;
     if (this._attempt > 1) {
-      this._send(TelemetryEvents.serverRestarted, {
+      this._send(TelemetryEvents.serverProcessRestarted, {
         Reason: this._lastFailureReason ?? ServerFailureReason.sessionEnded,
         AttemptNumber: this._attempt,
       });
@@ -81,11 +81,14 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
     if (this._reachedRunning) {
       this._reachedRunning = false;
       this._reportFailure(
-        TelemetryEvents.serverExitedUnexpectedly,
+        TelemetryEvents.serverProcessExitedUnexpectedly,
         ServerFailureReason.processExited,
       );
     } else if (!this._failureReported) {
-      this._reportFailure(TelemetryEvents.serverStartFailed, ServerFailureReason.startFailed);
+      this._reportFailure(
+        TelemetryEvents.serverProcessStartFailed,
+        ServerFailureReason.startFailed,
+      );
     }
   }
 

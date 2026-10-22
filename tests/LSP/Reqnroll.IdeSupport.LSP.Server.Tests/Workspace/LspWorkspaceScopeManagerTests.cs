@@ -221,7 +221,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
         await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "OpenProject command executed", Arg.Any<Dictionary<string, object?>>());
+            "Project.Opened", Arg.Any<Dictionary<string, object?>>());
 
         sut.Dispose();
     }
@@ -240,7 +240,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
         await sut.HandleProjectLoadedAsync(ProjectParams(_root1, projectFileName), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "OpenProject command executed",
+            "Project.Opened",
             Arg.Is<Dictionary<string, object?>>(p =>
                 ".NETCoreApp,Version=v8.0".Equals(p["ProjectTargetFramework"]) &&
                 expectedLanguage.Equals(p["ProgrammingLanguage"]) &&
@@ -263,7 +263,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
         await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
 
         telemetry.DidNotReceive().SendEvent(
-            "OpenProject command executed", Arg.Any<Dictionary<string, object?>>());
+            "Project.Opened", Arg.Any<Dictionary<string, object?>>());
 
         sut.Dispose();
     }
@@ -277,7 +277,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
         await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "OpenProject command executed",
+            "Project.Opened",
             Arg.Is<Dictionary<string, object?>>(p => p["FeatureFileCount"] == null));
 
         sut.Dispose();

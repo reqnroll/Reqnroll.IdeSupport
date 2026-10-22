@@ -37,13 +37,13 @@ suite('createTelemetryDebugLogFromValue', () => {
     const target = path.join(os.tmpdir(), `reqnroll-tel-${Date.now()}.jsonl`);
     try {
       const sink = createTelemetryDebugLogFromValue(target);
-      sink.record('host', 'Extension loaded', undefined, true, true);
+      sink.record('host', 'Lifecycle.Extension.Loaded', undefined, true, true);
 
       const lines = fs.readFileSync(target, 'utf8').trim().split('\n');
       assert.strictEqual(lines.length, 1);
       const parsed = parseRecord(lines[0]);
       assert.strictEqual(parsed.source, 'host');
-      assert.strictEqual(parsed.event, 'Extension loaded');
+      assert.strictEqual(parsed.event, 'Lifecycle.Extension.Loaded');
       assert.strictEqual(parsed.enabled, true);
       assert.strictEqual(parsed.transmitted, true);
     } finally {
@@ -62,7 +62,7 @@ suite('FileTelemetryDebugLog (via createTelemetryDebugLogFromValue)', () => {
         DiscoverySource: 'Connector',
         StepDefinitionCount: 42,
       });
-      sink.record('host', 'Extension loaded', undefined, true, true);
+      sink.record('host', 'Lifecycle.Extension.Loaded', undefined, true, true);
 
       const lines = fs.readFileSync(target, 'utf8').trim().split('\n');
       assert.strictEqual(lines.length, 2);

@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
 /// Emits the IDE-agnostic server lifecycle events: <c>ServerSessionStarted</c> once the
-/// LSP handshake has completed, and a best-effort <c>ServerSessionEnded</c> at graceful shutdown.
+/// LSP handshake has completed, and a best-effort <c>Server.Session.Ended</c> at graceful shutdown.
 /// Because the server sends them, VS, VS Code and Rider report identical events with no per-IDE port.
 /// </summary>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// the .NET runtime description, a client version and durations. No paths, user names or machine names.
 /// </para>
 /// <para>
-/// Loss profile: like <c>FeatureUsageSummary</c>'s final flush, the ended event rides the LSP
+/// Loss profile: like <c>Lifecycle.Usage.SummaryReported</c>'s final flush, the ended event rides the LSP
 /// <c>shutdown</c> request and is lost when the process dies abruptly. A started event without an
 /// ended event for the same <c>SessionId</c> is therefore itself the signal of an abnormal end.
 /// </para>
@@ -72,7 +72,7 @@ public sealed class ServerSessionTelemetry
     }
 
     /// <summary>
-    /// Sends <c>ServerSessionEnded</c>, at most once per server process (so the shutdown request and
+    /// Sends <c>Server.Session.Ended</c>, at most once per server process (so the shutdown request and
     /// the post-exit fallback cannot double-send). Never throws: best-effort telemetry must not fail shutdown.
     /// </summary>
     public void ReportEnded()
@@ -89,7 +89,7 @@ public sealed class ServerSessionTelemetry
     /// <summary>
     /// Calls <see cref="ReportEnded"/> when the LSP <c>shutdown</c> request arrives on <paramref name="shutdown"/>.
     /// Subscribe it <i>after</i> <see cref="Performance.FeatureUsageFlushService.FlushOnShutdown"/> so the
-    /// final <c>FeatureUsageSummary</c> precedes <c>ServerSessionEnded</c> in the stream.
+    /// final <c>Lifecycle.Usage.SummaryReported</c> precedes <c>Server.Session.Ended</c> in the stream.
     /// </summary>
     public IDisposable EndOnShutdown(IObservable<bool> shutdown) => shutdown.Subscribe(new ShutdownObserver(this));
 

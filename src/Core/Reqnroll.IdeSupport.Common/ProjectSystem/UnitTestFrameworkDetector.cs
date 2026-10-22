@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>
 /// Infers a project's unit test framework and test platform from its NuGet package references,
-/// for the <c>ProjectCharacteristics</c> event. Pure; the result is a member of a
+/// for the <c>Project.Characteristics.Reported</c> event. Pure; the result is a member of a
 /// small closed set, never a package name or version.
 /// </summary>
 /// <remarks>
