@@ -9,7 +9,7 @@ Insights resource per environment (dev / prod), with the event name as its ident
 
 All files are in `queries/` (workspace form, `AppEvents`). The same queries are kept in `queries/legacy/` in the
 classic `customEvents` form for the Application Insights resource-scoped **Logs** view; both forms are maintained for
-now, so change them together. Each one starts with a header comment that lists its assumptions, definitions and
+now, so change them together (a unit test checks that they differ only in table and column names). Each one starts with a header comment that lists its assumptions, definitions and
 **verification status**.
 
 | File | What it reports | Source events |
@@ -23,12 +23,12 @@ now, so change them together. Each one starts with a header comment that lists i
 
 - **`PerfSample` is sampled.** `Samples` is a confidence measure for the percentiles, not a usage count. For usage use
   the `Command.*` / `Lookup.*` events and `FeatureUsageSummary`.
-- **VS Code event names used to carry an extension-id prefix** (`Reqnroll.reqnroll-ide-support-vscode/...`, #1256), so older VS Code rows do not match a plain `Name == "..."`. Every query embeds `CanonicalEventName()` (from `event-name-map.kql`), which strips that prefix and maps the pre-#1257 event names to the current `Category.Thing.Action` ones; compare event names through it in new queries, and keep the embedded copy identical to `event-name-map.kql` (a unit test checks).
+- **VS Code event names used to carry an extension-id prefix** (`Reqnroll.reqnroll-ide-support-vscode/...`, #1256), so older VS Code rows do not match a plain `Name == "..."`. Every query embeds `CanonicalEventName()` (from `event-name-map.kql`), which strips that prefix and maps the pre-#1257 event names to the current `Category.Thing.Action` ones; compare event names through it in new queries, and keep the embedded copy identical to `event-name-map.kql` in both forms (a unit test checks).
 - **RID is derived** from `OperatingSystem` and `Architecture`; the client never sends a RID.
 - **Exceptions are events, not rows in the Application Insights `exceptions` table.** Client-side exceptions
   (`ExceptionOrigin = "Client"`) carry no `SessionId` but do carry `ClientSessionId` (#1199), which every server event carries too: join on it to attribute a client exception to a session; see the error-rates header.
 - **Verification status.** All four queries were run on 2026-10-15/16 against the dev resource using the *classic*
-  table and column names (now `queries/legacy/`; see below) with Visual Studio and Rider data on Windows. Not yet verified: the `AppEvents`
+  table and column names (now `queries/legacy/`; see below), before the event-name rename (#1257), so the `CanonicalEventName()` forms have not been re-run with Visual Studio and Rider data on Windows. Not yet verified: the `AppEvents`
   (workspace) forms, VS Code, macOS/Linux, and the `ServerStartFailed` / `ServerExitedUnexpectedly` / `ServerRestarted` paths.
 
 ## Two table-name flavours
