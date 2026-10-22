@@ -87,7 +87,7 @@ class RiderTelemetryTransmitterTest {
         // The server sends per-kind counts as a compact JSON string because Rider's
         // value.toString() would render a nested Gson map as {key=1.0}.
         val json = RiderTelemetryTransmitter.buildEnvelope(
-            eventName = "Usage.Summary",
+            eventName = "Lifecycle.Usage.SummaryReported",
             userId = "user-123",
             properties = mapOf("LookupCounts" to """{"CodeAction":1,"Completion.Step":14}"""),
             timestamp = Instant.parse("2026-07-20T12:00:00Z"),

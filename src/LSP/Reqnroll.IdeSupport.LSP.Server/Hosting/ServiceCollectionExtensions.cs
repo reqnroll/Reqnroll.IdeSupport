@@ -127,7 +127,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ILspTelemetryService>(),
                 FeatureUsageFlushService.ResolveIntervalFromEnvironment()))
             // Server lifecycle telemetry: ServerSessionStarted after the handshake,
-            // best-effort ServerSessionEnded at shutdown. Singleton so the session clock spans the process.
+            // best-effort Server.Session.Ended at shutdown. Singleton so the session clock spans the process.
             .AddSingleton(sp => new ServerSessionTelemetry(
                 sp.GetRequiredService<ILspTelemetryService>(),
                 sp.GetRequiredService<ClientIdeContext>(),

@@ -141,7 +141,7 @@ export async function openTagLink(
   openExternal: (uri: vscode.Uri) => Thenable<boolean> = (uri) => vscode.env.openExternal(uri),
 ): Promise<void> {
   if (typeof url !== 'string' || !isOpenableUrl(url)) return;
-  sendTelemetryEvent(TelemetryEvents.tagLinkCommandExecuted);
+  sendTelemetryEvent(TelemetryEvents.commandTagLink);
   await openExternal(vscode.Uri.parse(url));
 }
 

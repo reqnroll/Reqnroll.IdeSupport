@@ -91,27 +91,27 @@ object RiderTelemetryTransmitter {
      * (forwarded by [ReqnrollTelemetryEventInterceptor]) need no entries here. Keep the three
      * copies in sync.
      */
-    internal const val GO_TO_HOOK_COMMAND_EXECUTED = "Command.GoToHook"
+    internal const val COMMAND_GO_TO_HOOK = "Command.GoToHook"
 
     /** A clickable tag's link was followed. No properties: the URL and tag text are never sent. */
-    internal const val TAG_LINK_COMMAND_EXECUTED = "Command.TagLink"
+    internal const val COMMAND_TAG_LINK = "Command.TagLink"
 
     // Server-lifecycle events: sent by the client because a dead server cannot report
     // itself. `Reason` is always one of the SERVER_FAILURE_REASON_* values below, `AttemptNumber` the
     // 1-based start attempt in this IDE session. Mirror of ServerLifecycleTelemetry.cs.
-    internal const val SERVER_START_FAILED = "Server.StartFailed"
-    internal const val SERVER_EXITED_UNEXPECTEDLY = "Server.ExitedUnexpectedly"
-    internal const val SERVER_RESTARTED = "Server.Restarted"
+    internal const val SERVER_PROCESS_START_FAILED = "Server.Process.StartFailed"
+    internal const val SERVER_PROCESS_EXITED_UNEXPECTEDLY = "Server.Process.ExitedUnexpectedly"
+    internal const val SERVER_PROCESS_RESTARTED = "Server.Process.Restarted"
 
     internal const val SERVER_FAILURE_REASON_START_FAILED = "StartFailed"
     internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
     internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
 
     /** Exception caught in the plugin's own code; same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
-    internal const val UNHANDLED_EXCEPTION = "Error.UnhandledException"
+    internal const val ERROR_UNHANDLED_EXCEPTION = "Error.UnhandledException"
 
     /**
-     * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED]: how the navigation was
+     * `Source` property of [COMMAND_GO_TO_HOOK]: how the navigation was
      * started. Closed set shared with VS and VS Code (`GoToHookSources.cs` / `GoToHookSource` in
      * `telemetryEvents.ts`); keep the copies in sync. Event-scoped key: the LSP server's
      * `TelemetryProperties.Source` uses the same literal for a class name on `UnhandledException`.
@@ -123,10 +123,10 @@ object RiderTelemetryTransmitter {
 
     // Extension lifecycle events, parity with VS's WelcomeService. Mirror of the same
     // constants in TelemetryEvents.cs.
-    internal const val EXTENSION_LOADED = "Lifecycle.Loaded"
-    internal const val EXTENSION_INSTALLED = "Lifecycle.Installed"
-    internal const val EXTENSION_UPGRADED = "Lifecycle.Upgraded"
-    internal const val DAYS_OF_USAGE = "Lifecycle.DaysOfUsage"
+    internal const val LIFECYCLE_EXTENSION_LOADED = "Lifecycle.Extension.Loaded"
+    internal const val LIFECYCLE_EXTENSION_INSTALLED = "Lifecycle.Extension.Installed"
+    internal const val LIFECYCLE_EXTENSION_UPGRADED = "Lifecycle.Extension.Upgraded"
+    internal const val LIFECYCLE_USAGE_RECORDED = "Lifecycle.Usage.Recorded"
     internal const val OLD_EXTENSION_VERSION_PROPERTY = "OldExtensionVersion"
     internal const val USAGE_DAYS_PROPERTY = "UsageDays"
 

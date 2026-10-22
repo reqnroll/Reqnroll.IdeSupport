@@ -87,7 +87,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
         if (ResolveStackFramesOnce(exception, captured) is { } stackFrames)
             properties[TelemetryProperties.StackFrames] = stackFrames;
 
-        _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
+        _lspTelemetryService.SendEvent(TelemetryEvents.ErrorUnhandledException, properties);
     }
 
     /// <summary>

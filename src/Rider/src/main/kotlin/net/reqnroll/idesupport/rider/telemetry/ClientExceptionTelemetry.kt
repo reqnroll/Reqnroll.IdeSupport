@@ -40,7 +40,7 @@ import java.util.concurrent.CancellationException
  */
 object ClientExceptionTelemetry {
     internal const val EXCEPTION_ORIGIN_CLIENT = "Client"
-    internal const val UNHANDLED_EXCEPTION = RiderTelemetryTransmitter.UNHANDLED_EXCEPTION
+    internal const val ERROR_UNHANDLED_EXCEPTION = RiderTelemetryTransmitter.ERROR_UNHANDLED_EXCEPTION
 
     /** Most `UnhandledException` events one IDE session may send, however many distinct errors occur. */
     internal const val MAX_EVENTS_PER_SESSION = 20
@@ -179,7 +179,7 @@ object ClientExceptionTelemetry {
                         suppressed = 0
                     }
                 }
-                send(UNHANDLED_EXCEPTION, props)
+                send(ERROR_UNHANDLED_EXCEPTION, props)
                 return true
             } catch (_: Throwable) {
                 // Telemetry must never break the code path it observes.

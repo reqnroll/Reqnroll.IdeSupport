@@ -183,7 +183,7 @@ internal sealed class GoToHooksCommand : Command
 internal static class GoToHookTelemetry
 {
     public static GenericEvent CreateEvent(string source) =>
-        new(TelemetryEvents.GoToHookCommandExecuted,
+        new(TelemetryEvents.CommandGoToHook,
             [new KeyValuePair<string, object>(GoToHookSources.PropertyName, source)]);
 }
 

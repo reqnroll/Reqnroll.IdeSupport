@@ -19,7 +19,7 @@ public class InsertKeywordTriggeredHandlerTests
             CancellationToken.None);
 
         _telemetry.Received(1).SendEvent(
-            TelemetryEvents.InsertKeywordCommandExecuted,
+            TelemetryEvents.CodeActionInsertKeywordExecuted,
             Arg.Is<Dictionary<string, object?>>(p => p.Count == 0));
     }
 

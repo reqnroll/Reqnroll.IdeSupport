@@ -136,7 +136,7 @@ public sealed class ReferencesHandler
     /// undercount that silently excludes two of the three IDE clients.
     /// </summary>
     private void SendUsagesTelemetry(int usagesCount, int fileCount, long startedTimestamp, CancellationToken cancellationToken) =>
-        _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionUsagesCommandExecuted, new()
+        _telemetryService?.SendEvent(TelemetryEvents.CommandFindStepDefinitionUsages, new()
         {
             ["UsagesCount"] = usagesCount,
             ["IsCancelled"] = cancellationToken.IsCancellationRequested,

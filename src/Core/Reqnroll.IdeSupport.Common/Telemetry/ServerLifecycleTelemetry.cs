@@ -6,8 +6,8 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 
 /// <summary>
 /// Vocabulary shared by the client-originated server-lifecycle events
-/// (<see cref="TelemetryEvents.ServerStartFailed"/>, <see cref="TelemetryEvents.ServerExitedUnexpectedly"/>,
-/// <see cref="TelemetryEvents.ServerRestarted"/>). A dead server cannot report itself, so each
+/// (<see cref="TelemetryEvents.ServerProcessStartFailed"/>, <see cref="TelemetryEvents.ServerProcessExitedUnexpectedly"/>,
+/// <see cref="TelemetryEvents.ServerProcessRestarted"/>). A dead server cannot report itself, so each
 /// IDE client sends these. Property names and values are mirrored in
 /// <c>src/VSCode/src/telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>: keep all three in sync.
 /// </summary>

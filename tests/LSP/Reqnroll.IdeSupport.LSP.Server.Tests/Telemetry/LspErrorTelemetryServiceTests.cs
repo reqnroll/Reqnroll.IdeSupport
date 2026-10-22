@@ -20,7 +20,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(exception);
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 (string?)props["ExceptionType"] == typeof(InvalidOperationException).FullName &&
                 (string?)props["Message"] == "boom" &&
@@ -35,7 +35,7 @@ public class LspErrorTelemetryServiceTests
         CreateSut().MonitorError(thrown);
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 (string?)props["Source"] == nameof(LspErrorTelemetryServiceTests)));
     }
@@ -48,7 +48,7 @@ public class LspErrorTelemetryServiceTests
         CreateSut().MonitorError(thrown);
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 (string?)props["Source"] == nameof(LspErrorTelemetryServiceTests)));
     }
@@ -59,7 +59,7 @@ public class LspErrorTelemetryServiceTests
         CreateSut().MonitorError(new InvalidOperationException("never thrown"));
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => !props.ContainsKey("Source")));
     }
 
@@ -114,7 +114,7 @@ public class LspErrorTelemetryServiceTests
         CreateSut().MonitorError(thrown);
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 !((string?)props[TelemetryProperties.StackFrames])!.Contains("Acme") &&
                 !((string?)props[TelemetryProperties.StackFrames])!.Contains("secret")));
@@ -130,7 +130,7 @@ public class LspErrorTelemetryServiceTests
         CreateSut().MonitorError(thrown);
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 ((string?)props[TelemetryProperties.StackFrames])!.StartsWith(
                     "Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry.LspErrorTelemetryServiceTests.ThrowWithSecret") &&
@@ -144,7 +144,7 @@ public class LspErrorTelemetryServiceTests
         CreateSut().MonitorError(new InvalidOperationException("never thrown"));
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => !props.ContainsKey(TelemetryProperties.StackFrames)));
     }
 
@@ -209,7 +209,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(new Exception("test"), isFatal);
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => (bool)props["IsFatal"]! == isFatal));
     }
 
@@ -222,7 +222,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(new Exception(message));
 
         _lspTelemetryService.Received(1).SendEvent(
-            TelemetryEvents.UnhandledException,
+            TelemetryEvents.ErrorUnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => (string?)props["Message"] == message));
     }
 

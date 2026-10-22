@@ -29,15 +29,15 @@ public static class TelemetryProperties
     /// Project registries scanned by Find Unused Step Definitions (one per discovered project).
     /// </summary>
     public const string ScannedProjects = "ScannedProjects";
-    /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
+    /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>Lifecycle.Usage.SummaryReported</c> window.</summary>
     public const string LookupCounts = "LookupCounts";
-    /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
+    /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>Lifecycle.Usage.SummaryReported</c> window.</summary>
     public const string PassiveCounts = "PassiveCounts";
-    /// <summary>Seconds covered by a <c>FeatureUsageSummary</c> window.</summary>
+    /// <summary>Seconds covered by a <c>Lifecycle.Usage.SummaryReported</c> window.</summary>
     public const string WindowSeconds = "WindowSeconds";
     /// <summary><c>true</c> for the best-effort flush at graceful shutdown.</summary>
     public const string IsFinal = "IsFinal";
-    /// <summary>Per-<c>SessionId</c> monotonically increasing number of emitted <c>FeatureUsageSummary</c> events; a gap marks a lost flush.</summary>
+    /// <summary>Per-<c>SessionId</c> monotonically increasing number of emitted <c>Lifecycle.Usage.SummaryReported</c> events; a gap marks a lost flush.</summary>
     public const string Sequence = "Sequence";
     /// <summary>Seconds since the flush service started (≈ server uptime), the denominator for a window's counts.</summary>
     public const string SessionSeconds = "SessionSeconds";

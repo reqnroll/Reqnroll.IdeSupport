@@ -35,8 +35,8 @@ export function compareVersions(a: string, b: string): number {
 
 /**
  * Pure port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
- * `Lifecycle.Loaded` on every activation, `Lifecycle.Installed` on the first ever, `Lifecycle.Upgraded`
- * when the version increased, and a `Lifecycle.DaysOfUsage` heartbeat (property `UsageDays`) on the first activation of each new day
+ * `Lifecycle.Extension.Loaded` on every activation, `Lifecycle.Extension.Installed` on the first ever, `Lifecycle.Extension.Upgraded`
+ * when the version increased, and a `Lifecycle.Usage.Recorded` heartbeat (property `UsageDays`) on the first activation of each new day
  * (not on the install day, like VS).
  */
 export function computeLifecycle(
@@ -44,10 +44,10 @@ export function computeLifecycle(
   today: string,
   currentVersion: string,
 ): { state: LifecycleState; events: LifecycleEvent[] } {
-  const events: LifecycleEvent[] = [{ eventName: TelemetryEvents.extensionLoaded }];
+  const events: LifecycleEvent[] = [{ eventName: TelemetryEvents.lifecycleExtensionLoaded }];
 
   if (!state.installedVersion) {
-    events.push({ eventName: TelemetryEvents.extensionInstalled });
+    events.push({ eventName: TelemetryEvents.lifecycleExtensionInstalled });
     return {
       state: { installedVersion: currentVersion, lastUsedDate: today, usageDays: 0 },
       events,
@@ -59,13 +59,13 @@ export function computeLifecycle(
     next.usageDays = state.usageDays + 1;
     next.lastUsedDate = today;
     events.push({
-      eventName: TelemetryEvents.daysOfUsage,
+      eventName: TelemetryEvents.lifecycleUsageRecorded,
       properties: { [TelemetryProperties.usageDays]: String(next.usageDays) },
     });
   }
   if (compareVersions(state.installedVersion, currentVersion) < 0) {
     events.push({
-      eventName: TelemetryEvents.extensionUpgraded,
+      eventName: TelemetryEvents.lifecycleExtensionUpgraded,
       properties: { [TelemetryProperties.oldExtensionVersion]: state.installedVersion },
     });
     next.installedVersion = currentVersion;

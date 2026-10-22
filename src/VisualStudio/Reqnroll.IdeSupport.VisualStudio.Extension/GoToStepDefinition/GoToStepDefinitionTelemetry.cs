@@ -17,6 +17,6 @@ internal static class GoToStepDefinitionTelemetry
     public const string LocationCountProperty = "LocationCount";
 
     public static GenericEvent CreateEvent(int navigableLocationCount) =>
-        new(TelemetryEvents.GoToStepDefinitionCommandExecuted,
+        new(TelemetryEvents.CommandGoToStepDefinition,
             [new KeyValuePair<string, object>(LocationCountProperty, navigableLocationCount)]);
 }

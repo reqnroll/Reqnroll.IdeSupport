@@ -95,7 +95,7 @@ public sealed class ResolveContainerTestTargetsHandler
 
         _logger.LogVerbose($"ResolveContainerTestTargetsHandler: {targets.Count} target(s) in container range {request.Range} in {uri}");
 
-        _telemetryService?.SendEvent(TelemetryEvents.ResolveContainerTestTargetsCommandExecuted, new()
+        _telemetryService?.SendEvent(TelemetryEvents.LookupResolveContainerTestTargets, new()
         {
             [TelemetryProperties.TargetCount] = targets.Count,
             [TelemetryProperties.Kind] = TestTargetTelemetry.ClassifyContainer(buffer.Tags, containerRange),

@@ -75,7 +75,7 @@ public sealed class FormattingHandler
             startLine: null, endLine: null, isSelection: false).ConfigureAwait(false);
 
         // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
+        _telemetryService?.SendEvent(TelemetryEvents.CommandAutoFormatDocument, new()
         {
             ["IsSelectionFormatting"] = false,
             [TelemetryProperties.EditCount] = editCount,
@@ -106,7 +106,7 @@ public sealed class FormattingHandler
         var result = formatted ?? new TextEditContainer();
 
         // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
+        _telemetryService?.SendEvent(TelemetryEvents.CommandAutoFormatDocument, new()
         {
             ["IsSelectionFormatting"] = true,
             [TelemetryProperties.EditCount] = editCount,
@@ -304,7 +304,7 @@ public sealed class FormattingHandler
         if (lineCount != null)
             properties[TelemetryProperties.DocumentLineBucket] = TelemetryBuckets.LineCount(lineCount.Value);
 
-        _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, properties);
+        _telemetryService?.SendEvent(TelemetryEvents.CommandAutoFormatDocument, properties);
     }
 
     private static bool IsFeatureFile(OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri uri) =>

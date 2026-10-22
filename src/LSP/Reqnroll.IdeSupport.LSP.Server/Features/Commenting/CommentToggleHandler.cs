@@ -107,7 +107,7 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
             // well-behaved client — the document is simply not open in the server — and the user
             // otherwise sees the shortcut do nothing, so it is a rejection.
             _logger.LogWarning($"CommentToggleHandler: buffer not found for {uri}");
-            _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new()
+            _telemetryService?.SendEvent(TelemetryEvents.CommandCommentUncomment, new()
             {
                 [TelemetryProperties.Mode] = mode.ToString(),
                 ["Erroneous"] = true,
@@ -125,7 +125,7 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         _logger.LogInfo($"Comment/Uncomment toggle reqnroll.toggleComment: {uri} lines [{startLine}..{endLine}] mode={mode} → {result.Edits.Count} change(s)");
 
         // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new()
+        _telemetryService?.SendEvent(TelemetryEvents.CommandCommentUncomment, new()
         {
             [TelemetryProperties.Mode] = mode.ToString(),
             [TelemetryProperties.ResolvedMode] = result.Uncommented ? nameof(CommentToggleMode.Uncomment) : nameof(CommentToggleMode.Comment),

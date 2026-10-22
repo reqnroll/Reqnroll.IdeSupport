@@ -611,10 +611,10 @@ public class CodeActionHandlerTests
         var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
 
         _telemetryService.Received(1).SendEvent(
-            TelemetryEvents.InsertKeywordCommandOffered,
+            TelemetryEvents.CodeActionInsertKeywordOffered,
             Arg.Is<Dictionary<string, object?>>(p => (int)p["ActionsOffered"]! == result!.Count()));
         _telemetryService.DidNotReceive().SendEvent(
-            TelemetryEvents.DefineStepsCommandOffered, Arg.Any<Dictionary<string, object?>>());
+            TelemetryEvents.CodeActionDefineStepsOffered, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]
@@ -625,7 +625,7 @@ public class CodeActionHandlerTests
         await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
 
         _telemetryService.DidNotReceive().SendEvent(
-            TelemetryEvents.InsertKeywordCommandOffered, Arg.Any<Dictionary<string, object?>>());
+            TelemetryEvents.CodeActionInsertKeywordOffered, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]

@@ -309,7 +309,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                         ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
                     };
                     _discoveryService.LastRunTelemetry?.AddTo(failureProperties);
-                    _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, failureProperties);
+                    _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, failureProperties);
                     return;
             }
 
@@ -320,7 +320,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             {
                 // Lightweight telemetry: connector hash-noop rate (membership index / telemetry
                 // design §4.2).
-                _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
+                _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, new()
                 {
                     ["DiscoverySource"] = "Connector",
                     ["HashMatched"] = true,
@@ -371,7 +371,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             // code) from the connector run, whitelisted by ConnectorRunTelemetry -- never the
             // connector's command line or raw error text.
             _discoveryService.LastRunTelemetry?.AddTo(properties);
-            _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, properties);
+            _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, properties);
 
             _bindingRegistryChanged?.Invoke(this, true);
 
@@ -386,7 +386,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             try
             {
                 _telemetryService?.SendEvent(
-                    TelemetryEvents.ProjectCharacteristics,
+                    TelemetryEvents.ProjectCharacteristicsReported,
                     ProjectCharacteristicsTelemetry.Build(
                         newRegistry, _featureFileLookup?.CountFeatureFiles(_project), _project.TargetFrameworkMonikers,
                         _project.PackageReferences));
@@ -409,7 +409,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             // IsFailed / §4.3 error recovery).
             // _isFirstRun is intentionally NOT cleared here: a failed initial load is still a load,
             // so a subsequent (hopefully successful) run continues to report "projectLoad".
-            _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
+            _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, new()
             {
                 ["DiscoverySource"] = "Connector",
                 ["TriggerContext"] = _isFirstRun ? "projectLoad" : "build",

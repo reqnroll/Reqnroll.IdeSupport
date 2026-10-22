@@ -125,7 +125,7 @@ function createUnprefixingLogger(target: TelemetryReporter): vscode.TelemetryLog
   );
 }
 
-// The server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
+// The server emits its final events (`Lifecycle.Usage.SummaryReported`, `Server.Session.Ended`) while
 // handling the LSP `shutdown` request, i.e. during `client.stop()`. VS Code disposes
 // `context.subscriptions` as soon as `deactivate()` has been *called* (it does not wait for the returned
 // promise), which would detach the notification forwarder and the reporter before those events arrive.
@@ -198,7 +198,7 @@ function disposeReporterBounded(r: TelemetryReporter): Thenable<void> {
 /**
  * Creates the shared `TelemetryReporter` if telemetry is enabled and it does not exist yet. Called by
  * `extension.ts` *before* `client.start()` so that client-originated server-lifecycle events
- * (`ServerStartFailed`) can be sent when the server never comes up, and again (as a
+ * (`Server.Process.StartFailed`) can be sent when the server never comes up, and again (as a
  * no-op) by `registerTelemetry` once it has.
  */
 export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {

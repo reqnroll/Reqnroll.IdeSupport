@@ -24,7 +24,7 @@
 // - reqnroll/testOutcomes/ingestRun is excluded: it records the duration of a whole test run, not server latency.
 let lookback = 7d;
 // Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
-// themselves were later renamed to Category.Name. CanonicalEventName() maps all of those to the current name, so a
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
 // query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
 let LegacyEventNames = dynamic({
     "CommentUncomment command executed": "Command.CommentUncomment",
@@ -46,34 +46,34 @@ let LegacyEventNames = dynamic({
     "RenameTargets resolved": "Lookup.RenameTargets",
     "GoToHook command executed": "Command.GoToHook",
     "TagLink command executed": "Command.TagLink",
-    "Extension loaded": "Lifecycle.Loaded",
-    "Extension installed": "Lifecycle.Installed",
-    "Extension upgraded": "Lifecycle.Upgraded",
-    "Feature file opened": "Project.FeatureFileOpened",
-    "Feature file added": "Project.FeatureFileAdded",
-    "Reqnroll config added": "Project.ReqnrollConfigAdded",
-    "Project Template Wizard Started": "Project.CreationStarted",
-    "Project Template Wizard Completed": "Project.CreationCompleted",
-    "Link clicked": "Lifecycle.LinkClicked",
-    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialogDismissed",
-    "Welcome dialog dismissed": "Lifecycle.WelcomeDialogDismissed",
-    "ReqnrollDiscoveryExecuted": "Discovery.Executed",
+    "Extension loaded": "Lifecycle.Extension.Loaded",
+    "Extension installed": "Lifecycle.Extension.Installed",
+    "Extension upgraded": "Lifecycle.Extension.Upgraded",
+    "Feature file opened": "Project.FeatureFile.Opened",
+    "Feature file added": "Project.FeatureFile.Added",
+    "Reqnroll config added": "Project.ReqnrollConfig.Added",
+    "Project Template Wizard Started": "Project.Creation.Started",
+    "Project Template Wizard Completed": "Project.Creation.Completed",
+    "Link clicked": "Lifecycle.Link.Clicked",
+    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialog.Dismissed",
+    "Welcome dialog dismissed": "Lifecycle.WelcomeDialog.Dismissed",
+    "ReqnrollDiscoveryExecuted": "Project.Discovery.Executed",
     "UnhandledException": "Error.UnhandledException",
-    "TestOutcomesRunCompleted": "TestRun.Completed",
-    "TagIndexFirstScanCompleted": "TagIndex.FirstScanCompleted",
-    "FeatureUsageSummary": "Usage.Summary",
-    "ServerSessionStarted": "Server.SessionStarted",
-    "ServerSessionEnded": "Server.SessionEnded",
-    "ServerStartFailed": "Server.StartFailed",
-    "ServerExitedUnexpectedly": "Server.ExitedUnexpectedly",
-    "ServerRestarted": "Server.Restarted",
-    "ProjectCharacteristics": "Project.Characteristics",
+    "TestOutcomesRunCompleted": "Project.TestRun.Completed",
+    "TagIndexFirstScanCompleted": "Project.TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Lifecycle.Usage.SummaryReported",
+    "ServerSessionStarted": "Server.Session.Started",
+    "ServerSessionEnded": "Server.Session.Ended",
+    "ServerStartFailed": "Server.Process.StartFailed",
+    "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Process.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics.Reported",
     "PerfSample": "Perf.Sample",
-    "VsWellKnownIdsSelfCheckMismatch": "Vs.WellKnownIdsSelfCheckMismatch"
+    "VsWellKnownIdsSelfCheckMismatch": "Error.VsWellKnownIdsMismatch"
 });
 let CanonicalEventName = (n:string) {
     let s = tostring(split(n, "/")[-1]);
-    iff(s matches regex @"^\d+ day usage$", "Lifecycle.DaysOfUsage", coalesce(tostring(LegacyEventNames[s]), s))
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
 };
 let minSamples = 1;
 AppEvents

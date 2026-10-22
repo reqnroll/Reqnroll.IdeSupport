@@ -45,7 +45,7 @@ public class TelemetryEventInterceptorTests
         const string lookupCounts = "{\"CodeAction\":1,\"Completion.Step\":14}";
 
         await sut.InterceptAsync(
-            Receive(TelemetryEvent("Usage.Summary", new JObject { ["LookupCounts"] = lookupCounts })),
+            Receive(TelemetryEvent("Lifecycle.Usage.SummaryReported", new JObject { ["LookupCounts"] = lookupCounts })),
             CancellationToken.None);
 
         transmitter.Events.Should().ContainSingle();
@@ -152,7 +152,7 @@ public class TelemetryEventInterceptorTests
         ITelemetryTransmitter? transmitter = null;
         var sut = CreateHolding(() => transmitter, new Clock());
 
-        await sut.InterceptAsync(Receive(TelemetryEvent("Server.SessionStarted")), CancellationToken.None);
+        await sut.InterceptAsync(Receive(TelemetryEvent("Server.Session.Started")), CancellationToken.None);
         await sut.InterceptAsync(Receive(TelemetryEvent("Second")), CancellationToken.None);
         var capture = new CapturingTransmitter();
         transmitter = capture;
@@ -160,7 +160,7 @@ public class TelemetryEventInterceptorTests
 
         sut.Flush();
 
-        capture.Events.Select(e => e.EventName).Should().Equal("Server.SessionStarted", "Second");
+        capture.Events.Select(e => e.EventName).Should().Equal("Server.Session.Started", "Second");
     }
 
     [Fact]

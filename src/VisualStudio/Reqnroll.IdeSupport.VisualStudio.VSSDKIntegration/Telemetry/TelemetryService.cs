@@ -27,43 +27,43 @@ public class TelemetryService : ITelemetryService
 
     // OPEN
 
-    /// <summary>Transmits the "Lifecycle.Loaded" event.</summary>
+    /// <summary>Transmits the "Lifecycle.Extension.Loaded" event.</summary>
     public void MonitorOpenProjectSystem(IIdeScope ideScope)
     {
         //_welcomeService.OnIdeScopeActivityStarted(ideScope, this);
 
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ExtensionLoaded));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleExtensionLoaded));
     }
 
-    /// <summary>Transmits the "Project.FeatureFileOpened" event with project settings.</summary>
+    /// <summary>Transmits the "Project.FeatureFile.Opened" event with project settings.</summary>
     public void MonitorOpenFeatureFile(ProjectSettings projectSettings)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.FeatureFileOpened,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectFeatureFileOpened,
             GetProjectSettingsProps(projectSettings)));
     }
 
     // EXTENSION
 
-    /// <summary>Transmits the "Lifecycle.Installed" event.</summary>
+    /// <summary>Transmits the "Lifecycle.Extension.Installed" event.</summary>
     public void MonitorExtensionInstalled()
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ExtensionInstalled));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleExtensionInstalled));
     }
 
-    /// <summary>Transmits the "Lifecycle.Upgraded" event with the previous version.</summary>
+    /// <summary>Transmits the "Lifecycle.Extension.Upgraded" event with the previous version.</summary>
     public void MonitorExtensionUpgraded(string oldExtensionVersion)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ExtensionUpgraded,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleExtensionUpgraded,
             new Dictionary<string, object>
             {
                 {"OldExtensionVersion", oldExtensionVersion}
             }));
     }
 
-    /// <summary>Transmits the "Lifecycle.DaysOfUsage" event with the running <c>UsageDays</c> count.</summary>
+    /// <summary>Transmits the "Lifecycle.Usage.Recorded" event with the running <c>UsageDays</c> count.</summary>
     public void MonitorExtensionDaysOfUsage(int usageDays)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.DaysOfUsage,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleUsageRecorded,
             new Dictionary<string, object>
             {
                 {"UsageDays", usageDays}
@@ -73,17 +73,17 @@ public class TelemetryService : ITelemetryService
 
     //COMMAND
 
-    /// <summary>Transmits the "Project.FeatureFileAdded" event with project settings.</summary>
+    /// <summary>Transmits the "Project.FeatureFile.Added" event with project settings.</summary>
     public void MonitorCommandAddFeatureFile(ProjectSettings settings)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.FeatureFileAdded,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectFeatureFileAdded,
             GetProjectSettingsProps(settings)));
     }
 
-    /// <summary>Transmits the "Project.ReqnrollConfigAdded" event with project settings.</summary>
+    /// <summary>Transmits the "Project.ReqnrollConfig.Added" event with project settings.</summary>
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings settings)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ReqnrollConfigAdded,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectReqnrollConfigAdded,
             GetProjectSettingsProps(settings)));
     }
 
@@ -101,13 +101,13 @@ public class TelemetryService : ITelemetryService
 
     // PROJECT TEMPLATE WIZARD
 
-    /// <summary>Transmits the "Project.CreationStarted" event.</summary>
+    /// <summary>Transmits the "Project.Creation.Started" event.</summary>
     public void MonitorProjectTemplateWizardStarted()
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectCreationStarted));
     }
 
-    /// <summary>Transmits the "Project.CreationCompleted" event with the selected wizard options.</summary>
+    /// <summary>Transmits the "Project.Creation.Completed" event with the selected wizard options.</summary>
     public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework)
     {
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectCreationCompleted,
@@ -131,27 +131,27 @@ public class TelemetryService : ITelemetryService
     //        GetNotificationProps(notification)));
     //}
 
-    /// <summary>Transmits the "Lifecycle.LinkClicked" event with the link source and URL.</summary>
+    /// <summary>Transmits the "Lifecycle.Link.Clicked" event with the link source and URL.</summary>
     public void MonitorLinkClicked(string source, string url, Dictionary<string, object> additionalProps = null)
     {
         additionalProps ??= new Dictionary<string, object>();
         additionalProps.Add("Source", source);
         additionalProps.Add("URL", url);
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LinkClicked,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleLinkClicked,
             additionalProps));
     }
 
-    /// <summary>Transmits the "Lifecycle.UpgradeDialogDismissed" event.</summary>
+    /// <summary>Transmits the "Lifecycle.UpgradeDialog.Dismissed" event.</summary>
     public void MonitorUpgradeDialogDismissed(Dictionary<string, object> additionalProps)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.UpgradeDialogDismissed,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleUpgradeDialogDismissed,
             additionalProps));
     }
 
-    /// <summary>Transmits the "Lifecycle.WelcomeDialogDismissed" event.</summary>
+    /// <summary>Transmits the "Lifecycle.WelcomeDialog.Dismissed" event.</summary>
     public void MonitorWelcomeDialogDismissed(Dictionary<string, object> additionalProps)
     {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.WelcomeDialogDismissed,
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleWelcomeDialogDismissed,
             additionalProps));
     }
 

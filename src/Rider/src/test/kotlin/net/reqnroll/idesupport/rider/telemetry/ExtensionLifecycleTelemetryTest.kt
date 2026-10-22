@@ -25,7 +25,7 @@ class ExtensionLifecycleTelemetryTest {
     fun `first start sends loaded and installed and seeds state without a usage day`() {
         sut.report(day1, "1.2.0")
 
-        assertEquals(listOf("Lifecycle.Loaded", "Lifecycle.Installed"), names())
+        assertEquals(listOf("Lifecycle.Extension.Loaded", "Lifecycle.Extension.Installed"), names())
         assertEquals("1.2.0", values[ExtensionLifecycleTelemetry.INSTALLED_VERSION_KEY])
         assertEquals("2026-10-03", values[ExtensionLifecycleTelemetry.LAST_USED_DATE_KEY])
         assertEquals("0", values[ExtensionLifecycleTelemetry.USAGE_DAYS_KEY])
@@ -38,7 +38,7 @@ class ExtensionLifecycleTelemetryTest {
 
         sut.report(day1, "1.2.0")
 
-        assertEquals(listOf("Lifecycle.Loaded"), names())
+        assertEquals(listOf("Lifecycle.Extension.Loaded"), names())
     }
 
     @Test
@@ -49,7 +49,7 @@ class ExtensionLifecycleTelemetryTest {
         sut.report(day1.plusDays(1), "1.2.0")
         sut.report(day1.plusDays(2), "1.2.0")
 
-        assertEquals(listOf("Lifecycle.Loaded", "Lifecycle.DaysOfUsage", "Lifecycle.Loaded", "Lifecycle.DaysOfUsage"), names())
+        assertEquals(listOf("Lifecycle.Extension.Loaded", "Lifecycle.Usage.Recorded", "Lifecycle.Extension.Loaded", "Lifecycle.Usage.Recorded"), names())
     }
 
     @Test
@@ -59,7 +59,7 @@ class ExtensionLifecycleTelemetryTest {
 
         sut.report(day1, "1.10.0")
 
-        assertEquals(listOf("Lifecycle.Loaded", "Lifecycle.Upgraded"), names())
+        assertEquals(listOf("Lifecycle.Extension.Loaded", "Lifecycle.Extension.Upgraded"), names())
         assertEquals(mapOf<String, Any?>("OldExtensionVersion" to "1.2.0"), sent[1].second)
         assertEquals("1.10.0", values[ExtensionLifecycleTelemetry.INSTALLED_VERSION_KEY])
     }
@@ -71,7 +71,7 @@ class ExtensionLifecycleTelemetryTest {
 
         sut.report(day1, "1.2.0")
 
-        assertEquals(listOf("Lifecycle.Loaded"), names())
+        assertEquals(listOf("Lifecycle.Extension.Loaded"), names())
     }
 
     @Test

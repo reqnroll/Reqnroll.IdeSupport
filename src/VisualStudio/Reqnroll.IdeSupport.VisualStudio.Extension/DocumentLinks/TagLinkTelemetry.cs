@@ -11,5 +11,5 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.DocumentLinks;
 /// </summary>
 internal static class TagLinkTelemetry
 {
-    public static GenericEvent CreateEvent() => new(TelemetryEvents.TagLinkCommandExecuted, []);
+    public static GenericEvent CreateEvent() => new(TelemetryEvents.CommandTagLink, []);
 }

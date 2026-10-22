@@ -10,14 +10,16 @@ namespace Reqnroll.IdeSupport.Common.Tests.Telemetry;
 /// </summary>
 public class TelemetryEventCatalogTests
 {
-    // Category.Name or Category.Name.Qualifier, PascalCase segments.
+    // Category.Name or Category.Thing.Action, PascalCase segments.
     private static readonly Regex HierarchicalName = new(@"^[A-Z][A-Za-z0-9]*(\.[A-Z][A-Za-z0-9]*)+$");
 
-    private static readonly string[] CatalogNames = typeof(TelemetryEvents)
+    private static readonly (string Constant, string Name)[] Catalog = typeof(TelemetryEvents)
         .GetFields(BindingFlags.Public | BindingFlags.Static)
         .Where(f => f.IsLiteral && f.FieldType == typeof(string))
-        .Select(f => (string)f.GetRawConstantValue()!)
+        .Select(f => (f.Name, (string)f.GetRawConstantValue()!))
         .ToArray();
+
+    private static readonly string[] CatalogNames = Catalog.Select(c => c.Name).ToArray();
 
     [Fact]
     public void Every_event_name_is_hierarchical_and_unique()
@@ -28,30 +30,49 @@ public class TelemetryEventCatalogTests
     }
 
     [Fact]
-    public void VsCode_catalog_names_all_exist_in_the_dotnet_catalog()
+    public void Every_constant_is_named_after_its_event_with_the_dots_removed()
+    {
+        foreach (var (constant, name) in Catalog)
+            constant.Should().Be(name.Replace(".", ""), $"the constant for \"{name}\" is named after the event");
+    }
+
+    [Fact]
+    public void VsCode_catalog_names_all_exist_in_the_dotnet_catalog_under_the_same_name()
     {
         var ts = ReadRepoFile("src/VSCode/src/telemetryEvents.ts");
         var block = Regex.Match(ts, @"export const TelemetryEvents = \{(.*?)\n\} as const;", RegexOptions.Singleline);
         block.Success.Should().BeTrue("the TelemetryEvents object literal is how the catalog is mirrored");
 
-        var names = Regex.Matches(block.Groups[1].Value, @":\s*'([^']+)'").Select(m => m.Groups[1].Value).ToList();
+        var entries = Regex.Matches(block.Groups[1].Value, @"(\w+):\s*'([^']+)'")
+            .Select(m => (Key: m.Groups[1].Value, Name: m.Groups[2].Value))
+            .ToList();
 
-        names.Should().NotBeEmpty();
-        names.Should().BeSubsetOf(CatalogNames);
+        entries.Should().NotBeEmpty();
+        entries.Select(e => e.Name).Should().BeSubsetOf(CatalogNames);
+        foreach (var (key, name) in entries)
+        {
+            var dotless = name.Replace(".", "");
+            key.Should().Be(char.ToLowerInvariant(dotless[0]) + dotless[1..],
+                $"the TypeScript key for \"{name}\" is the event name with the dots removed, camelCased");
+        }
     }
 
     [Fact]
-    public void Rider_catalog_names_all_exist_in_the_dotnet_catalog()
+    public void Rider_catalog_names_all_exist_in_the_dotnet_catalog_under_the_same_name()
     {
         var kt = ReadRepoFile("src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/telemetry/RiderTelemetryTransmitter.kt");
 
-        var names = Regex.Matches(kt, @"const val [A-Z_]+ = ""([^""]+)""")
-            .Select(m => m.Groups[1].Value)
-            .Where(v => HierarchicalName.IsMatch(v) && !v.StartsWith("net.reqnroll", StringComparison.Ordinal))
+        var entries = Regex.Matches(kt, @"const val ([A-Z_]+) = ""([^""]+)""")
+            .Select(m => (Key: m.Groups[1].Value, Name: m.Groups[2].Value))
+            .Where(e => HierarchicalName.IsMatch(e.Name) && !e.Name.StartsWith("net.reqnroll", StringComparison.Ordinal))
             .ToList();
 
-        names.Should().NotBeEmpty();
-        names.Should().BeSubsetOf(CatalogNames);
+        entries.Should().NotBeEmpty();
+        entries.Select(e => e.Name).Should().BeSubsetOf(CatalogNames);
+        foreach (var (key, name) in entries)
+            key.Should().Be(
+                Regex.Replace(name.Replace(".", ""), "(?<=[a-z0-9])(?=[A-Z])", "_").ToUpperInvariant(),
+                $"the Kotlin constant for \"{name}\" is the event name with the dots removed, in upper snake case");
     }
 
     [Fact]

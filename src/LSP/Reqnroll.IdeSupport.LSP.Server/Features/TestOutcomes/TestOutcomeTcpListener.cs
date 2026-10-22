@@ -365,7 +365,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
     /// </summary>
     private void SendRunCompletedTelemetry(int results, int passed, int failed, int skipped, int executed,
         bool aborted, bool canceled, bool completedNormally, string reporterKind, string targetFramework, double elapsedMs)
-        => _lspTelemetryService?.SendEvent(TelemetryEvents.TestOutcomesRunCompleted, new Dictionary<string, object?>
+        => _lspTelemetryService?.SendEvent(TelemetryEvents.ProjectTestRunCompleted, new Dictionary<string, object?>
         {
             ["ResultCount"] = results,
             ["PassedCount"] = passed,

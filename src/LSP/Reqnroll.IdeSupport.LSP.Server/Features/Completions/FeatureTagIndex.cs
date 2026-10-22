@@ -143,7 +143,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
                 $"[TagIndex] Indexed {files.Count} feature file(s) for tag completion in project '{project.ProjectName}' in {DurationFormatter.FormatMilliseconds(elapsedMs)} ({stats})");
 
             // Counts and a duration only — no project, file or tag names.
-            _telemetryService?.SendEvent(TelemetryEvents.TagIndexFirstScanCompleted, new()
+            _telemetryService?.SendEvent(TelemetryEvents.ProjectTagIndexFirstScanCompleted, new()
             {
                 ["FileCount"] = files.Count,
                 ["FilesParsedFromDisk"] = stats.DiskParsed,

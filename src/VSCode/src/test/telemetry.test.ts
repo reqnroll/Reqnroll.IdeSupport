@@ -148,7 +148,10 @@ suite('telemetry', () => {
         stripExtensionIdPrefix('Command.FindStepDefinitions'),
         'Command.FindStepDefinitions',
       );
-      assert.strictEqual(stripExtensionIdPrefix('Server.StartFailed'), 'Server.StartFailed');
+      assert.strictEqual(
+        stripExtensionIdPrefix('Server.Process.StartFailed'),
+        'Server.Process.StartFailed',
+      );
     });
 
     test('an event reaches the reporter under its own name, whatever prefix the host adds', async () => {
@@ -209,12 +212,15 @@ suite('telemetry', () => {
 
       await withStubbedSendTelemetryEvent(context, (calls) => {
         ensureTelemetryReporter(context);
-        sendTelemetryEvent('Server.StartFailed', { Reason: 'StartFailed', AttemptNumber: 1 });
+        sendTelemetryEvent('Server.Process.StartFailed', {
+          Reason: 'StartFailed',
+          AttemptNumber: 1,
+        });
         registerTelemetry(client, context);
         ensureTelemetryReporter(context);
 
         assert.strictEqual(calls.length, 1);
-        assert.strictEqual(calls[0].eventName, 'Server.StartFailed');
+        assert.strictEqual(calls[0].eventName, 'Server.Process.StartFailed');
         assert.deepStrictEqual(withoutIdentity(calls[0].properties), {
           Reason: 'StartFailed',
           AttemptNumber: '1',
@@ -271,10 +277,10 @@ suite('telemetry', () => {
         deferTelemetryTeardownUntil(stopping);
         for (const sub of context.subscriptions) void sub.dispose();
 
-        fire({ eventName: 'Server.SessionEnded', properties: { SessionSeconds: 5 } });
+        fire({ eventName: 'Server.Session.Ended', properties: { SessionSeconds: 5 } });
         assert.deepStrictEqual(
           calls.map((c) => c.eventName),
-          ['Server.SessionEnded'],
+          ['Server.Session.Ended'],
         );
 
         releaseStop();
@@ -283,7 +289,7 @@ suite('telemetry', () => {
         fire({ eventName: 'AfterStop' });
         assert.deepStrictEqual(
           calls.map((c) => c.eventName),
-          ['Server.SessionEnded'],
+          ['Server.Session.Ended'],
           'the forwarder is detached once stop() has settled',
         );
       });
@@ -376,7 +382,7 @@ suite('telemetry', () => {
       await withStubbedSendTelemetryEvent(context, (calls) => {
         registerTelemetry(client, context);
         fire({
-          eventName: 'Usage.Summary',
+          eventName: 'Lifecycle.Usage.SummaryReported',
           properties: { LookupCounts: lookupCounts, Sequence: 2 },
         });
 

@@ -141,7 +141,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
             roslynProperties[TelemetryProperties.StepDefinitionCount] = registry.StepDefinitions.Length;
             roslynProperties[TelemetryProperties.HookCount] = registry.Hooks.Length;
         }
-        _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, roslynProperties);
+        _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, roslynProperties);
     }
 
     /// <summary>Re-parses <paramref name="text"/> directly into <paramref name="project"/>'s binding registry, bypassing membership-index owner resolution.</summary>

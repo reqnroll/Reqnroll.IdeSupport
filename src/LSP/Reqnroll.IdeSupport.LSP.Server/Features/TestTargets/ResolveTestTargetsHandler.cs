@@ -99,7 +99,7 @@ public sealed class ResolveTestTargetsHandler
         var telemetry = new Dictionary<string, object?> { [TelemetryProperties.TargetCount] = targets.Count };
         if (TestTargetTelemetry.ClassifyScenario(buffer.Tags, scenarioRange) is { } kind)
             telemetry[TelemetryProperties.Kind] = kind;
-        _telemetryService?.SendEvent(TelemetryEvents.ResolveTestTargetsCommandExecuted, telemetry);
+        _telemetryService?.SendEvent(TelemetryEvents.LookupResolveTestTargets, telemetry);
 
         return Task.FromResult(new ResolveTestTargetsResponse { Targets = targets.Select(ToDto).ToList() });
     }
