@@ -70,7 +70,8 @@ public class IdeSupportConfiguration
         Equals(BindingDiscovery, other.BindingDiscovery) &&
         ProcessorArchitecture == other.ProcessorArchitecture && DebugConnector == other.DebugConnector &&
         string.Equals(DefaultFeatureLanguage, other.DefaultFeatureLanguage) &&
-        string.Equals(ConfiguredBindingCulture, other.ConfiguredBindingCulture);
+        string.Equals(ConfiguredBindingCulture, other.ConfiguredBindingCulture) &&
+        SnippetExpressionStyle == other.SnippetExpressionStyle;
 
     /// <summary>Determines whether <paramref name="obj"/> is a <see cref="IdeSupportConfiguration"/> with the same setting values.</summary>
     public override bool Equals(object obj)
@@ -96,6 +97,7 @@ public class IdeSupportConfiguration
             hashCode = (hashCode * 397) ^ (DefaultFeatureLanguage != null ? DefaultFeatureLanguage.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^
                        (ConfiguredBindingCulture != null ? ConfiguredBindingCulture.GetHashCode() : 0);
+            hashCode = (hashCode * 397) ^ (int) SnippetExpressionStyle;
             return hashCode;
         }
     }

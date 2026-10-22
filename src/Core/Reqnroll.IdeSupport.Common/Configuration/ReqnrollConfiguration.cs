@@ -1,5 +1,7 @@
 #nullable disable
 
+using System;
+using System.Linq;
 using Reqnroll;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using System.Text.RegularExpressions;
@@ -39,7 +41,7 @@ public class ReqnrollConfiguration
     protected bool Equals(ReqnrollConfiguration other) => IsReqnrollProject == other.IsReqnrollProject &&
                                                           string.Equals(Version, other.Version) &&
                                                           string.Equals(ConfigFilePath, other.ConfigFilePath) &&
-                                                          Equals(Traits, other.Traits);
+                                                          (Traits ?? Array.Empty<ReqnrollProjectTraits>()).SequenceEqual(other.Traits ?? Array.Empty<ReqnrollProjectTraits>());
 
     /// <summary>Determines whether <paramref name="obj"/> is a <see cref="ReqnrollConfiguration"/> with the same setting values.</summary>
     public override bool Equals(object obj)
@@ -58,7 +60,7 @@ public class ReqnrollConfiguration
             var hashCode = IsReqnrollProject.GetHashCode();
             hashCode = (hashCode * 397) ^ (Version != null ? Version.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (ConfigFilePath != null ? ConfigFilePath.GetHashCode() : 0);
-            hashCode = (hashCode * 397) ^ (Traits != null ? Traits.GetHashCode() : 0);
+            hashCode = (Traits ?? Array.Empty<ReqnrollProjectTraits>()).Aggregate(hashCode, (hash, trait) => (hash * 397) ^ (int) trait);
             return hashCode;
         }
     }
