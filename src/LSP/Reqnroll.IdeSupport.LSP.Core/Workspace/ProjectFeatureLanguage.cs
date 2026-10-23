@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.Common.Configuration.Model;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
@@ -14,7 +15,7 @@ public static class ProjectFeatureLanguage
     /// (<c>language.feature</c> in <c>reqnroll.json</c>), or
     /// <see cref="IdeSupportConfiguration.FallbackFeatureLanguage"/> when there is no project.
     /// </summary>
-    public static string For(LspReqnrollProject? project) =>
+    public static string For(IProjectScope? project) =>
         project?.GetIdeSupportConfiguration()?.DefaultFeatureLanguage is { Length: > 0 } language
             ? language
             : IdeSupportConfiguration.FallbackFeatureLanguage;
