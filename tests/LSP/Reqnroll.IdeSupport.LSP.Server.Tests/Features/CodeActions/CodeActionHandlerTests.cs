@@ -754,9 +754,9 @@ public class CodeActionHandlerTests
         var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
         configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
 
-        var parser = new IdeSupportTagParser(logger, telemetryService, configProvider);
+        var parser = new IdeSupportTagParser(logger, telemetryService);
         var snapshot = new LspTextSnapshot("file:///workspace/broken.feature", 1, text);
-        return parser.Parse(snapshot, ProjectBindingRegistry.Invalid);
+        return parser.Parse(snapshot, ProjectBindingRegistry.Invalid, "en-US");
     }
 
     private void SeedMatchService(params StepBindingMatch[] matches) =>

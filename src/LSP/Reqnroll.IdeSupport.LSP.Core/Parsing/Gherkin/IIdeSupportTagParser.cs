@@ -18,8 +18,12 @@ public interface IIdeSupportTagParser
     /// binding matches from <paramref name="bindingRegistry"/>.
     /// Pass <see cref="ProjectBindingRegistry.Invalid"/> when no registry is available yet;
     /// step-matching tags will simply be omitted.
+    /// <paramref name="defaultFeatureLanguage"/> is the Gherkin language used for keywords until a
+    /// <c># language:</c> directive in the file overrides it; it comes from the configuration of the
+    /// project that owns the file.
     /// </summary>
     IReadOnlyCollection<IdeSupportTag> Parse(
         IGherkinTextSnapshot fileSnapshot,
-        ProjectBindingRegistry bindingRegistry);
+        ProjectBindingRegistry bindingRegistry,
+        string defaultFeatureLanguage);
 }

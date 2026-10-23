@@ -6,18 +6,15 @@ public class IdeSupportTagParserTests
 {
     private readonly IIdeSupportLogger _logger;
     private readonly ITelemetryService _telemetryService;
-    private readonly IIdeSupportConfigurationProvider _configProvider;
 
     public IdeSupportTagParserTests()
     {
         _logger = Substitute.For<IIdeSupportLogger>();
         _telemetryService = Substitute.For<ITelemetryService>();
-        _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
-        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
     private IdeSupportTagParser CreateSut() =>
-        new(_logger, _telemetryService, _configProvider);
+        new(_logger, _telemetryService);
 
     private static IGherkinTextSnapshot Snap(string text) =>
         new StubGherkinTextSnapshot(text);
@@ -34,10 +31,10 @@ public class IdeSupportTagParserTests
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private IReadOnlyCollection<IdeSupportTag> ParseTags(string text,
-        ProjectBindingRegistry? registry = null)
+        ProjectBindingRegistry? registry = null, string language = "en-US")
     {
         var sut = CreateSut();
-        return sut.Parse(Snap(text), registry ?? ProjectBindingRegistry.Invalid);
+        return sut.Parse(Snap(text), registry ?? ProjectBindingRegistry.Invalid, language);
     }
 
     private static IEnumerable<IdeSupportTag> OfType(IReadOnlyCollection<IdeSupportTag> tags, string type) =>
@@ -515,7 +512,7 @@ public class IdeSupportTagParserTests
         var text = "Feature: F\nScenario: S\n  Given a step\n";
         var snap = Snap(text);
         var sut = CreateSut();
-        var tags = sut.Parse(snap, ProjectBindingRegistry.Invalid);
+        var tags = sut.Parse(snap, ProjectBindingRegistry.Invalid, "en-US");
         var featureBlock = tags.First(t => t.Type == IdeSupportTagTypes.FeatureBlock);
         featureBlock.Range.Start.Should().Be(0);
         featureBlock.Range.End.Should().Be(snap.Length);
@@ -531,14 +528,42 @@ public class IdeSupportTagParserTests
         OfType(tags, IdeSupportTagTypes.StepBlock).Should().HaveCount(3);
     }
 
-    // ── Unhandled exception guard ─────────────────────────────────────────────
+    // ── Default feature language ─────────────────────────────────────────────
+
+    private const string FrenchFeature = "Fonctionnalité: F\nScénario: S\n  Etant donné une précondition\n";
 
     [Fact]
-    public void Exception_in_configuration_returns_empty_collection()
+    public void Default_feature_language_is_used_for_keywords_when_the_file_has_no_directive()
     {
-        _configProvider.GetConfiguration().Returns(_ => throw new InvalidOperationException("boom"));
-        var tags = ParseTags("Feature: F\nScenario: S\n  Given a step\n");
-        tags.Should().BeEmpty();
+        var tags = ParseTags(FrenchFeature, language: "fr");
+
+        OfType(tags, IdeSupportTagTypes.ParserError).Should().BeEmpty();
+        OfType(tags, IdeSupportTagTypes.StepBlock).Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Regional_default_feature_language_falls_back_to_its_base_language()
+    {
+        var tags = ParseTags(FrenchFeature, language: "fr-FR");
+
+        OfType(tags, IdeSupportTagTypes.ParserError).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Language_directive_in_the_file_overrides_the_default_feature_language()
+    {
+        var tags = ParseTags("# language: fr\n" + FrenchFeature, language: "de");
+
+        OfType(tags, IdeSupportTagTypes.ParserError).Should().BeEmpty();
+        OfType(tags, IdeSupportTagTypes.StepBlock).Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void French_keywords_are_not_recognized_under_the_english_default()
+    {
+        var tags = ParseTags(FrenchFeature, language: "en-US");
+
+        OfType(tags, IdeSupportTagTypes.ParserError).Should().NotBeEmpty();
     }
 
     // Regression guard: an unsupported configured default feature language must not make the parser's
@@ -546,12 +571,7 @@ public class IdeSupportTagParserTests
     [Fact]
     public void Unsupported_configured_default_language_produces_ParserError_tag()
     {
-        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration
-        {
-            DefaultFeatureLanguage = "xx-INVALID-not-a-language"
-        });
-
-        var tags = ParseTags("Feature: F\nScenario: S\n  Given a step\n");
+        var tags = ParseTags("Feature: F\nScenario: S\n  Given a step\n", language: "xx-INVALID-not-a-language");
 
         tags.Any(t => t.Type == IdeSupportTagTypes.ParserError).Should().BeTrue();
     }

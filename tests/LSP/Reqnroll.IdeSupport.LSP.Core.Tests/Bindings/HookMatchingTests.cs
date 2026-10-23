@@ -12,15 +12,11 @@ public class HookMatchingTests
 {
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ITelemetryService _telemetryService = Substitute.For<ITelemetryService>();
-    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
-
-    public HookMatchingTests() => _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
-
     private const string SampleFeature = "Feature: F\nScenario: S\n    Given a step\n";
 
     private IReadOnlyCollection<IdeSupportTag> ParseTags(string text) =>
-        new IdeSupportTagParser(_logger, _telemetryService, _configProvider)
-            .Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid);
+        new IdeSupportTagParser(_logger, _telemetryService)
+            .Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid, "en-US");
 
     private static ProjectHookBinding MakeHook(
         HookType hookType, BindingScope? scope = null, int? hookOrder = null, string method = "MyHook") =>

@@ -39,8 +39,8 @@ public class DiagnosticsAggregatorTests
 
     private IReadOnlyCollection<IdeSupportTag> ParseTags(string text, ProjectBindingRegistry? registry = null)
     {
-        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
-        return parser.Parse(Snap(text), registry ?? RegistryWith());
+        var parser = new IdeSupportTagParser(_logger, _telemetryService);
+        return parser.Parse(Snap(text), registry ?? RegistryWith(), "en-US");
     }
 
     private FeatureBindingMatchSet MatchSetFor(string text, ProjectBindingRegistry? registry = null)

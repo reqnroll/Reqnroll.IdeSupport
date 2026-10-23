@@ -71,8 +71,9 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // Returns ProjectBindingRegistry.Invalid when the project has not yet been
         // discovered or its first discovery run has not completed; IdeSupportTagParser
         // gracefully skips step-matching in that case.
-        var registry = _registryLookup.GetRegistryForUri(uri);
-        var tags     = _tagParser.Parse(snapshot, registry);
+        var registry     = _registryLookup.GetRegistryForUri(uri);
+        var primaryOwner = _scopeManager.ResolvePrimaryOwner(uri);
+        var tags         = _tagParser.Parse(snapshot, registry, ProjectFeatureLanguage.For(primaryOwner));
         _logger.LogInfo($"Parsed {tags.Count} tags from document {uri}");
 
         // Store the new tags first so semantic-token encoding (which re-reads them) and the
@@ -90,7 +91,6 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // known (no baseline received), store with ProjectOwner.Unknown so diagnostics can
         // still work during startup. The Store call will evict the Unknown entry once a
         // project-keyed entry arrives for the same document.
-        var primaryOwner = _scopeManager.ResolvePrimaryOwner(uri);
         var owner = primaryOwner is not null
             ? new ProjectOwner(primaryOwner.ProjectFullName, primaryOwner.TargetFrameworkMoniker)
             : ProjectOwner.Unknown;
@@ -134,7 +134,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
             ? provider.Current
             : _registryLookup.GetRegistryForUri(uri);   // fallback: router (should not happen after baseline)
 
-        var tags = _tagParser.Parse(snapshot, registry);
+        var tags = _tagParser.Parse(snapshot, registry, ProjectFeatureLanguage.For(project));
 
         var owner    = new ProjectOwner(project.ProjectFullName, project.TargetFrameworkMoniker);
         var matchSet = FeatureBindingMatchSet.FromTags(

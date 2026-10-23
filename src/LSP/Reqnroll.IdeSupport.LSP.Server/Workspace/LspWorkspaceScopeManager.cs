@@ -274,7 +274,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     /// <summary>Returns the owning project's configuration provider for <paramref name="uri"/>, or a default configuration provider when no project covers it.</summary>
     public IIdeSupportConfigurationProvider GetConfigurationProviderForUri(DocumentUri uri)
     {
-        var project = GetProjectForUri(uri);
+        var project = ResolvePrimaryOwner(uri);
         if (project is not null)
             return project.GetIdeSupportConfigurationProvider();
 

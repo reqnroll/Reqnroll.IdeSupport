@@ -51,7 +51,7 @@ public class FeatureTagIndexTests : IDisposable
         var config = Substitute.For<IIdeSupportConfigurationProvider>();
         config.GetConfiguration().Returns(new IdeSupportConfiguration());
 
-        var tagParser = new IdeSupportTagParser(_logger, telemetry, config);
+        var tagParser = new IdeSupportTagParser(_logger, telemetry);
         return new FeatureTagIndex(
             _scopeManager, _bufferService, tagParser, new FileSystemForIDE(), _logger, _telemetry);
     }
@@ -92,8 +92,8 @@ public class FeatureTagIndexTests : IDisposable
         {
             var config = Substitute.For<IIdeSupportConfigurationProvider>();
             config.GetConfiguration().Returns(new IdeSupportConfiguration());
-            var parser = new IdeSupportTagParser(_logger, Substitute.For<IErrorTelemetryService>(), config);
-            tags = parser.Parse(new LspTextSnapshot(string.Empty, 0, text), ProjectBindingRegistry.Invalid);
+            var parser = new IdeSupportTagParser(_logger, Substitute.For<IErrorTelemetryService>());
+            tags = parser.Parse(new LspTextSnapshot(string.Empty, 0, text), ProjectBindingRegistry.Invalid, "en-US");
         }
 
         var buffer = new DocumentBuffer(uri, version, text, tags);

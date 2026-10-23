@@ -42,7 +42,7 @@ public sealed record CorpusFingerprint(
         var registry = await BuildRegistryAsync(Path.Combine(corpusRoot, "Bindings")).ConfigureAwait(false);
 
         var tagParser = new IdeSupportTagParser(
-            new IdeSupportNullLogger(), NullLspTelemetryService.Instance, new DefaultConfigurationProvider());
+            new IdeSupportNullLogger(), NullLspTelemetryService.Instance);
 
         var featureFiles = Directory
             .EnumerateFiles(Path.Combine(corpusRoot, "Features"), "*.feature", SearchOption.AllDirectories)
@@ -59,7 +59,7 @@ public sealed record CorpusFingerprint(
             // bound/unbound/ambiguous + step count: the faithful server path (tag parse → match set).
             var buffer = new DocumentBuffer(uri, 1, text);
             var snapshot = buffer.ToGherkinTextSnapshot();
-            var tags = tagParser.Parse(snapshot, registry);
+            var tags = tagParser.Parse(snapshot, registry, "en");
             var matchSet = FeatureBindingMatchSet.FromTags(uri.ToString(), 1, registry.Version, tags);
 
             steps += matchSet.Steps.Count;
@@ -124,13 +124,5 @@ public sealed record CorpusFingerprint(
         }
 
         return new ProjectBindingRegistry(stepDefs, Array.Empty<ProjectHookBinding>(), projectHash: 1);
-    }
-
-    /// <summary>Minimal provider returning a default configuration (English dialect).</summary>
-    private sealed class DefaultConfigurationProvider : IIdeSupportConfigurationProvider
-    {
-        private readonly IdeSupportConfiguration _configuration = new();
-        public event EventHandler? ConfigurationChanged { add { } remove { } }
-        public IdeSupportConfiguration GetConfiguration() => _configuration;
     }
 }

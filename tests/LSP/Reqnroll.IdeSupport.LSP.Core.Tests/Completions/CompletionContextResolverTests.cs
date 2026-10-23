@@ -54,7 +54,7 @@ public class CompletionContextResolverTests
     public void No_step_tags_returns_KeywordCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<IdeSupportTag>());
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>()).Returns(Array.Empty<IdeSupportTag>());
 
         var ctx = _sut.Resolve(snapshot, 0, 0, ProjectBindingRegistry.Invalid, "en");
 
@@ -66,7 +66,7 @@ public class CompletionContextResolverTests
     {
         var snapshot = Snapshot(DocText);
         // StepLine3 is on line 3 (0-based); cursor is on line 2.
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine3, snapshot) });
 
         var ctx = _sut.Resolve(snapshot, 2, 0, ProjectBindingRegistry.Invalid, "en");
@@ -80,7 +80,7 @@ public class CompletionContextResolverTests
     public void Cursor_before_step_text_start_returns_KeywordCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         // stepTextStartColumn = 10; cursor at col 9 is still in the keyword.
@@ -93,7 +93,7 @@ public class CompletionContextResolverTests
     public void Cursor_at_col_zero_on_step_line_returns_KeywordCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         var ctx = _sut.Resolve(snapshot, 2, 0, ProjectBindingRegistry.Invalid, "en");
@@ -107,7 +107,7 @@ public class CompletionContextResolverTests
     public void Cursor_at_exactly_step_text_start_returns_StepCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         // col 10 = first char of step text ("s" of "some")
@@ -120,7 +120,7 @@ public class CompletionContextResolverTests
     public void Cursor_past_step_text_start_returns_StepCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         var ctx = _sut.Resolve(snapshot, 2, 14, ProjectBindingRegistry.Invalid, "en");
@@ -134,7 +134,7 @@ public class CompletionContextResolverTests
     public void TypedAfterKeyword_is_empty_when_cursor_at_step_text_start()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         var ctx = (StepCompletionContext)_sut.Resolve(snapshot, 2, 10, ProjectBindingRegistry.Invalid, "en")!;
@@ -146,7 +146,7 @@ public class CompletionContextResolverTests
     public void TypedAfterKeyword_contains_text_typed_after_keyword()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         // "    Given some text" — col 10 starts "some text"; col 14 is after "some"
@@ -161,7 +161,7 @@ public class CompletionContextResolverTests
     public void StepTextStartColumn_equals_indent_plus_keyword_length()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot) });
 
         var ctx = (StepCompletionContext)_sut.Resolve(snapshot, 2, 10, ProjectBindingRegistry.Invalid, "en")!;
@@ -176,7 +176,7 @@ public class CompletionContextResolverTests
         // "When " is 5 chars vs "Given " which is 6 — column stays same, keyword shorter.
         // Location.Column=5 (1-based), keyword="When " (5 chars): (5-1)+5=9
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine3, snapshot) });
 
         var ctx = (StepCompletionContext)_sut.Resolve(snapshot, 3, 9, ProjectBindingRegistry.Invalid, "en")!;
@@ -190,7 +190,7 @@ public class CompletionContextResolverTests
     public void Fallback_language_used_when_no_document_tag()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<IdeSupportTag>());
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>()).Returns(Array.Empty<IdeSupportTag>());
 
         var ctx = (KeywordCompletionContext)_sut.Resolve(snapshot, 0, 0, ProjectBindingRegistry.Invalid, "de")!;
 
@@ -206,7 +206,7 @@ public class CompletionContextResolverTests
         // fallback must go through ReqnrollGherkinDialectProvider, which retries with the base
         // language ("en") when no exact regional dialect is registered.
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<IdeSupportTag>());
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>()).Returns(Array.Empty<IdeSupportTag>());
 
         var ctx = (KeywordCompletionContext)_sut.Resolve(snapshot, 0, 0, ProjectBindingRegistry.Invalid, "en-US")!;
 
@@ -224,7 +224,7 @@ public class CompletionContextResolverTests
             deDialect, new List<int>());
 
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DocTag(deDoc, snapshot) });
 
         // Fallback says "en" but the parsed doc says "de" — parsed wins.
@@ -244,7 +244,7 @@ public class CompletionContextResolverTests
     public void Cursor_within_definition_keyword_still_returns_KeywordCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
 
         // Column 3 on line 1 is inside "Sce|nario:" -- still composing the keyword.
@@ -257,7 +257,7 @@ public class CompletionContextResolverTests
     public void Cursor_at_start_of_definition_keyword_still_returns_KeywordCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
 
         var ctx = _sut.Resolve(snapshot, 1, 0, ProjectBindingRegistry.Invalid, "en");
@@ -269,7 +269,7 @@ public class CompletionContextResolverTests
     public void Cursor_right_after_the_colon_returns_null()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
 
         // Column 9 on line 1 is the space right after "Scenario:" -- already past the keyword.
@@ -282,7 +282,7 @@ public class CompletionContextResolverTests
     public void Cursor_in_the_middle_of_the_scenario_title_returns_null()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
 
         // Column 10 on line 1 is "S" of the title "S" -- editing the name, not the keyword.
@@ -297,7 +297,7 @@ public class CompletionContextResolverTests
         // Same rule applies to Feature (and, by the same tag, Rule/Background/Examples) lines,
         // not just Scenario.
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 0, length: 8) });
 
         var ctx = _sut.Resolve(snapshot, 0, 9, ProjectBindingRegistry.Invalid, "en");
@@ -310,7 +310,7 @@ public class CompletionContextResolverTests
     {
         var snapshot = Snapshot(DocText);
         // The tag is for line 0; the cursor is on line 1, which has no tag of its own here.
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 0, length: 8) });
 
         var ctx = _sut.Resolve(snapshot, 1, 10, ProjectBindingRegistry.Invalid, "en");
@@ -324,7 +324,7 @@ public class CompletionContextResolverTests
     public void StepCompletionContext_carries_the_step_for_the_cursor_line()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
             .Returns(new[] { StepTag(StepLine2, snapshot), StepTag(StepLine3, snapshot) });
 
         var ctx = (StepCompletionContext)_sut.Resolve(snapshot, 2, 10, ProjectBindingRegistry.Invalid, "en")!;

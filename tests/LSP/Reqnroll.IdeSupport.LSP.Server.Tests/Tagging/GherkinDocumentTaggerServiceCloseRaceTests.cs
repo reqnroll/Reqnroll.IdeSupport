@@ -44,7 +44,7 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
 
         // Only the open-document parse (non-zero version) is gated; the closed-file scan parses
         // a version-0 snapshot read from disk and must run straight through.
-        _tagParser.Parse(Arg.Any<IGherkinTextSnapshot>(), Arg.Any<ProjectBindingRegistry>())
+        _tagParser.Parse(Arg.Any<IGherkinTextSnapshot>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
                   .Returns(call =>
                   {
                       if (call.Arg<IGherkinTextSnapshot>().Version != 0)

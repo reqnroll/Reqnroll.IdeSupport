@@ -109,7 +109,6 @@ public static class ServiceCollectionExtensions
             // IdeSupportTagParser, CompletionContextResolver depend on this narrow interface, not the
             // full ITelemetryService above) — same singleton, resolved via interface inheritance.
             .AddSingleton<IErrorTelemetryService>(sp => sp.GetRequiredService<ITelemetryService>())
-            .AddSingleton<IIdeSupportConfigurationProvider, ProjectSystemIdeSupportConfigurationProvider>()
             .AddSingleton<IEditorConfigOptionsProvider>(sp =>
                 new FileSystemEditorConfigOptionsProvider(sp.GetRequiredService<IIdeScope>().FileSystem))
             // Performance Verification, Layer 4: field instrumentation. The recorder writes

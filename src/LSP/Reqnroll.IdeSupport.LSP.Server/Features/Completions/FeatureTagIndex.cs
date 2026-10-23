@@ -117,7 +117,8 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
             if (!known.Contains(cachedPath))
                 index.Files.TryRemove(cachedPath, out _);
 
-        var perFile = await Task.WhenAll(files.Select(f => GetFileTagsAsync(index, f, stats, ct)))
+        var language = ProjectFeatureLanguage.For(project);
+        var perFile = await Task.WhenAll(files.Select(f => GetFileTagsAsync(index, f, language, stats, ct)))
             .ConfigureAwait(false);
 
         var projectTagNames = new HashSet<string>(StringComparer.Ordinal);
@@ -185,6 +186,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
     private async Task<IReadOnlyDictionary<string, int>?> GetFileTagsAsync(
         ProjectTagIndex index,
         string filePath,
+        string language,
         ScanStats stats,
         CancellationToken ct)
     {
@@ -246,7 +248,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
         {
             stats.ParsedFromDisk();
             var text = await _fileSystem.File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false);
-            var counts = CollectCounts(text);
+            var counts = CollectCounts(text, language);
             index.Files[filePath] = new FileTagEntry(null, lastWrite, counts);
             return counts;
         }
@@ -259,10 +261,10 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
     }
 
     /// <summary>Parses the given text against no binding registry and counts the tag names in it.</summary>
-    private IReadOnlyDictionary<string, int> CollectCounts(string text)
+    private IReadOnlyDictionary<string, int> CollectCounts(string text, string language)
     {
         var snapshot = new LspTextSnapshot(string.Empty, 0, text);
-        var tags = _tagParser.Parse(snapshot, ProjectBindingRegistry.Invalid);
+        var tags = _tagParser.Parse(snapshot, ProjectBindingRegistry.Invalid, language);
         return GherkinTagNameCollector.CollectCounts(tags);
     }
 
