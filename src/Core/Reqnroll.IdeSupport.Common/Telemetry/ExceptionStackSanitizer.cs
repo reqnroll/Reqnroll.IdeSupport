@@ -44,6 +44,8 @@ public static class ExceptionStackSanitizer
 
     private static readonly char[] GenericOrParameterStart = { '<', '(' };
 
+    private static readonly string[] ConstructorSuffixes = { "..cctor", "..ctor" };
+
     /// <summary>
     /// <see langword="true"/> when <paramref name="type"/> is declared in a <c>Reqnroll.IdeSupport</c> namespace
     /// <b>and</b> in a <c>Reqnroll.IdeSupport</c> assembly (exact name or <c>Reqnroll.IdeSupport.*</c>), so a
@@ -226,7 +228,20 @@ public static class ExceptionStackSanitizer
         if (qualifiedName == null || !qualifiedName.StartsWith(ProductName + ".", StringComparison.Ordinal))
             return null;
 
-        var segments = qualifiedName.Split('.', '+');
+        // A constructor's name (".ctor", ".cctor") contains the separator itself; keep it as one segment.
+        string constructor = null;
+        foreach (var suffix in ConstructorSuffixes)
+        {
+            if (qualifiedName.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                constructor = suffix.Substring(1);
+                qualifiedName = qualifiedName.Substring(0, qualifiedName.Length - suffix.Length);
+                break;
+            }
+        }
+
+        var split = qualifiedName.Split('.', '+');
+        var segments = constructor == null ? split : new List<string>(split) { constructor }.ToArray();
         if (segments.Length < 2)
             return null;
 
