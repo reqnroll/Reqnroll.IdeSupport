@@ -11,7 +11,6 @@ global using NSubstitute;
 // New Reqnroll.IdeSupport.* namespaces (replacing old Reqnroll.VisualStudio.*)
 global using Reqnroll.IdeSupport.Common;
 global using Reqnroll.IdeSupport.Common.Telemetry;
-global using Reqnroll.IdeSupport.Common.Configuration;
 global using Reqnroll.IdeSupport.Common.Logging;
 global using Reqnroll.IdeSupport.Common.ProjectSystem;
 global using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
@@ -48,3 +47,6 @@ global using System.Threading;
 global using System.Threading.Tasks;
 global using Xunit.Abstractions;
 global using Xunit;
+global using Reqnroll.IdeSupport.Common.Configuration.Model;
+global using Reqnroll.IdeSupport.Common.Configuration.Loading;
+global using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;

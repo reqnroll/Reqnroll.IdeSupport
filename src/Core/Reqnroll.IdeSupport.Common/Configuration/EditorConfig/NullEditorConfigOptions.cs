@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 /// <summary>
 /// Returns the caller-supplied default for every key. Used when no .editorconfig applies.

@@ -4,8 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Loading;
 
 /// <summary>How the content of a configuration file is read into an <see cref="IdeSupportConfiguration"/>.</summary>
 public enum ConfigurationFileFormat

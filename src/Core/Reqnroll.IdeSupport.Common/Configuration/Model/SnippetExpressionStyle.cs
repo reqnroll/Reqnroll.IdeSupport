@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>SnippetExpressionStyle</summary>
 public enum SnippetExpressionStyle

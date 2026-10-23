@@ -1,5 +1,5 @@
 ﻿using System.IO.Abstractions.TestingHelpers;
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 namespace Reqnroll.IdeSupport.Common.Tests.Configuration;
 

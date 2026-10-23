@@ -3,7 +3,7 @@
 using System;
 using System.Text.RegularExpressions;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>TagLinkConfiguration</summary>
 public class TagLinkConfiguration

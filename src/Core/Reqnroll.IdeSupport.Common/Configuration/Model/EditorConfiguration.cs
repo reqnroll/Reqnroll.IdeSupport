@@ -1,6 +1,6 @@
 using System;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Model;
 
 /// <summary>EditorConfiguration</summary>
 public class EditorConfiguration

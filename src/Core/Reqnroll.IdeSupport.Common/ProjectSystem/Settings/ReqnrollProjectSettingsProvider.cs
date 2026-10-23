@@ -3,7 +3,7 @@
 
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using System;
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.Loading;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;

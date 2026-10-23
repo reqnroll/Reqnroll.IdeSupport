@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;

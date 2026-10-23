@@ -1,4 +1,4 @@
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 

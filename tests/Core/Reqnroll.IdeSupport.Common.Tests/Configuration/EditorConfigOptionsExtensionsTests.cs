@@ -1,4 +1,5 @@
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 using Xunit;
 
 namespace Reqnroll.IdeSupport.Common.Tests.Configuration;

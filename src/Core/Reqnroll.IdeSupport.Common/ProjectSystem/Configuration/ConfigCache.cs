@@ -1,4 +1,4 @@
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 
 namespace Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 

@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 /// <summary>EditorConfigOptionsExtensions</summary>
 public static class EditorConfigOptionsExtensions

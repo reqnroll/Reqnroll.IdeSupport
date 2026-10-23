@@ -1,9 +1,9 @@
 #nullable disable
 
-using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 using System.Collections.Generic;
 
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.Loading;
 
 /// <summary>ReqnrollConfigDeserializer</summary>
 public class ReqnrollConfigDeserializer : IConfigDeserializer<IdeSupportConfiguration>

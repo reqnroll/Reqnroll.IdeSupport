@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.Common.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration.EditorConfig;
 
 /// <summary>
 /// Read-only view of EditorConfig settings that apply to a specific file path.
