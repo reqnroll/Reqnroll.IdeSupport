@@ -155,46 +155,97 @@ public static class ExceptionStackSanitizer
                 if (frames == null)
                     return null;
 
-                var entries = new List<string>();
-                var sawProductFrame = false;
-                foreach (var frame in frames)
-                {
-                    if (entries.Count >= maxFrames)
-                        break;
-                    var method = frame.GetMethod();
-                    var name = method == null ? null : FormatProductFrame(method, frame.GetFileLineNumber());
-                    if (name == null)
-                    {
-                        if (entries.Count == 0 || entries[entries.Count - 1] != ExternalPlaceholder)
-                            entries.Add(ExternalPlaceholder);
-                    }
-                    else
-                    {
-                        sawProductFrame = true;
-                        entries.Add(name);
-                    }
-                }
-
-                if (!sawProductFrame)
-                    return null;
-
-                var result = new StringBuilder();
-                foreach (var entry in entries)
-                {
-                    var added = (result.Length == 0 ? 0 : 1) + entry.Length;
-                    if (result.Length + added > MaxLength)
-                        break;
-                    if (result.Length > 0)
-                        result.Append(FrameSeparator);
-                    result.Append(entry);
-                }
-                return result.Length == 0 ? null : result.ToString();
+                return JoinFrames(Formatted(frames), maxFrames);
             }
             catch (Exception)
             {
                 return null;
             }
+
+            static IEnumerable<string> Formatted(StackFrame[] frames)
+            {
+                foreach (var frame in frames)
+                {
+                    var method = frame.GetMethod();
+                    yield return method == null ? null : FormatProductFrame(method, frame.GetFileLineNumber());
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// Builds the telemetry string from frames already formatted innermost-first, where <see langword="null"/>
+    /// stands for a non-product frame: runs of those collapse to <see cref="ExternalPlaceholder"/>, at most
+    /// <paramref name="maxFrames"/> entries are kept and the result is capped at <see cref="MaxLength"/>.
+    /// <see langword="null"/> when no product frame was seen. Shared with <see cref="CrashReportParser"/>.
+    /// </summary>
+    internal static string JoinFrames(IEnumerable<string> formattedFrames, int maxFrames)
+    {
+        var entries = new List<string>();
+        var sawProductFrame = false;
+        foreach (var name in formattedFrames)
+        {
+            if (entries.Count >= maxFrames)
+                break;
+            if (name == null)
+            {
+                if (entries.Count == 0 || entries[entries.Count - 1] != ExternalPlaceholder)
+                    entries.Add(ExternalPlaceholder);
+            }
+            else
+            {
+                sawProductFrame = true;
+                entries.Add(name);
+            }
+        }
+
+        if (!sawProductFrame)
+            return null;
+
+        var result = new StringBuilder();
+        foreach (var entry in entries)
+        {
+            var added = (result.Length == 0 ? 0 : 1) + entry.Length;
+            if (result.Length + added > MaxLength)
+                break;
+            if (result.Length > 0)
+                result.Append(FrameSeparator);
+            result.Append(entry);
+        }
+        return result.Length == 0 ? null : result.ToString();
+    }
+
+    /// <summary>
+    /// Formats one frame of a stack trace printed as text (<c>Namespace.Type.Method</c>, nested types and
+    /// compiler-generated members as the runtime prints them) the same way as a captured frame:
+    /// <see langword="null"/> for a non-product frame, otherwise the normalised name plus <c>:line</c> when
+    /// <paramref name="line"/> is positive. Text carries no assembly, so the product test is on the namespace only.
+    /// </summary>
+    internal static string FormatProductFrameText(string qualifiedName, int line)
+    {
+        if (qualifiedName == null || !qualifiedName.StartsWith(ProductName + ".", StringComparison.Ordinal))
+            return null;
+
+        var segments = qualifiedName.Split('.', '+');
+        if (segments.Length < 2)
+            return null;
+
+        var methodSegment = segments[segments.Length - 1];
+        var declaringTypeName = segments[segments.Length - 2];
+        var kept = new List<string>(segments.Length);
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            if (segments[i].Length > 0 && !segments[i].StartsWith("<", StringComparison.Ordinal))
+                kept.Add(Sanitized(StripArity(segments[i])));
+        }
+
+        // Generic method arguments print as Method[T]; cut them like the '<' of a captured name.
+        var bracket = methodSegment.IndexOf('[');
+        if (bracket > 0)
+            methodSegment = methodSegment.Substring(0, bracket);
+        kept.Add(NormalizeMethodName(methodSegment, declaringTypeName));
+
+        return string.Join(".", kept) + (line > 0 ? ":" + line.ToString(CultureInfo.InvariantCulture) : string.Empty);
     }
 
     private static string FormatProductFrame(MethodBase method, int line)

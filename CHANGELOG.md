@@ -1,6 +1,7 @@
 # [vNext]
 
 ## Improvements:
+* When the language server crashes in Visual Studio, `Server.Process.ExitedUnexpectedly` now also carries the crash report the .NET runtime printed to stderr, reduced to telemetry-safe values: `CrashKind` (`UnhandledException`, `StackOverflow`, `FatalError`, `FailFast`), the outermost exception's type, scrubbed message and product-only stack frames, and the same for the innermost exception (VS) - see #1282
 * `Server.Process.ExitedUnexpectedly` telemetry now says how the language server died and which run it was: the client passes each server process its own id as `--server-session-id`, which the server stamps as `SessionId`, and the exit event carries the same value as `ServerSessionId` together with the process `ExitCode` and `UptimeMs`. A failed start after launch carries them too. So far Visual Studio sends the new properties; VS Code and Rider follow (VS, LSP server) - see #1282
 
 # v2026.1 - 2026-10-21
