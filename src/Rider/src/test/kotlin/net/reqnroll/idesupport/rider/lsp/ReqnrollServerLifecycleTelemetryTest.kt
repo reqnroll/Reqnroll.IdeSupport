@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 
 class ReqnrollServerLifecycleTelemetryTest {
     private val sent = mutableListOf<Pair<String, Map<String, Any?>>>()
-    private val sut = ReqnrollServerLifecycleTelemetry { name, props -> sent += name to props }
+    private val sut = ReqnrollServerLifecycleTelemetry(send = { name, props -> sent += name to props })
 
     private fun move(vararg states: LspServerState) = states.forEach(sut::onStateChanged)
 
@@ -84,5 +84,48 @@ class ReqnrollServerLifecycleTelemetryTest {
         move(LspServerState.Initializing, LspServerState.ShutdownUnexpectedly)
 
         assertEquals(setOf("Reason", "AttemptNumber"), sent.single().second.keys)
+    }
+
+    @Test
+    fun `a start failure carries the start details`() {
+        val withDetails = mutableListOf<Pair<String, Map<String, Any?>>>()
+        val tracked = ReqnrollServerLifecycleTelemetry(
+            { name, props -> withDetails += name to props },
+            startDetails = { mapOf("ServerSessionId" to "id-1") },
+        )
+
+        tracked.onStateChanged(LspServerState.Initializing)
+        tracked.onStateChanged(LspServerState.ShutdownUnexpectedly)
+
+        assertEquals(
+            mapOf<String, Any?>("ServerSessionId" to "id-1", "Reason" to "StartFailed", "AttemptNumber" to 1),
+            withDetails.single().second,
+        )
+    }
+
+    @Test
+    fun `an unexpected exit is sent when its details are ready, and they never replace Reason or AttemptNumber`() {
+        val withDetails = mutableListOf<Pair<String, Map<String, Any?>>>()
+        var deliver: ((Map<String, Any?>) -> Unit)? = null
+        val tracked = ReqnrollServerLifecycleTelemetry(
+            { name, props -> withDetails += name to props },
+            exitDetails = { deliver = it },
+        )
+
+        tracked.onStateChanged(LspServerState.Initializing)
+        tracked.onStateChanged(LspServerState.Running)
+        tracked.onStateChanged(LspServerState.ShutdownUnexpectedly)
+        assertTrue(withDetails.isEmpty(), "waits for the details")
+
+        deliver!!(mapOf("ServerSessionId" to "id-1", "ExitCode" to 134, "Reason" to "ignored"))
+
+        assertEquals(
+            listOf(
+                "Server.Process.ExitedUnexpectedly" to mapOf<String, Any?>(
+                    "ServerSessionId" to "id-1", "ExitCode" to 134, "Reason" to "ProcessExited", "AttemptNumber" to 1,
+                ),
+            ),
+            withDetails,
+        )
     }
 }
