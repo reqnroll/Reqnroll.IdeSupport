@@ -208,7 +208,8 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
 
             if (buffer.Tags is not null)
             {
-                if (hasCached && buffer.Version.HasValue && cached!.Version == buffer.Version.Value)
+                if (hasCached && buffer.Version.HasValue && cached!.Version == buffer.Version.Value
+                    && cached.Language == language)
                 {
                     stats.Cached();
                     return cached.Counts;
@@ -217,7 +218,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
                 stats.CountedFromBuffer();
                 var counts = GherkinTagNameCollector.CollectCounts(buffer.Tags);
                 if (buffer.Version.HasValue)
-                    index.Files[filePath] = new FileTagEntry(buffer.Version.Value, null, counts);
+                    index.Files[filePath] = new FileTagEntry(buffer.Version.Value, null, language, counts);
                 return counts;
             }
 
@@ -238,7 +239,8 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
 
         var lastWrite = _fileSystem.File.GetLastWriteTimeUtc(filePath);
         if (index.Files.TryGetValue(filePath, out var cachedEntry) &&
-            cachedEntry.LastWriteTimeUtc == lastWrite)
+            cachedEntry.LastWriteTimeUtc == lastWrite &&
+            cachedEntry.Language == language)
         {
             stats.Cached();
             return cachedEntry.Counts;
@@ -249,7 +251,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
             stats.ParsedFromDisk();
             var text = await _fileSystem.File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false);
             var counts = CollectCounts(text, language);
-            index.Files[filePath] = new FileTagEntry(null, lastWrite, counts);
+            index.Files[filePath] = new FileTagEntry(null, lastWrite, language, counts);
             return counts;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -315,9 +317,10 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
         public readonly ConcurrentDictionary<string, FileTagEntry> Files = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Cached tag counts for one feature file, valid while its identity anchor (buffer version or disk write time) is unchanged.</summary>
+    /// <summary>Cached tag counts for one feature file, valid while its identity anchor (buffer version or disk write time) and the feature language it was parsed with are unchanged.</summary>
     private sealed record FileTagEntry(
         int? Version,
         DateTime? LastWriteTimeUtc,
+        string Language,
         IReadOnlyDictionary<string, int> Counts);
 }
