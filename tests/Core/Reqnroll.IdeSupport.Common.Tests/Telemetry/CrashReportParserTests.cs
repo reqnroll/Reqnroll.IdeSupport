@@ -185,6 +185,18 @@ public class CrashReportParserTests
         report.Outer.StackFrames.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("Reqnroll.IdeSupport.X.Worker..ctor(String name) in C:\\x.cs:line 3", "Reqnroll.IdeSupport.X.Worker.{ctor}:3")]
+    [InlineData("Reqnroll.IdeSupport.X.Worker..cctor()", "Reqnroll.IdeSupport.X.Worker.{cctor}")]
+    [InlineData("Reqnroll.IdeSupport.X.Outer+Inner.Run()", "Reqnroll.IdeSupport.X.Outer.Inner.Run")]
+    [InlineData("Reqnroll.IdeSupport.X.Box`1.Get()", "Reqnroll.IdeSupport.X.Box.Get")]
+    public void Constructors_nested_and_generic_types_are_normalised(string frame, string expected)
+    {
+        var report = Parse("Unhandled exception. System.Exception: x\n   at " + frame)!;
+
+        report.Outer.StackFrames.Should().Be(expected);
+    }
+
     [Fact]
     public void A_header_that_is_not_a_type_name_keeps_no_type()
     {
