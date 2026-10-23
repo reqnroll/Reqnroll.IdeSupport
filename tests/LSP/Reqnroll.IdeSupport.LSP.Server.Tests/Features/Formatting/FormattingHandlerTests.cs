@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Formatting;
 
 public class FormattingHandlerTests
 {
-    private const string FeatureText = "Feature: F\nScenario: S\n    Given a step\n";
+    private const string FeatureText = "Feature: F\nScenario: S\nGiven a step\n";
 
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider = Substitute.For<IEditorConfigOptionsProvider>();
@@ -34,7 +34,7 @@ public class FormattingHandlerTests
                 return true;
             });
         _editorConfigOptionsProvider.GetEditorConfigOptionsByPath(Arg.Any<string>())
-            .Returns(Substitute.For<IEditorConfigOptions>());
+            .Returns(NullEditorConfigOptions.Instance);
     }
 
     private FormattingHandler CreateSut() =>
@@ -79,6 +79,39 @@ public class FormattingHandlerTests
             var edits = await CreateSut().Handle(FormatRequest(uri), CancellationToken.None);
 
             edits!.Single().NewText.Should().Contain("Etant donné une précondition").And.NotContain("      Etant");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task Handle_document_formatting_applies_the_owning_projects_format_settings()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "rnr-fmt-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, "reqnroll.json"),
+                "{ \"ide\": { \"editor\": { \"gherkinFormat\": { \"indentFeatureChildren\": true } } } }");
+            var project = new LspReqnrollProject(
+                new ReqnrollProjectLoadedParams
+                {
+                    WorkspaceFolder = folder,
+                    ProjectFile = Path.Combine(folder, "My.csproj"),
+                    ProjectFolder = folder,
+                    OutputAssemblyPath = Path.Combine(folder, "bin", "My.dll"),
+                    TargetFrameworkMoniker = "net10.0"
+                },
+                new LspIdeScope(_logger));
+            var uri = DocumentUri.FromFileSystemPath(Path.Combine(folder, "a.feature"));
+            _scopeManager.ResolvePrimaryOwner(uri).Returns(project);
+            SetupBuffer(uri, "Feature: F\nScenario: S\nGiven a step\n");
+
+            var edits = await CreateSut().Handle(FormatRequest(uri), CancellationToken.None);
+
+            edits!.Single().NewText.Should().Contain("\n    Scenario: S");
         }
         finally
         {
