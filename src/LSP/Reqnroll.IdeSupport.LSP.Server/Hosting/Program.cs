@@ -92,6 +92,23 @@ public class Program
         // default. See ConfigureServer's initialTrace parameter for the full precedence order.
         var initialTrace = ParseTraceLevel(args);
 
+        // An exception no code catches, on any thread, ends the process. Record it before that happens: the local
+        // crash log, and a sanitized crash file that the next server to start reports, since this process can no
+        // longer send telemetry through its client. Installed first so a failure building the server is covered.
+        LanguageServer? startedServer = null;
+        var fatalExceptionRecorder = new FatalExceptionRecorder(
+            new ServerCrashFiles(ServerCrashFiles.DefaultDirectory()),
+            serverSessionId,
+            clientSessionId,
+            () => startedServer?.Services.GetService<ClientIdeContext>()?.Ide ?? ideId,
+            GetServerVersion(),
+            WriteCrashLog);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception exception)
+                fatalExceptionRecorder.Record(exception);
+        };
+
         // Write any unhandled startup exception to a file next to the LSP inspector logs
         // so crashes are self-diagnosing without needing to capture stderr.
         try
@@ -108,6 +125,12 @@ public class Program
                        .WithOutput(Console.OpenStandardOutput());
                 ConfigureServer(options, ideId, logLevel, initialTrace, protocolLogLevel, clientSessionId, serverSessionId);
             });
+            startedServer = server;
+
+            // Faulted tasks nobody awaited do not end the process, but they are bugs that were otherwise invisible.
+            var unobservedTaskReporter = new UnobservedTaskExceptionReporter(
+                server.Services.GetRequiredService<IErrorTelemetryService>());
+            TaskScheduler.UnobservedTaskException += (_, e) => unobservedTaskReporter.Report(e.Exception);
 
             using var preloadCts = new CancellationTokenSource();
             var scopeManager = server.Services.GetRequiredService<ILspWorkspaceScopeManager>();
@@ -138,6 +161,13 @@ public class Program
             await preloadCts.CancelAsync().ConfigureAwait(false);
             await preloadTask.ConfigureAwait(false);
 
+            // Report crashes recorded by earlier server processes, whichever IDE or project started them, now that
+            // there is a client to carry the events. Off the startup path: it reads files.
+            var telemetry = server.Services.GetRequiredService<ILspTelemetryService>();
+            _ = Task.Run(() => new ServerCrashFiles(ServerCrashFiles.DefaultDirectory()).ReportPending(
+                record => telemetry.SendEvent(TelemetryEvents.ErrorUnhandledException, record.ToEventProperties(DateTime.UtcNow)),
+                DateTime.UtcNow));
+
             await server.WaitForExit.ConfigureAwait(false);
 
             // Stop the periodic loop. The final flush already ran on the shutdown request above;
@@ -160,18 +190,22 @@ public class Program
         {
             try
             {
-                // Reuses SynchronousFileLogger itself (role "crash") rather than one-off
-                // directory/filename/formatting code: same
-                // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
-                // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
-                // with no PID and a raw ex.ToString() dump.
-                var idePrefix = IdeLogPrefix.From(ideId);
-                new SynchronousFileLogger(idePrefix, "crash", TraceLevel.Error)
-                    .LogException(ex, "Unhandled exception - LSP server terminating");
+                WriteCrashLog(ex);
+                // Rethrown below into the unhandled-exception handler, which must not log it again.
+                fatalExceptionRecorder.MarkLogged(ex);
             }
             catch { /* best-effort; never mask the original exception */ }
             throw;
         }
+
+        // Reuses SynchronousFileLogger itself (role "crash") rather than one-off
+        // directory/filename/formatting code: same
+        // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
+        // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
+        // with no PID and a raw ex.ToString() dump.
+        void WriteCrashLog(Exception exception) =>
+            new SynchronousFileLogger(IdeLogPrefix.From(ideId), "crash", TraceLevel.Error)
+                .LogException(exception, "Unhandled exception - LSP server terminating");
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 # [vNext]
 
 ## Improvements:
+* A language server that crashes from an unhandled exception, on any thread, now leaves a sanitized crash record that the next server to start reports as `Error.UnhandledException` with `IsFatal = true` and `ReportedAfterRestart = true`, carrying the crashed run's `SessionId`, the outer and innermost exception and the uptime; records older than 72 hours are discarded. Exceptions from faulted tasks nobody awaited are now reported as non-fatal `Error.UnhandledException` events (at most 10 per server process), and the local crash log now also covers exceptions on background threads (LSP server) - see #1282
 * When the language server crashes in Visual Studio, `Server.Process.ExitedUnexpectedly` now also carries the crash report the .NET runtime printed to stderr, reduced to telemetry-safe values: `CrashKind` (`UnhandledException`, `StackOverflow`, `FatalError`, `FailFast`), the outermost exception's type, scrubbed message and product-only stack frames, and the same for the innermost exception (VS) - see #1282
 * `Server.Process.ExitedUnexpectedly` telemetry now says how the language server died and which run it was: the client passes each server process its own id as `--server-session-id`, which the server stamps as `SessionId`, and the exit event carries the same value as `ServerSessionId` together with the process `ExitCode` and `UptimeMs`. A failed start after launch carries them too. So far Visual Studio sends the new properties; VS Code and Rider follow (VS, LSP server) - see #1282
 
