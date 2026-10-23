@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
 /// <summary>
-/// Regression tests for <see cref="ProjectScopeIdeSupportConfigurationProvider.UpdateFromSpecSyncJsonConfig"/>:
+/// Regression tests for <see cref="ConfigurationFileLoader.UpdateFromSpecSyncJson"/>:
 /// the SpecSync tag prefix (<c>synchronization/testCaseTagPrefix</c> and each
 /// <c>synchronization/links[]/tagPrefix</c>) is interpolated into the tag-link regex, so it must be
 /// escaped first. Without escaping, a prefix containing a regex metacharacter either matches a tag it
@@ -19,7 +19,7 @@ public class ProjectScopeIdeSupportConfigurationProviderSpecSyncTests
     private static IdeSupportConfiguration Load(string specSyncJson)
     {
         var configuration = new IdeSupportConfiguration();
-        ProjectScopeIdeSupportConfigurationProvider.UpdateFromSpecSyncJsonConfig(configuration, specSyncJson);
+        ConfigurationFileLoader.UpdateFromSpecSyncJson(configuration, specSyncJson);
         configuration.Traceability.CheckConfiguration();
         return configuration;
     }

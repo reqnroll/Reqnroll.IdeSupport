@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 /// <summary>
 /// Handles <c>workspace/didChangeWatchedFiles</c> notifications.
 /// <list type="bullet">
-///   <item><term>reqnroll.json changes</term>
+///   <item><term>Configuration file changes (<c>reqnroll.json</c>, <c>specflow.json</c>, <c>App.config</c>, <c>specsync.json</c>, <c>deveroom.json</c>)</term>
 ///     <description>Reload the owning project's configuration and trigger binding re-discovery.</description>
 ///   </item>
 ///   <item><term>.editorconfig changes</term>
@@ -61,35 +61,30 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
         _recorder               = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
-    /// <summary>Builds the LSP registration options requesting file-watch notifications for <c>reqnroll.json</c>, <c>.editorconfig</c>, and rebuilt output assemblies.</summary>
+    /// <summary>Builds the LSP registration options requesting file-watch notifications for every configuration file the provider loads, <c>.editorconfig</c>, and rebuilt output assemblies.</summary>
     public DidChangeWatchedFilesRegistrationOptions GetRegistrationOptions(
         DidChangeWatchedFilesCapability capability,
         ClientCapabilities clientCapabilities)
         => new()
         {
-            Watchers = new[]
-            {
-#pragma warning disable CS8601 // GlobPattern implicit conversion from string returns GlobPattern? but value is provably non-null
-                new OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher
-                {
-                    GlobPattern = "**/reqnroll.json",
-                    Kind        = WatchKind.Create | WatchKind.Change | WatchKind.Delete
-                },
-                new OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher
-                {
-                    GlobPattern = "**/.editorconfig",
-                    Kind        = WatchKind.Create | WatchKind.Change | WatchKind.Delete
-                },
+            Watchers = ConfigurationFiles.WatchedFileNames
+                .Select(fileName => Watcher("**/" + fileName, WatchKind.Create | WatchKind.Change | WatchKind.Delete))
+                .Append(Watcher("**/.editorconfig", WatchKind.Create | WatchKind.Change | WatchKind.Delete))
                 // Broad watcher for rebuilt output assemblies.  Narrowed to the specific
                 // OutputAssemblyPath per project once a reqnroll/projectLoaded notification
                 // has been received and the path is known.
-                new OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher
-                {
-                    GlobPattern = "**/bin/**/*.dll",
-                    Kind        = WatchKind.Create | WatchKind.Change
-                }
+                .Append(Watcher("**/bin/**/*.dll", WatchKind.Create | WatchKind.Change))
+                .ToArray()
+        };
+
+    private static OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher Watcher(
+        string globPattern, WatchKind kind)
+        => new()
+        {
+#pragma warning disable CS8601 // GlobPattern implicit conversion from string returns GlobPattern? but value is provably non-null
+            GlobPattern = globPattern,
 #pragma warning restore CS8601
-            }
+            Kind = kind
         };
 
     /// <summary>Handles <c>workspace/didChangeWatchedFiles</c> for watched <c>reqnroll.json</c>, <c>.editorconfig</c>, and rebuilt-assembly events, invalidating caches and re-running discovery/config reconciliation as appropriate.</summary>
@@ -232,8 +227,7 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static bool IsReqnrollConfig(string filePath)
-        => Path.GetFileName(filePath).Equals(
-            "reqnroll.json", StringComparison.OrdinalIgnoreCase);
+        => ConfigurationFiles.IsConfigurationFile(filePath);
 
     private static bool IsEditorConfig(string filePath)
         => Path.GetFileName(filePath).Equals(
