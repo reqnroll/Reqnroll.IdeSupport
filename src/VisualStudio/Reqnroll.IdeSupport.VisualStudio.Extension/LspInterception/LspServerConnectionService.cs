@@ -76,6 +76,8 @@ internal sealed class LspServerConnectionService : IDisposable
     private int _generation = 1;
 
     private Process? _serverProcess;
+    // The --server-session-id passed to the current generation's process; the server stamps it as SessionId.
+    private string? _serverSessionId;
     private LspInspectorLogger? _inspectorLogger;
     private LspInterceptingPipe? _interceptingPipe;
     private ChildProcessJob? _childJob;
@@ -283,7 +285,7 @@ internal sealed class LspServerConnectionService : IDisposable
             var wasUnexpected = IsUnexpectedExit(
                 _disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated);
             if (wasUnexpected)
-                ReportUnexpectedExit(previousGeneration);
+                ReportUnexpectedExit(previousGeneration, _serverProcess, _serverSessionId);
             DiscardDeadGeneration();
             _generation++;
             _lifecycleReporter.Report(
@@ -419,9 +421,11 @@ internal sealed class LspServerConnectionService : IDisposable
 
     /// <summary>Reports that the server process started but VS's LSP initialize handshake with it failed.</summary>
     internal void ReportHandshakeFailed() =>
-        _lifecycleReporter.Report(TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, _generation);
+        _lifecycleReporter.Report(
+            TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, _generation,
+            ServerLifecycleTelemetry.DescribeProcess(_serverProcess, _serverSessionId, DateTime.Now));
 
-    private void ReportUnexpectedExit(int generation)
+    private void ReportUnexpectedExit(int generation, Process? serverProcess, string? serverSessionId)
     {
         // Interlocked max-style guard: only the first detector for a generation reports.
         int seen;
@@ -433,7 +437,9 @@ internal sealed class LspServerConnectionService : IDisposable
         }
         while (Interlocked.CompareExchange(ref _unexpectedExitReportedGeneration, generation, seen) != seen);
 
-        _lifecycleReporter.Report(TelemetryEvents.ServerProcessExitedUnexpectedly, ServerFailureReason.ProcessExited, generation);
+        _lifecycleReporter.Report(
+            TelemetryEvents.ServerProcessExitedUnexpectedly, ServerFailureReason.ProcessExited, generation,
+            ServerLifecycleTelemetry.DescribeProcess(serverProcess, serverSessionId, DateTime.Now));
     }
 
     /// <summary>
@@ -465,6 +471,13 @@ internal sealed class LspServerConnectionService : IDisposable
         "--ide visualstudio --log-level Warning --protocol-log-level Warning --trace Off";
 #endif
 
+    /// <summary>
+    /// The full command line for one server process: <see cref="ServerArguments"/>, this IDE session's
+    /// <c>--client-session-id</c> and the process's own <c>--server-session-id</c>.
+    /// </summary>
+    internal static string BuildServerArguments(string serverSessionId) =>
+        $"{ServerArguments} {ClientSession.ServerArgumentName} {ClientSession.Id} {ServerSession.ServerArgumentName} {serverSessionId}";
+
     private async Task<LspInterceptingPipe?> StartAsync(int generation)
     {
         var serverExe = _serverExe;
@@ -480,6 +493,10 @@ internal sealed class LspServerConnectionService : IDisposable
             return null;
         }
 
+        // A fresh id per process, so each generation's exit or failed start joins to its own server events.
+        var serverSessionId = ServerSession.NewId();
+        _serverSessionId = serverSessionId;
+
         try
         {
             var psi = new ProcessStartInfo(serverExe)
@@ -489,7 +506,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 CreateNoWindow         = true,
-                Arguments              = $"{ServerArguments} {ClientSession.ServerArgumentName} {ClientSession.Id}",
+                Arguments              = BuildServerArguments(serverSessionId),
             };
 
             _serverProcess = _startProcess(psi)
@@ -529,7 +546,7 @@ internal sealed class LspServerConnectionService : IDisposable
             {
                 if (IsUnexpectedExit(_disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated)
                     && ReferenceEquals(startedProcess, _serverProcess))
-                    ReportUnexpectedExit(generation);
+                    ReportUnexpectedExit(generation, startedProcess, serverSessionId);
             };
 
             _logger.LogInformation("LspServerConnectionService: server process started (PID {ProcessId}).", _serverProcess.Id);
@@ -617,9 +634,11 @@ internal sealed class LspServerConnectionService : IDisposable
         }
         catch (Exception ex)
         {
+            // Read before ReleaseFailedStart kills and disposes the process.
+            var details = ServerLifecycleTelemetry.DescribeProcess(_serverProcess, serverSessionId, DateTime.Now);
             ReleaseFailedStart();
             _logger.LogError(ex, "LspServerConnectionService: failed to start server; any server process it had started was stopped.");
-            _lifecycleReporter.Report(TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, generation);
+            _lifecycleReporter.Report(TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, generation, details);
             return null;
         }
     }

@@ -8,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -67,6 +68,11 @@ public class Program
         // as ClientSessionId on every server event so client-originated exceptions join to ServerSessionStarted.
         var clientSessionId = ClientIdeContext.NormalizeClientSessionId(ParseArg(args, "--client-session-id"));
 
+        // --server-session-id <guid> is this process's own id, chosen by the client so its lifecycle events
+        // (an unexpected exit, a failed start) carry the same value the server stamps as SessionId. A
+        // client that passes none, or something that is not a GUID, gets a random one.
+        var serverSessionId = ServerSession.Normalize(ParseArg(args, ServerSession.ServerArgumentName)) ?? ServerSession.NewId();
+
         // Each IDE's glue component may pass --log-level <level> (Off/Error/Warning/Info/Verbose)
         // when spawning the server. Defaults to Warning when absent so a normal session doesn't
         // write maximum-verbosity logs indefinitely; pass --log-level Verbose for full tracing.
@@ -100,7 +106,7 @@ public class Program
                 // Production transport: the IDE talks to the server over stdio.
                 options.WithInput(Console.OpenStandardInput())
                        .WithOutput(Console.OpenStandardOutput());
-                ConfigureServer(options, ideId, logLevel, initialTrace, protocolLogLevel, clientSessionId);
+                ConfigureServer(options, ideId, logLevel, initialTrace, protocolLogLevel, clientSessionId, serverSessionId);
             });
 
             using var preloadCts = new CancellationTokenSource();
@@ -214,9 +220,10 @@ public class Program
     /// see that parameter's remarks.
     /// </param>
     /// <param name="clientSessionId">The client's own per-IDE-session id from <c>--client-session-id</c>, or <see langword="null"/>.</param>
+    /// <param name="serverSessionId">This process's id from <c>--server-session-id</c>, or <see langword="null"/> for a random one.</param>
     internal static void ConfigureServer(LanguageServerOptions options, string? clientIde = null,
         TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off,
-        TraceLevel protocolLogLevel = TraceLevel.Warning, string? clientSessionId = null)
+        TraceLevel protocolLogLevel = TraceLevel.Warning, string? clientSessionId = null, string? serverSessionId = null)
     {
         options.ConfigureLogging(logging =>
         {
@@ -267,7 +274,7 @@ public class Program
             // it, with the casualties decided by assembly-scan order. Must stay
             // AFTER AddMediatR; registered before it, AddMediatR's own registration would win.
             .AddTransient<IMediator, ResilientMediator>()
-            .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace, clientSessionId)
+            .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace, clientSessionId, serverSessionId)
             .AddReqnrollProjectSystem()
             .AddReqnrollEditorServices()
             .AddReqnrollLspHandlers();

@@ -100,4 +100,17 @@ public class IdentityStampingLspTelemetryServiceTests
 
         Id().Should().NotBeNullOrEmpty().And.NotBe(Id());
     }
+
+    [Fact]
+    public void Public_constructor_stamps_the_session_id_the_client_chose()
+    {
+        Dictionary<string, object?>? sent = null;
+        _inner.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(ci => sent = ci.Arg<Dictionary<string, object?>>());
+
+        new IdentityStampingLspTelemetryService(_inner, new ClientIdeContext("vscode"), "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00")
+            .SendEvent("Evt", new Dictionary<string, object?>());
+
+        sent!["SessionId"].Should().Be("6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00");
+    }
 }
