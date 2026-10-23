@@ -158,6 +158,11 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // a redundant trigger a cheap no-op, so being unconditional here costs nothing when
             // the output path/TFM didn't change and the assembly is actually unchanged.
             TriggerBindingDiscovery(project);
+
+            // The same re-send is the only signal a client that never sends
+            // workspace/didChangeWatchedFiles has that reqnroll.json (or a sibling configuration
+            // file) changed, so pick up configuration edits here as well.
+            ReloadConfigurationAfterReSend(project);
         }
 
         // The project's baseline may have already arrived (see HandleProjectFilesAsync) before
@@ -180,6 +185,25 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Re-reads the project's configuration files and, when the effective configuration changed,
+    /// publishes <see cref="ReqnrollConfigChangedNotification"/> so open feature files are
+    /// re-parsed with the new settings.
+    /// </summary>
+    private void ReloadConfigurationAfterReSend(LspReqnrollProject project)
+    {
+        if (project.GetIdeSupportConfigurationProvider() is not ProjectScopeIdeSupportConfigurationProvider provider
+            || !provider.Reload())
+            return;
+
+        _logger.LogInfo(
+            $"[{project.ProjectName}] projectLoaded re-send: configuration changed, refreshing feature files.");
+        FireAndForgetExtensions.FireAndForget(
+            () => _mediator.Publish(
+                new ReqnrollConfigChangedNotification(project.ProjectFolder, project), CancellationToken.None),
+            _logger, nameof(ReloadConfigurationAfterReSend));
     }
 
     /// <summary>
