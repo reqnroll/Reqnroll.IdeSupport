@@ -15,6 +15,8 @@ import './lsp/editRejection.test';
 import './lsp/saveTracker.test';
 import './lsp/manualDocumentSync.test';
 import './lsp/serverLifecycleTelemetry.test';
+import './lsp/serverProcessTracker.test';
+import './lsp/serverCrashReport.test';
 import './lsp/serverRestart.test';
 // Must precede `commands/stepCodeLens.test` and `commands/hookCodeLens.test` below (and, for the
 // same reason, everything else that could reach a real `activate()`): `getCodeLensRefreshEvent`

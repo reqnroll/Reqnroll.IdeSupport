@@ -2,8 +2,12 @@ import * as vscode from 'vscode';
 import { State } from 'vscode-languageclient';
 import type { LanguageClient } from 'vscode-languageclient/node';
 import { ServerFailureReason, TelemetryEvents } from '../telemetryEvents';
+import type { ServerProcessTracker } from './serverProcessTracker';
 
 type Send = (eventName: string, properties: Record<string, string | number>) => void;
+
+/** How long an unexpected exit waits for the process to finish closing before it is reported with what is known. */
+export const EXIT_DETAILS_TIMEOUT_MS = 2000;
 
 /**
  * Reports the client-originated server-lifecycle events from the language client's
@@ -18,6 +22,10 @@ type Send = (eventName: string, properties: Record<string, string | number>) => 
  *
  * `AttemptNumber` is the 1-based start attempt in this extension session. Each attempt reports at most
  * one failure event, however many of those signals fire for it.
+ *
+ * With a {@link ServerProcessTracker}, a start failure also carries `ServerSessionId`, and an unexpected exit
+ * carries `ServerSessionId`, `ExitCode`/`ExitSignal`, `UptimeMs` and the crash report the runtime printed to
+ * stderr; that event is sent once the process has finished closing (bounded by {@link EXIT_DETAILS_TIMEOUT_MS}).
  */
 export class ServerLifecycleTelemetry implements vscode.Disposable {
   private readonly _listener: vscode.Disposable;
@@ -28,16 +36,21 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
   private _lastFailureReason: string | undefined;
 
   constructor(
-    client: Pick<LanguageClient, 'onDidChangeState'>,
+    client: Pick<LanguageClient, 'onDidChangeState'> &
+      Partial<Pick<LanguageClient, 'serverProcess'>>,
     private readonly _send: Send,
+    private readonly _tracker?: ServerProcessTracker,
   ) {
     this._listener = client.onDidChangeState((event) => {
       switch (event.newState) {
         case State.Starting:
+          // Before anything else: it gives the process about to be spawned its session id.
+          this._tracker?.onStarting();
           this._onStarting();
           break;
         case State.Running:
           this._reachedRunning = true;
+          this._tracker?.onRunning(client.serverProcess);
           break;
         case State.Stopped:
           this._onStopped();
@@ -95,6 +108,18 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
   private _reportFailure(eventName: string, reason: string): void {
     this._failureReported = true;
     this._lastFailureReason = reason;
-    this._send(eventName, { Reason: reason, AttemptNumber: this._attempt });
+    const properties = { Reason: reason, AttemptNumber: this._attempt };
+    if (!this._tracker) {
+      this._send(eventName, properties);
+    } else if (eventName === TelemetryEvents.serverProcessExitedUnexpectedly) {
+      void this._tracker
+        .describeExit(EXIT_DETAILS_TIMEOUT_MS)
+        .catch(() => ({}))
+        .then((details) => this._send(eventName, { ...details, ...properties }))
+        // Telemetry must never surface as an unhandled rejection in the extension host.
+        .catch(() => undefined);
+    } else {
+      this._send(eventName, { ...this._tracker.startDetails(), ...properties });
+    }
   }
 }
