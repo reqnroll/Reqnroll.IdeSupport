@@ -1,6 +1,6 @@
 # Reqnroll.IdeSupport
 
-LSP-based IDE support for [Reqnroll](https://reqnroll.net/), the open-source Gherkin/BDD test
+[LSP (Language Server Protocol)](https://microsoft.github.io/language-server-protocol/)-based IDE support for [Reqnroll](https://reqnroll.net/), the open-source Gherkin/BDD test
 framework for .NET. One shared LSP server drives Gherkin syntax highlighting, diagnostics,
 navigation, completions, formatting, and refactoring across multiple IDEs, intended to replace the legacy
 monolithic [`Reqnroll.VisualStudio`](https://github.com/reqnroll/Reqnroll.Visualstudio) VS
