@@ -1,0 +1,151 @@
+// Crash triage: one row per language-server process that died without the client asking it to
+// (Server.Process.ExitedUnexpectedly), with everything known about why, newest first.
+//
+// Table: customEvents (classic / Application Insights resource-scoped Logs). This is the legacy
+// form of the query in ../crash-triage.kql, which targets AppEvents (workspace-based). Keep the two in step.
+// Column mapping applied: AppEvents -> customEvents, TimeGenerated -> timestamp, Properties -> customDimensions,
+// UserId -> user_Id, Name -> name.
+//
+// Status: not yet run against either resource. Rows from builds that predate the crash-telemetry properties
+// have the exit event only, with every other column empty.
+//
+// How the rows are joined
+// - The client gives every server process its own id (--server-session-id) and sends it as ServerSessionId on the
+//   exit event; the server stamps the same value as SessionId on everything it sends. So the dead run's own events
+//   join by equality: its Server.Session.Started (server version, OS), the non-fatal exceptions it reported before
+//   it died, and the fatal-exception record the NEXT server start sent for it (Error.UnhandledException with
+//   ReportedAfterRestart = true and SessionId = the dead run's).
+// - Exit events without ServerSessionId (Rider until it sends one, and older builds) keep only their own columns.
+//
+// Columns
+// - ExitKind: derived from ExitCode/ExitSignal. ManagedException (0xE0434352, an exception no code caught; also
+//   out-of-memory), StackOverflow (0xC00000FD), AccessViolation (0xC0000005), FailFast (0x80131623), Killed (exit
+//   code 1, usually), a POSIX signal name (macOS/Linux), or Other/Unknown.
+// - CrashKind, ExceptionType, Message, StackFrames, Inner*: from the crash report the runtime printed to stderr
+//   (VS, VS Code), falling back to the next-start record (Fatal* columns) when there was none.
+// - Fatal*: the next-start record, written by the server itself as it died; covers any IDE, but not a stack
+//   overflow, FailFast, native crash or kill.
+// - PriorErrors / LastPriorErrorType: non-fatal exceptions the dead run reported before it died.
+// - InFlight*, LastRequest*, PeakWorkingSetMb, PrivateMemoryMb: what the server was doing (VS only).
+let lookback = 7d;
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Extension.Loaded",
+    "Extension installed": "Lifecycle.Extension.Installed",
+    "Extension upgraded": "Lifecycle.Extension.Upgraded",
+    "Feature file opened": "Project.FeatureFile.Opened",
+    "Feature file added": "Project.FeatureFile.Added",
+    "Reqnroll config added": "Project.ReqnrollConfig.Added",
+    "Project Template Wizard Started": "Project.Creation.Started",
+    "Project Template Wizard Completed": "Project.Creation.Completed",
+    "Link clicked": "Lifecycle.Link.Clicked",
+    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialog.Dismissed",
+    "Welcome dialog dismissed": "Lifecycle.WelcomeDialog.Dismissed",
+    "ReqnrollDiscoveryExecuted": "Project.Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "Project.TestRun.Completed",
+    "TagIndexFirstScanCompleted": "Project.TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Lifecycle.Usage.SummaryReported",
+    "ServerSessionStarted": "Server.Session.Started",
+    "ServerSessionEnded": "Server.Session.Ended",
+    "ServerStartFailed": "Server.Process.StartFailed",
+    "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerRestarted": "Server.Process.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics.Reported",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Error.VsWellKnownIdsMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
+};
+let events = customEvents
+    | where timestamp > ago(lookback + 3d)
+    | extend EventName = CanonicalEventName(name);
+let starts = events
+    | where EventName == "Server.Session.Started"
+    | summarize arg_min(timestamp, ServerVersion = tostring(customDimensions.ServerVersion),
+                        OperatingSystem = tostring(customDimensions.OperatingSystem))
+        by RunId = tostring(customDimensions.SessionId);
+let fatalRecords = events
+    | where EventName == "Error.UnhandledException" and tostring(customDimensions.ReportedAfterRestart) =~ "true"
+    | summarize arg_min(timestamp, FatalExceptionType = tostring(customDimensions.ExceptionType),
+                        FatalMessage = tostring(customDimensions.Message),
+                        FatalStackFrames = tostring(customDimensions.StackFrames),
+                        FatalInnerExceptionType = tostring(customDimensions.InnerExceptionType),
+                        FatalInnerMessage = tostring(customDimensions.InnerMessage),
+                        FatalInnerStackFrames = tostring(customDimensions.InnerStackFrames))
+        by RunId = tostring(customDimensions.SessionId);
+let priorErrors = events
+    | where EventName == "Error.UnhandledException"
+    | where tostring(customDimensions.ReportedAfterRestart) !~ "true" and tostring(customDimensions.ExceptionOrigin) != "Client"
+    | summarize PriorErrors = count(), arg_max(timestamp, LastPriorErrorType = tostring(customDimensions.ExceptionType))
+        by RunId = tostring(customDimensions.SessionId);
+events
+| where timestamp > ago(lookback)
+| where EventName == "Server.Process.ExitedUnexpectedly"
+| extend RunId = tostring(customDimensions.ServerSessionId),
+         ExitCode = toint(customDimensions.ExitCode),
+         ExitSignal = tostring(customDimensions.ExitSignal)
+| extend ExitKind = case(
+        isnotempty(ExitSignal), ExitSignal,
+        isnull(ExitCode), "Unknown",
+        ExitCode == -532462766, "ManagedException",
+        ExitCode == -1073741571, "StackOverflow",
+        ExitCode == -1073741819, "AccessViolation",
+        ExitCode == -2146232797, "FailFast",
+        ExitCode == 1, "Killed",
+        "Other"),
+    ExitCodeHex = iff(isnull(ExitCode), "", strcat("0x", toupper(tohex(ExitCode, 8))))
+| join kind=leftouter (starts | where isnotempty(RunId)) on RunId
+| join kind=leftouter (fatalRecords | where isnotempty(RunId)) on RunId
+| join kind=leftouter (priorErrors | where isnotempty(RunId)) on RunId
+| project timestamp,
+          IdeClient = tostring(customDimensions.IdeClient),
+          IdeVersion = tostring(customDimensions.IdeVersion),
+          ExtensionVersion = tostring(customDimensions.ExtensionVersion),
+          ServerVersion, OperatingSystem, user_Id,
+          ClientSessionId = tostring(customDimensions.ClientSessionId), RunId,
+          AttemptNumber = toint(customDimensions.AttemptNumber),
+          ExitKind, ExitCode, ExitCodeHex, UptimeMs = tolong(customDimensions.UptimeMs),
+          CrashKind = tostring(customDimensions.CrashKind),
+          ExceptionType = coalesce(tostring(customDimensions.ExceptionType), FatalExceptionType),
+          Message = coalesce(tostring(customDimensions.Message), FatalMessage),
+          StackFrames = coalesce(tostring(customDimensions.StackFrames), FatalStackFrames),
+          InnerExceptionType = coalesce(tostring(customDimensions.InnerExceptionType), FatalInnerExceptionType),
+          InnerMessage = coalesce(tostring(customDimensions.InnerMessage), FatalInnerMessage),
+          InnerStackFrames = coalesce(tostring(customDimensions.InnerStackFrames), FatalInnerStackFrames),
+          InnerExceptionCount = toint(customDimensions.InnerExceptionCount),
+          FatalExceptionType, FatalStackFrames,
+          PriorErrors = coalesce(PriorErrors, 0), LastPriorErrorType,
+          InFlightRequestCount = toint(customDimensions.InFlightRequestCount),
+          InFlightMethods = tostring(customDimensions.InFlightMethods),
+          LastRequestMethod = tostring(customDimensions.LastRequestMethod),
+          LastRequestAgeMs = tolong(customDimensions.LastRequestAgeMs),
+          PeakWorkingSetMb = tolong(customDimensions.PeakWorkingSetMb),
+          PrivateMemoryMb = tolong(customDimensions.PrivateMemoryMb)
+| order by timestamp desc
