@@ -80,6 +80,8 @@ internal sealed class LspServerConnectionService : IDisposable
     private string? _serverSessionId;
     // Collects the current generation's stderr crash report, if the runtime prints one.
     private CrashReportCollector? _crashCollector;
+    // Tracks the current generation's in-flight requests and memory, for its exit event.
+    private ServerActivityTracker? _activityTracker;
     private LspInspectorLogger? _inspectorLogger;
     private LspInterceptingPipe? _interceptingPipe;
     private ChildProcessJob? _childJob;
@@ -293,7 +295,7 @@ internal sealed class LspServerConnectionService : IDisposable
             if (wasUnexpected)
                 ReportUnexpectedExit(
                     previousGeneration,
-                    ServerLifecycleTelemetry.DescribeProcess(_serverProcess, _serverSessionId, DateTime.Now),
+                    DescribeExitedServer(_serverProcess, _serverSessionId, _activityTracker),
                     _crashCollector);
             DiscardDeadGeneration();
             _generation++;
@@ -453,6 +455,25 @@ internal sealed class LspServerConnectionService : IDisposable
     }
 
     /// <summary>
+    /// The process details (<see cref="ServerLifecycleTelemetry.DescribeProcess"/>) plus what the server was
+    /// doing (<see cref="ServerActivityTracker.Describe"/>), read together before anything can dispose the process.
+    /// </summary>
+    private static IReadOnlyDictionary<string, object> DescribeExitedServer(
+        Process? serverProcess, string? serverSessionId, ServerActivityTracker? activityTracker)
+    {
+        var now = DateTime.Now;
+        var details = new Dictionary<string, object>();
+        foreach (var pair in ServerLifecycleTelemetry.DescribeProcess(serverProcess, serverSessionId, now))
+            details[pair.Key] = pair.Value;
+        if (activityTracker is not null)
+        {
+            foreach (var pair in activityTracker.Describe(now))
+                details[pair.Key] = pair.Value;
+        }
+        return details;
+    }
+
+    /// <summary>
     /// The exit event's details: the process details plus, when the runtime printed one to stderr, the parsed
     /// crash report (already reduced to telemetry-safe values by <see cref="CrashReportParser"/>).
     /// </summary>
@@ -543,6 +564,11 @@ internal sealed class LspServerConnectionService : IDisposable
             _serverProcess = _startProcess(psi)
                 ?? throw new InvalidOperationException("Process.Start returned null.");
 
+            // What this process is doing (requests awaiting a response, memory), for the exit event if it dies.
+            // Registered on both interceptor pipelines below.
+            var activityTracker = new ServerActivityTracker(_serverProcess);
+            _activityTracker = activityTracker;
+
             // Fire-and-forget: pushes project/discovery data to the server's preload side
             // channel as soon as the solution is loaded, well before VS's own initialize
             // handshake (and hence CreateServerConnectionAsync) may happen. Must not be awaited
@@ -582,7 +608,7 @@ internal sealed class LspServerConnectionService : IDisposable
                     return;
 
                 // Read before waiting: a relaunch during the wait discards and disposes the process.
-                var processDetails = ServerLifecycleTelemetry.DescribeProcess(startedProcess, serverSessionId, DateTime.Now);
+                var processDetails = DescribeExitedServer(startedProcess, serverSessionId, activityTracker);
 
                 // Exited can be raised before the last stderr lines have been read; the crash report is the
                 // last thing the runtime writes. Bounded, because a child process that inherited the handle can
@@ -645,8 +671,9 @@ internal sealed class LspServerConnectionService : IDisposable
             _shutdownHandshakeInterceptor = new ShutdownHandshakeInterceptor(
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
-            // Send pipeline:   VS → [logger, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
-            // Receive pipeline: Server → [logger, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
+            // Send pipeline:   VS → [logger, activity, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
+            // Receive pipeline: Server → [logger, activity, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
+            // activity is on both pipelines: send records each request, receive removes it on its response.
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
             // push. It is not on the send pipeline: invalidating per .cs didChange would have VS
             // reactivate the language client on every edit (a second CreateServerConnectionAsync),
@@ -654,7 +681,7 @@ internal sealed class LspServerConnectionService : IDisposable
             // shutdownHandshake is on both pipelines: send captures the outgoing shutdown request id;
             // receive watches for the matching response.
             var sendInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, shadowDocumentFilterInterceptor, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
+                { _inspectorLogger, activityTracker, shadowDocumentFilterInterceptor, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.
@@ -663,7 +690,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             _telemetryInterceptor = telemetryInterceptor;
             var receiveInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
+                { _inspectorLogger, activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
             _interceptingPipe = _createInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());
