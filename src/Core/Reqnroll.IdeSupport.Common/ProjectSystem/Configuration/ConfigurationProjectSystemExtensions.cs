@@ -18,20 +18,4 @@ public static class ConfigurationProjectSystemExtensions
         return (IIdeSupportConfigurationProvider)projectScope.Properties.GetOrAdd(typeof(IIdeSupportConfigurationProvider), _ =>
             new ProjectScopeIdeSupportConfigurationProvider(projectScope));
     }
-
-    /// <summary>Returns the resolved Deveroom configuration for the given IDE/project scope pair.</summary>
-    public static IdeSupportConfiguration GetIdeSupportConfiguration(this IIdeScope ideScope, IProjectScope projectScope)
-    {
-        var provider = ideScope.GetIdeSupportConfigurationProvider(projectScope);
-        return provider.GetConfiguration();
-    }
-
-    /// <summary>Returns the configuration provider for the given project scope, falling back to an IDE-scoped provider if <paramref name="projectScope"/> is <c>null</c>.</summary>
-    public static IIdeSupportConfigurationProvider GetIdeSupportConfigurationProvider(this IIdeScope ideScope,
-        IProjectScope projectScope)
-    {
-        if (projectScope != null)
-            return projectScope.GetIdeSupportConfigurationProvider();
-        return new ProjectSystemIdeSupportConfigurationProvider(ideScope);
-    }
 }

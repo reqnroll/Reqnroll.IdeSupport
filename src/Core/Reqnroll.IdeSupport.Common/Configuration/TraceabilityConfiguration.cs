@@ -45,7 +45,8 @@ public class TraceabilityConfiguration
     #region Equality
 
     /// <summary>Determines whether this instance has the same tag links as <paramref name="other"/>.</summary>
-    protected bool Equals(TraceabilityConfiguration other) => Equals(TagLinks, other.TagLinks);
+    protected bool Equals(TraceabilityConfiguration other) =>
+        (TagLinks ?? Array.Empty<TagLinkConfiguration>()).SequenceEqual(other.TagLinks ?? Array.Empty<TagLinkConfiguration>());
 
     /// <summary>Determines whether <paramref name="obj"/> is a <see cref="TraceabilityConfiguration"/> with the same tag links.</summary>
     public override bool Equals(object obj)
@@ -56,8 +57,9 @@ public class TraceabilityConfiguration
         return Equals((TraceabilityConfiguration) obj);
     }
 
-    /// <summary>Returns a hash code derived from the tag links array.</summary>
-    public override int GetHashCode() => TagLinks != null ? TagLinks.GetHashCode() : 0;
+    /// <summary>Returns a hash code derived from the tag links.</summary>
+    public override int GetHashCode() =>
+        (TagLinks ?? Array.Empty<TagLinkConfiguration>()).Aggregate(0, (hash, link) => unchecked((hash * 397) ^ link.GetHashCode()));
 
     #endregion
 }

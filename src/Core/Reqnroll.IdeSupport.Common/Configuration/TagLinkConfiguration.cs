@@ -79,8 +79,7 @@ public class TagLinkConfiguration
 
     /// <summary>Determines whether this instance has the same setting values as <paramref name="other"/>.</summary>
     protected bool Equals(TagLinkConfiguration other) => string.Equals(TagPattern, other.TagPattern) &&
-                                                         string.Equals(UrlTemplate, other.UrlTemplate) &&
-                                                         Equals(ResolvedTagPattern, other.ResolvedTagPattern);
+                                                         string.Equals(UrlTemplate, other.UrlTemplate);
 
     /// <summary>Determines whether <paramref name="obj"/> is a <see cref="TagLinkConfiguration"/> with the same setting values.</summary>
     public override bool Equals(object obj)
@@ -98,7 +97,6 @@ public class TagLinkConfiguration
         {
             var hashCode = TagPattern != null ? TagPattern.GetHashCode() : 0;
             hashCode = (hashCode * 397) ^ (UrlTemplate != null ? UrlTemplate.GetHashCode() : 0);
-            hashCode = (hashCode * 397) ^ (ResolvedTagPattern != null ? ResolvedTagPattern.GetHashCode() : 0);
             return hashCode;
         }
     }

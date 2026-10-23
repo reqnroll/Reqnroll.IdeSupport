@@ -279,7 +279,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             return project.GetIdeSupportConfigurationProvider();
 
         // Fallback: default configuration when no project covers the URI.
-        return new ProjectSystemIdeSupportConfigurationProvider(_ideScope);
+        return NoProjectConfigurationProvider.Instance;
     }
 
     // ── Membership index (workspace scope / project membership tracking) ────

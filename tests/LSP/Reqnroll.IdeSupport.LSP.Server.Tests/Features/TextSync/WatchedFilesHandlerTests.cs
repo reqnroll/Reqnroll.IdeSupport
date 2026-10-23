@@ -2,6 +2,8 @@ using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
@@ -89,17 +91,39 @@ public class WatchedFilesHandlerTests : IDisposable
     // ── Config change with matching project ───────────────────────────────────
 
     [Fact]
-    public async Task Handle_publishes_config_changed_notification_when_project_matches()
+    public async Task Handle_publishes_config_changed_notification_when_the_saved_config_changes_the_configuration()
     {
         var project = MakeProject();
         _scopeManager.GetProjectForUri(Arg.Any<DocumentUri>()).Returns(project);
-
-        var sut = CreateSut();
+        _ = project.GetIdeSupportConfigurationProvider();
         var configPath = Path.Combine(_projectFolder, "reqnroll.json");
-        await sut.Handle(MakeParams(configPath, FileChangeType.Changed), CancellationToken.None);
+        File.WriteAllText(configPath, "{ \"language\": { \"feature\": \"fr\" } }");
+
+        await CreateSut().Handle(MakeParams(configPath, FileChangeType.Changed), CancellationToken.None);
 
         await _mediator.Received(1).Publish(
-            Arg.Any<INotification>(), Arg.Any<CancellationToken>());
+            Arg.Is<ReqnrollConfigChangedNotification>(n => ReferenceEquals(n.Project, project)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_does_not_publish_when_the_saved_config_leaves_the_configuration_unchanged()
+    {
+        var project = MakeProject();
+        _scopeManager.GetProjectForUri(Arg.Any<DocumentUri>()).Returns(project);
+        _ = project.GetIdeSupportConfigurationProvider();
+        var configPath = Path.Combine(_projectFolder, "reqnroll.json");
+        File.WriteAllText(configPath, "{ \"language\": { \"feature\": \"fr\" } }");
+        var sut = CreateSut();
+        await sut.Handle(MakeParams(configPath, FileChangeType.Created), CancellationToken.None);
+        _mediator.ClearReceivedCalls();
+
+        // Same content, newer timestamp: the file looks modified, the configuration is not.
+        File.SetLastWriteTimeUtc(configPath, DateTime.UtcNow.AddMinutes(1));
+        await sut.Handle(MakeParams(configPath, FileChangeType.Changed), CancellationToken.None);
+
+        await _mediator.DidNotReceiveWithAnyArgs()
+            .Publish(Arg.Any<INotification>(), Arg.Any<CancellationToken>());
     }
 
     // ── .editorconfig change ──────────────────────────────────────────────────
