@@ -37,29 +37,18 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
     {
         _projectScope = projectScope ?? throw new ArgumentNullException(nameof(projectScope));
         InitializeConfiguration();
-
-        //_projectScope.IdeScope.WeakProjectsBuilt += ProjectSystemOnProjectsBuilt;
     }
 
     private IIdeSupportLogger Logger => _projectScope.IdeScope.Logger;
     private ITelemetryService TelemetryService => _projectScope.IdeScope.TelemetryService;
     private IFileSystemForIDE FileSystem => _projectScope.IdeScope.FileSystem;
 
-    //public event EventHandler<EventArgs> WeakConfigurationChanged
-    //{
-    //    add => WeakEventManager<ProjectScopeIdeSupportConfigurationProvider, EventArgs>.AddHandler(this,
-    //        nameof(ConfigurationChanged), value);
-    //    remove => WeakEventManager<ProjectScopeIdeSupportConfigurationProvider, EventArgs>.RemoveHandler(this,
-    //        nameof(ConfigurationChanged), value);
-    //}
-
     /// <summary>Returns the currently cached, resolved configuration for the project.</summary>
     public IdeSupportConfiguration GetConfiguration() => _configCache.Configuration;
 
-    /// <summary>No-op: reserved for unsubscribing project-build event handlers if that wiring is re-enabled.</summary>
+    /// <summary>No-op: the provider holds no resources.</summary>
     public void Dispose()
     {
-        //_projectScope.IdeScope.WeakProjectsBuilt -= ProjectSystemOnProjectsBuilt;
     }
 
     /// <summary>Raised after the configuration is reloaded and found to have changed.</summary>
@@ -71,11 +60,6 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
             ? Array.Empty<ConfigSource>()
             : GetConfigSources().ToArray();
         _configCache = LoadConfiguration(configSources);
-    }
-
-    private void ProjectSystemOnProjectsBuilt(object sender, EventArgs e)
-    {
-        CheckConfiguration(true);
     }
 
     /// <summary>Forces a re-check of configuration sources, raising <see cref="ConfigurationChanged"/> if anything changed.</summary>

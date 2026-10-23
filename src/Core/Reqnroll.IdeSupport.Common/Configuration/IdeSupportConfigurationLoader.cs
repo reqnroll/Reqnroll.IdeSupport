@@ -28,14 +28,6 @@ public class IdeSupportConfigurationLoader
     public static IdeSupportConfigurationLoader CreateIdeSupportJsonConfigurationLoader(IFileSystemForIDE fileSystem) =>
         new(new JsonNetConfigDeserializer<IdeSupportConfiguration>(), fileSystem);
 
-    /// <summary>Loads a new <see cref="IdeSupportConfiguration"/> from the given config file.</summary>
-    public IdeSupportConfiguration Load(string configFilePath)
-    {
-        var config = new IdeSupportConfiguration();
-        Update(config, configFilePath);
-        return config;
-    }
-
     /// <summary>Re-reads the given config file and applies its settings onto the existing <paramref name="config"/> instance.</summary>
     public void Update(IdeSupportConfiguration config, string configFilePath)
     {
@@ -56,8 +48,6 @@ public class IdeSupportConfigurationLoader
         config.ConfigurationBaseFolder = configFolder;
 
         config.Reqnroll.ConfigFilePath = EnsureFullPath(config, c => c.Reqnroll.ConfigFilePath);
-        //config.SpecFlow.ConfigFilePath = EnsureFullPath(config, c => c.SpecFlow.ConfigFilePath);
-        //config.SpecFlow.GeneratorFolder = EnsureFullPath(config, c => c.SpecFlow.GeneratorFolder, true);
     }
 
     private string ExpandEnvironmentVariables(string value)

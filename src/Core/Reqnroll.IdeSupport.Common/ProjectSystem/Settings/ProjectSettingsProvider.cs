@@ -43,9 +43,6 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         // instead of running on the timer's thread-pool thread.
         _synchronizationContext = SynchronizationContext.Current;
         InitializeProjectSettings();
-
-        //_projectScope.GetIdeSupportConfigurationProvider().WeakConfigurationChanged += OnConfigurationChanged;
-        //_projectScope.IdeScope.WeakProjectsBuilt += ProjectSystemOnProjectsBuilt;
     }
 
     private IIdeSupportLogger Logger => _projectScope.IdeScope.Logger;
@@ -55,19 +52,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     {
         _disposed = true;
         StopRetryInitializeTimer();
-        //_projectScope.GetIdeSupportConfigurationProvider().WeakConfigurationChanged -= OnConfigurationChanged;
-        //_projectScope.IdeScope.WeakProjectsBuilt -= ProjectSystemOnProjectsBuilt;
     }
-
-    //public event EventHandler<EventArgs> SettingsInitialized;
-
-    //public event EventHandler<EventArgs> WeakSettingsInitialized
-    //{
-    //    add => WeakEventManager<IProjectSettingsProvider, EventArgs>.AddHandler(this, nameof(SettingsInitialized),
-    //        value);
-    //    remove => WeakEventManager<IProjectSettingsProvider, EventArgs>.RemoveHandler(this, nameof(SettingsInitialized),
-    //        value);
-    //}
 
     /// <summary>Returns the currently cached project settings.</summary>
     public ProjectSettings GetProjectSettings() => _projectSettings;
@@ -155,20 +140,9 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         }
     }
 
-    private void OnConfigurationChanged(object sender, EventArgs e)
-    {
-        CheckProjectSettings();
-    }
-
-    private void ProjectSystemOnProjectsBuilt(object sender, EventArgs e)
-    {
-        CheckProjectSettings();
-    }
-
     private void OnSettingsInitialized(ProjectSettings settings)
     {
         Logger.LogInfo($"Project settings initialized: {settings.GetShortLabel()}");
-        //SettingsInitialized?.Invoke(this, EventArgs.Empty);
     }
 
     private ProjectSettings LoadProjectSettings()

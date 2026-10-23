@@ -4,7 +4,6 @@ using System;
 
 namespace Reqnroll.IdeSupport.Common.Configuration;
 
-// TODO: mention of SpecFlow has been commented out in preparation for full removal.
 
 /// <summary>IdeSupportConfiguration</summary>
 public class IdeSupportConfiguration
@@ -17,7 +16,6 @@ public class IdeSupportConfiguration
 
     /// <summary>Gets or sets the reqnroll.</summary>
     public ReqnrollConfiguration Reqnroll { get; set; } = new();
-    //public SpecFlowConfiguration SpecFlow { get; set; } = new();
     /// <summary>Gets or sets the traceability.</summary>
     public TraceabilityConfiguration Traceability { get; set; } = new();
     /// <summary>Gets or sets the editor.</summary>
@@ -45,7 +43,6 @@ public class IdeSupportConfiguration
     private void FixEmptyContainers()
     {
         Reqnroll ??= new ReqnrollConfiguration();
-        //SpecFlow ??= new SpecFlowConfiguration();
         Traceability ??= new TraceabilityConfiguration();
         Editor ??= new EditorConfiguration();
         BindingDiscovery ??= new BindingDiscoveryConfiguration();
@@ -57,7 +54,6 @@ public class IdeSupportConfiguration
         FixEmptyContainers();
 
         Reqnroll.CheckConfiguration();
-        //SpecFlow.CheckConfiguration();
         Traceability.CheckConfiguration();
         Editor.CheckConfiguration();
         BindingDiscovery.CheckConfiguration();
@@ -69,7 +65,6 @@ public class IdeSupportConfiguration
     protected bool Equals(IdeSupportConfiguration other) =>
         string.Equals(ConfigurationBaseFolder, other.ConfigurationBaseFolder) && 
         Equals(Reqnroll, other.Reqnroll) &&
-        //Equals(SpecFlow, other.SpecFlow) &&
         Equals(Traceability, other.Traceability) && 
         Equals(Editor, other.Editor) &&
         Equals(BindingDiscovery, other.BindingDiscovery) &&
@@ -93,7 +88,6 @@ public class IdeSupportConfiguration
         {
             var hashCode = ConfigurationBaseFolder != null ? ConfigurationBaseFolder.GetHashCode() : 0;
             hashCode = (hashCode * 397) ^ (Reqnroll != null ? Reqnroll.GetHashCode() : 0);
-            //hashCode = (hashCode * 397) ^ (SpecFlow != null ? SpecFlow.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (Traceability != null ? Traceability.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (Editor != null ? Editor.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (BindingDiscovery != null ? BindingDiscovery.GetHashCode() : 0);
