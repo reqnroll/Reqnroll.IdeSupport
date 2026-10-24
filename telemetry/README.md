@@ -18,6 +18,7 @@ now, so change them together (a unit test checks that they differ only in table 
 | `session-duration.kql` | Median and P90 session length by day and `IdeClient`, plus sessions that never sent an end event (crash proxy). | `ServerSessionStarted`, `ServerSessionEnded` |
 | `operation-latency.kql` | P50 / P95 / max latency per server operation and `IdeClient`, grouped by a derived `Category` (Request, DocumentSync, Internal, TestOutcomes). | `PerfSample` (sampled, ~5% by default) |
 | `error-rates.kql` | Unhandled exceptions (server and client origin) and language-server failure events per day, with affected users and events per 100 sessions. | `UnhandledException`, `ServerStartFailed`, `ServerExitedUnexpectedly`, `ServerRestarted` |
+| `crash-triage.kql` | One row per language server that died unexpectedly (last 7 days): how it ended (`ExitKind` from the exit code or signal), the outer and innermost exception and their product frames, the dead run's earlier errors, and, in VS, what it was doing and its memory. Joins the exit to the dead run's own events on `ServerSessionId` = `SessionId`. | `Server.Process.ExitedUnexpectedly`, `Server.Session.Started`, `Error.UnhandledException` (including `ReportedAfterRestart`) |
 
 ### Things to know when reading the results
 
@@ -27,6 +28,7 @@ now, so change them together (a unit test checks that they differ only in table 
 - **RID is derived** from `OperatingSystem` and `Architecture`; the client never sends a RID.
 - **Exceptions are events, not rows in the Application Insights `exceptions` table.** Client-side exceptions
   (`ExceptionOrigin = "Client"`) carry no `SessionId` but do carry `ClientSessionId` (#1199), which every server event carries too: join on it to attribute a client exception to a session; see the error-rates header.
+- **`crash-triage.kql` has not been run yet.** Both forms pass a semantic check with `Microsoft.Azure.Kusto.Language` against the four columns the queries use, but no real data carries the crash properties until the crash-telemetry changes ship.
 - **Verification status.** All four queries were run on 2026-10-15/16 against the dev resource using the *classic*
   table and column names (now `queries/legacy/`; see below), before the event-name rename (#1257), so the `CanonicalEventName()` forms have not been re-run with Visual Studio and Rider data on Windows. Not yet verified: the `AppEvents`
   (workspace) forms, VS Code, macOS/Linux, and the `ServerStartFailed` / `ServerExitedUnexpectedly` / `ServerRestarted` paths.
