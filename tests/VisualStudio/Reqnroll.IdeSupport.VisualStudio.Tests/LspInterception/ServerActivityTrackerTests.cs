@@ -92,6 +92,38 @@ public class ServerActivityTrackerTests
     }
 
     [Fact]
+    public async Task Requests_sent_after_the_process_exited_are_not_recorded()
+    {
+        var now = Start;
+        var exited = false;
+        var sut = new ServerActivityTracker(null, () => now, () => exited);
+        await SendRequest(sut, 1, "textDocument/hover");
+        await ReceiveResponse(sut, 1);
+        exited = true;
+        now = Start.AddSeconds(16);
+        await SendRequest(sut, 2, "shutdown");
+
+        var details = sut.Describe(now.AddMilliseconds(40));
+
+        details.Should().Contain(ServerActivityTracker.InFlightRequestCountKey, 0)
+            .And.NotContainKey(ServerActivityTracker.InFlightMethodsKey)
+            .And.Contain(ServerActivityTracker.LastRequestMethodKey, "textDocument/hover")
+            .And.Contain(ServerActivityTracker.LastRequestAgeMsKey, 16040L);
+    }
+
+    [Fact]
+    public async Task A_disposed_process_counts_as_exited()
+    {
+        var process = Process.GetCurrentProcess();
+        process.Dispose();
+        var sut = new ServerActivityTracker(process, () => Start);
+
+        await SendRequest(sut, 1, "shutdown");
+
+        sut.Describe(Start).Should().NotContainKey(ServerActivityTracker.LastRequestMethodKey);
+    }
+
+    [Fact]
     public async Task Memory_is_sampled_from_the_process_on_traffic()
     {
         using var process = Process.GetCurrentProcess();
