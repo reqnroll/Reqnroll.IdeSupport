@@ -78,6 +78,8 @@ internal sealed class LspServerConnectionService : IDisposable
     private Process? _serverProcess;
     // The --server-session-id passed to the current generation's process; the server stamps it as SessionId.
     private string? _serverSessionId;
+    // Collects the current generation's stderr crash report, if the runtime prints one.
+    private CrashReportCollector? _crashCollector;
     private LspInspectorLogger? _inspectorLogger;
     private LspInterceptingPipe? _interceptingPipe;
     private ChildProcessJob? _childJob;
@@ -104,6 +106,10 @@ internal sealed class LspServerConnectionService : IDisposable
     // never once observed one — so rather than wait on a request that may never arrive, we send it
     // ourselves on the still-live pipe via LspInterceptingPipe.SendRequestToServerAsync.
     private const int ShutdownRequestTimeoutMs = 2000;
+
+    // How long the Exited handler waits for the rest of a dead server's stderr (the runtime's crash report)
+    // before reporting the exit with whatever has arrived.
+    private static readonly TimeSpan CrashReportDrainTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Creates the service and immediately kicks off server-process startup on a background
@@ -285,7 +291,10 @@ internal sealed class LspServerConnectionService : IDisposable
             var wasUnexpected = IsUnexpectedExit(
                 _disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated);
             if (wasUnexpected)
-                ReportUnexpectedExit(previousGeneration, _serverProcess, _serverSessionId);
+                ReportUnexpectedExit(
+                    previousGeneration,
+                    ServerLifecycleTelemetry.DescribeProcess(_serverProcess, _serverSessionId, DateTime.Now),
+                    _crashCollector);
             DiscardDeadGeneration();
             _generation++;
             _lifecycleReporter.Report(
@@ -425,7 +434,8 @@ internal sealed class LspServerConnectionService : IDisposable
             TelemetryEvents.ServerProcessStartFailed, ServerFailureReason.StartFailed, _generation,
             ServerLifecycleTelemetry.DescribeProcess(_serverProcess, _serverSessionId, DateTime.Now));
 
-    private void ReportUnexpectedExit(int generation, Process? serverProcess, string? serverSessionId)
+    private void ReportUnexpectedExit(
+        int generation, IReadOnlyDictionary<string, object> processDetails, CrashReportCollector? crashCollector)
     {
         // Interlocked max-style guard: only the first detector for a generation reports.
         int seen;
@@ -439,7 +449,25 @@ internal sealed class LspServerConnectionService : IDisposable
 
         _lifecycleReporter.Report(
             TelemetryEvents.ServerProcessExitedUnexpectedly, ServerFailureReason.ProcessExited, generation,
-            ServerLifecycleTelemetry.DescribeProcess(serverProcess, serverSessionId, DateTime.Now));
+            BuildExitDetails(processDetails, crashCollector?.Parse()));
+    }
+
+    /// <summary>
+    /// The exit event's details: the process details plus, when the runtime printed one to stderr, the parsed
+    /// crash report (already reduced to telemetry-safe values by <see cref="CrashReportParser"/>).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, object> BuildExitDetails(
+        IReadOnlyDictionary<string, object> processDetails, CrashReport? crashReport)
+    {
+        if (crashReport is null)
+            return processDetails;
+
+        var details = new Dictionary<string, object>();
+        foreach (var pair in processDetails)
+            details[pair.Key] = pair.Value;
+        foreach (var pair in crashReport.ToProperties())
+            details[pair.Key] = pair.Value;
+        return details;
     }
 
     /// <summary>
@@ -496,6 +524,9 @@ internal sealed class LspServerConnectionService : IDisposable
         // A fresh id per process, so each generation's exit or failed start joins to its own server events.
         var serverSessionId = ServerSession.NewId();
         _serverSessionId = serverSessionId;
+        // Keeps whatever crash report the runtime prints to this process's stderr as it dies.
+        var crashCollector = new CrashReportCollector();
+        _crashCollector = crashCollector;
 
         try
         {
@@ -535,6 +566,8 @@ internal sealed class LspServerConnectionService : IDisposable
             {
                 if (e.Data is not null)
                     _logger.LogWarning("LSPServer stderr: {StdErr}", e.Data);
+                // Null marks the end of the stream, which the Exited handler below waits for.
+                crashCollector.OnLine(e.Data);
             };
             _serverProcess.BeginErrorReadLine();
 
@@ -544,9 +577,18 @@ internal sealed class LspServerConnectionService : IDisposable
             startedProcess.EnableRaisingEvents = true;
             startedProcess.Exited += (_, _) =>
             {
-                if (IsUnexpectedExit(_disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated)
-                    && ReferenceEquals(startedProcess, _serverProcess))
-                    ReportUnexpectedExit(generation, startedProcess, serverSessionId);
+                if (!IsUnexpectedExit(_disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated)
+                    || !ReferenceEquals(startedProcess, _serverProcess))
+                    return;
+
+                // Read before waiting: a relaunch during the wait discards and disposes the process.
+                var processDetails = ServerLifecycleTelemetry.DescribeProcess(startedProcess, serverSessionId, DateTime.Now);
+
+                // Exited can be raised before the last stderr lines have been read; the crash report is the
+                // last thing the runtime writes. Bounded, because a child process that inherited the handle can
+                // keep the stream open after the server itself is gone.
+                crashCollector.WaitForEnd(CrashReportDrainTimeout);
+                ReportUnexpectedExit(generation, processDetails, crashCollector);
             };
 
             _logger.LogInformation("LspServerConnectionService: server process started (PID {ProcessId}).", _serverProcess.Id);

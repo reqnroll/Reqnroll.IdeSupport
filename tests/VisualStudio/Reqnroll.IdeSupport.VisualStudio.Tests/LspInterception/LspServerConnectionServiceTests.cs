@@ -71,6 +71,30 @@ public class LspServerConnectionServiceTests
             $"{LspServerConnectionService.ServerArguments} --client-session-id {ClientSession.Id} --server-session-id {serverSessionId}");
     }
 
+    [Fact]
+    public void Exit_details_add_the_parsed_crash_report_to_the_process_details()
+    {
+        var collector = new CrashReportCollector();
+        collector.OnLine("Unhandled exception. System.InvalidOperationException: boom");
+        collector.OnLine("   at Reqnroll.IdeSupport.X.Y.Run() in C:\\x.cs:line 7");
+        var processDetails = new System.Collections.Generic.Dictionary<string, object> { ["ExitCode"] = -532462766 };
+
+        var details = LspServerConnectionService.BuildExitDetails(processDetails, collector.Parse());
+
+        details.Should().Contain("ExitCode", -532462766)
+            .And.Contain("CrashKind", "UnhandledException")
+            .And.Contain("ExceptionType", "System.InvalidOperationException")
+            .And.Contain("StackFrames", "Reqnroll.IdeSupport.X.Y.Run:7");
+    }
+
+    [Fact]
+    public void Exit_details_without_a_crash_report_are_the_process_details()
+    {
+        var processDetails = new System.Collections.Generic.Dictionary<string, object> { ["UptimeMs"] = 12L };
+
+        LspServerConnectionService.BuildExitDetails(processDetails, null).Should().BeSameAs(processDetails);
+    }
+
     [Theory]
     // disposed, shutdownObserved, pipeTerminated, expected
     [InlineData(false, false, false, true)]   // process died with the pipe still live: a crash
