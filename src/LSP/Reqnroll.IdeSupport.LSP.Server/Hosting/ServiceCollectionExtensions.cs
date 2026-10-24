@@ -64,11 +64,12 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers core infrastructure and cross-cutting services.
+    /// Registers core infrastructure and cross-cutting services. <paramref name="serverSessionId"/> is stamped as
+    /// <c>SessionId</c> on every server event; <see langword="null"/> means a random one.
     /// </summary>
     public static IServiceCollection AddReqnrollLspCoreServices(this IServiceCollection services, string? clientIde,
         TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off,
-        string? clientSessionId = null)
+        string? clientSessionId = null, string? serverSessionId = null)
     {
         return services
             .AddSingleton(new ClientIdeContext(clientIde, logLevel, clientSessionId))
@@ -97,7 +98,8 @@ public static class ServiceCollectionExtensions
                 new FileLoggingLspTelemetryService(
                     sp.GetRequiredService<LspTelemetryService>(),
                     sp.GetRequiredService<ITelemetryDebugLog>()),
-                sp.GetRequiredService<ClientIdeContext>()))
+                sp.GetRequiredService<ClientIdeContext>(),
+                serverSessionId))
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
             // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "Error.UnhandledException"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server

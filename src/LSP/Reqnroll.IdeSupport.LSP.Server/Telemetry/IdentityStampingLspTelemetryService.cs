@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -37,9 +38,13 @@ public sealed class IdentityStampingLspTelemetryService : ILspTelemetryService
     private readonly string _serverVersion;
     private readonly string _sessionId;
 
-    /// <summary>Initializes a new instance of the <see cref="IdentityStampingLspTelemetryService"/> class.</summary>
-    public IdentityStampingLspTelemetryService(ILspTelemetryService inner, ClientIdeContext ide)
-        : this(inner, ide, GetServerVersion(), Guid.NewGuid().ToString("D"))
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IdentityStampingLspTelemetryService"/> class.
+    /// <paramref name="sessionId"/> is the id the client passed as <c>--server-session-id</c>; when
+    /// <see langword="null"/> a random one is generated.
+    /// </summary>
+    public IdentityStampingLspTelemetryService(ILspTelemetryService inner, ClientIdeContext ide, string? sessionId = null)
+        : this(inner, ide, GetServerVersion(), sessionId ?? ServerSession.NewId())
     {
     }
 

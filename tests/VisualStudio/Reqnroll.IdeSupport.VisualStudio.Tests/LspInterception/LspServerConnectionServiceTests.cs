@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using AwesomeAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.Threading;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 using Xunit;
@@ -59,6 +60,15 @@ public class LspServerConnectionServiceTests
         LspServerConnectionService.ServerArguments.Should().Be(
             "--ide visualstudio --log-level Warning --protocol-log-level Warning --trace Off");
 #endif
+    }
+
+    [Fact]
+    public void Each_server_process_gets_the_client_session_id_and_its_own_server_session_id()
+    {
+        var serverSessionId = ServerSession.NewId();
+
+        LspServerConnectionService.BuildServerArguments(serverSessionId).Should().Be(
+            $"{LspServerConnectionService.ServerArguments} --client-session-id {ClientSession.Id} --server-session-id {serverSessionId}");
     }
 
     [Theory]

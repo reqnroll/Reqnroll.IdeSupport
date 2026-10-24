@@ -1,5 +1,8 @@
 # [vNext]
 
+## Improvements:
+* `Server.Process.ExitedUnexpectedly` telemetry now says how the language server died and which run it was: the client passes each server process its own id as `--server-session-id`, which the server stamps as `SessionId`, and the exit event carries the same value as `ServerSessionId` together with the process `ExitCode` and `UptimeMs`. A failed start after launch carries them too. So far Visual Studio sends the new properties; VS Code and Rider follow (VS, LSP server) - see #1282
+
 # v2026.1 - 2026-10-21
 
 ## Improvements:

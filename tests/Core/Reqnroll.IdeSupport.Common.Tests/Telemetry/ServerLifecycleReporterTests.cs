@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Reqnroll.IdeSupport.Common.Telemetry;
 
 namespace Reqnroll.IdeSupport.Common.Tests.Telemetry;
@@ -74,5 +75,104 @@ public class ServerLifecycleReporterTests
         var act = () => sut.Report(TelemetryEvents.ServerProcessRestarted, ServerFailureReason.SessionEnded, 2);
 
         act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Details_are_added_to_the_event_but_never_replace_the_reason_or_attempt_number()
+    {
+        var transmitter = Substitute.For<ITelemetryTransmitter>();
+        var sut = new ServerLifecycleReporter { Transmitter = transmitter };
+        var details = new Dictionary<string, object>
+        {
+            ["ServerSessionId"] = "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00",
+            ["ExitCode"] = -532462766,
+            ["Reason"] = "ignored",
+        };
+
+        sut.Report(TelemetryEvents.ServerProcessExitedUnexpectedly, ServerFailureReason.ProcessExited, 3, details);
+
+        transmitter.Received(1).TransmitEvent(Arg.Is<ITelemetryEvent>(e =>
+            (string)e.Properties["Reason"] == "ProcessExited"
+            && (int)e.Properties["AttemptNumber"] == 3
+            && (string)e.Properties["ServerSessionId"] == "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00"
+            && (int)e.Properties["ExitCode"] == -532462766
+            && e.Properties.Count == 4));
+    }
+
+    [Fact]
+    public void DescribeProcess_without_a_process_reports_only_the_session_id()
+    {
+        var details = ServerLifecycleTelemetry.DescribeProcess(null, "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00", DateTime.Now);
+
+        details.Should().BeEquivalentTo(new Dictionary<string, object> { ["ServerSessionId"] = "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00" });
+    }
+
+    [Fact]
+    public void DescribeProcess_omits_a_missing_session_id()
+    {
+        ServerLifecycleTelemetry.DescribeProcess(null, null, DateTime.Now).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DescribeProcess_of_a_running_process_reports_uptime_but_no_exit_code()
+    {
+        using var current = Process.GetCurrentProcess();
+
+        var details = ServerLifecycleTelemetry.DescribeProcess(current, null, DateTime.Now);
+
+        details.Should().NotContainKey("ExitCode");
+        ((long)details["UptimeMs"]).Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Fact]
+    public void DescribeProcess_of_an_exited_process_reports_its_exit_code_and_uptime()
+    {
+        using var process = Process.Start(new ProcessStartInfo("dotnet", "--version")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+        })!;
+        process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+
+        var details = ServerLifecycleTelemetry.DescribeProcess(process, "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00", DateTime.Now);
+
+        details["ExitCode"].Should().Be(process.ExitCode);
+        ((long)details["UptimeMs"]).Should().BeGreaterThanOrEqualTo(0);
+        details["ServerSessionId"].Should().Be("6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00");
+    }
+
+    [Fact]
+    public void DescribeProcess_of_an_unstarted_process_object_never_throws()
+    {
+        using var process = new Process();
+
+        var details = ServerLifecycleTelemetry.DescribeProcess(process, null, DateTime.Now);
+
+        details.Should().BeEmpty();
+    }
+}
+
+public class ServerSessionTests
+{
+    [Fact]
+    public void NewId_returns_a_distinct_canonical_guid()
+    {
+        var id = ServerSession.NewId();
+
+        Guid.TryParse(id, out _).Should().BeTrue();
+        id.Should().Be(Guid.Parse(id).ToString("D")).And.NotBe(ServerSession.NewId());
+    }
+
+    [Theory]
+    [InlineData("6F1C2B8E-0D3A-4C55-9B7E-2A4D8C1E9F00", "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00")]
+    [InlineData("{6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00}", "6f1c2b8e-0d3a-4c55-9b7e-2a4d8c1e9f00")]
+    [InlineData("not-a-guid", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void Normalize_accepts_only_guids(string? value, string? expected)
+    {
+        ServerSession.Normalize(value).Should().Be(expected);
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace Reqnroll.IdeSupport.Common.Telemetry;
 
@@ -22,11 +23,69 @@ public static class ServerLifecycleTelemetry
     /// </summary>
     public const string AttemptNumberKey = "AttemptNumber";
 
-    /// <summary>Builds the property set for one lifecycle event.</summary>
-    public static ImmutableDictionary<string, object> BuildProperties(string reason, int attemptNumber) =>
-        ImmutableDictionary<string, object>.Empty
+    /// <summary>
+    /// Property key: the process exit code, as a signed integer (Windows NTSTATUS-style codes such as
+    /// <c>0xE0434352</c> are negative). Only on <see cref="TelemetryEvents.ServerProcessExitedUnexpectedly"/>,
+    /// and only when the process had exited by the time the client reported it.
+    /// </summary>
+    public const string ExitCodeKey = "ExitCode";
+
+    /// <summary>Property key: whole milliseconds from the server process starting to it exiting (or to the report, if it had not yet exited).</summary>
+    public const string UptimeMsKey = "UptimeMs";
+
+    /// <summary>Builds the property set for one lifecycle event; <paramref name="details"/> keys are added where not already present.</summary>
+    public static ImmutableDictionary<string, object> BuildProperties(
+        string reason, int attemptNumber, IReadOnlyDictionary<string, object>? details = null)
+    {
+        var properties = ImmutableDictionary<string, object>.Empty
             .Add(ReasonKey, reason)
             .Add(AttemptNumberKey, attemptNumber);
+        if (details is null)
+            return properties;
+
+        foreach (var pair in details)
+        {
+            if (!properties.ContainsKey(pair.Key))
+                properties = properties.Add(pair.Key, pair.Value);
+        }
+
+        return properties;
+    }
+
+    /// <summary>
+    /// The <see cref="ServerSession.PropertyName"/>, <see cref="ExitCodeKey"/> and <see cref="UptimeMsKey"/>
+    /// details for a server process, each omitted when it cannot be read. Never throws.
+    /// </summary>
+    /// <param name="process">The server process, or <see langword="null"/> when it was never started.</param>
+    /// <param name="serverSessionId">The id the client passed as <c>--server-session-id</c>, if any.</param>
+    /// <param name="now">The current local time, used for the uptime of a process that has not exited yet.</param>
+    public static IReadOnlyDictionary<string, object> DescribeProcess(Process? process, string? serverSessionId, DateTime now)
+    {
+        var details = new Dictionary<string, object>();
+        if (!string.IsNullOrEmpty(serverSessionId))
+            details[ServerSession.PropertyName] = serverSessionId!;
+        if (process is null)
+            return details;
+
+        try
+        {
+            var exited = process.HasExited;
+            if (exited)
+                details[ExitCodeKey] = process.ExitCode;
+
+            var end = exited ? process.ExitTime : now;
+            var uptime = end - process.StartTime;
+            if (uptime >= TimeSpan.Zero)
+                details[UptimeMsKey] = (long)uptime.TotalMilliseconds;
+        }
+        catch (Exception)
+        {
+            // InvalidOperationException (no process associated, or disposed), Win32Exception (access
+            // denied) and NotSupportedException (remote process): report what was read so far.
+        }
+
+        return details;
+    }
 }
 
 /// <summary>The closed set of <c>Reason</c> values for the server-lifecycle events.</summary>
@@ -84,10 +143,14 @@ public sealed class ServerLifecycleReporter
         }
     }
 
-    /// <summary>Reports <paramref name="eventName"/> with a closed-enum <paramref name="reason"/> and the start <paramref name="attemptNumber"/>. Never throws.</summary>
-    public void Report(string eventName, string reason, int attemptNumber)
+    /// <summary>
+    /// Reports <paramref name="eventName"/> with a closed-enum <paramref name="reason"/>, the start
+    /// <paramref name="attemptNumber"/> and optional <paramref name="details"/> (see
+    /// <see cref="ServerLifecycleTelemetry.DescribeProcess"/>). Never throws.
+    /// </summary>
+    public void Report(string eventName, string reason, int attemptNumber, IReadOnlyDictionary<string, object>? details = null)
     {
-        var telemetryEvent = new GenericEvent(eventName, ServerLifecycleTelemetry.BuildProperties(reason, attemptNumber));
+        var telemetryEvent = new GenericEvent(eventName, ServerLifecycleTelemetry.BuildProperties(reason, attemptNumber, details));
         ITelemetryTransmitter? transmitter;
         lock (_gate)
         {
