@@ -15,7 +15,7 @@
 //   join by equality: its Server.Session.Started (server version, OS), the non-fatal exceptions it reported before
 //   it died, and the fatal-exception record the NEXT server start sent for it (Error.UnhandledException with
 //   ReportedAfterRestart = true and SessionId = the dead run's).
-// - Exit events without ServerSessionId (Rider until it sends one, and older builds) keep only their own columns.
+// - Exit events without ServerSessionId (older builds) keep only their own columns.
 //
 // Columns
 // - ExitKind: derived from ExitCode/ExitSignal. ManagedException (0xE0434352, an exception no code caught; also

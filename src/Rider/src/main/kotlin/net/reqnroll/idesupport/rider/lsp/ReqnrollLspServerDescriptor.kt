@@ -150,7 +150,7 @@ class ReqnrollLspServerDescriptor(project: Project) :
     override fun startServerProcess(): OSProcessHandler {
         events.serverStarting()
         try {
-            return super.startServerProcess()
+            return super.startServerProcess().also(events::serverProcessStarted)
         } catch (ex: Exception) {
             events.serverStartFailed()
             throw ex
@@ -171,11 +171,17 @@ class ReqnrollLspServerDescriptor(project: Project) :
         // full diagnostic logging without needing a manual override every time.
         val logLevel = resolveLogLevel(System.getProperty("reqnroll.devSandbox") == "true")
 
+        // Set by events.serverStarting() just before the platform builds this command line, once per start.
+        val sessionArguments = events.serverSessionId
+            ?.let { listOf(ReqnrollServerProcessTracker.SERVER_SESSION_ID_ARGUMENT, it) }
+            .orEmpty()
+
         ReqnrollDebugLogger.info(
             "createCommandLine: launching $serverPath --ide rider --log-level $logLevel " +
-                "${ClientSession.SERVER_ARGUMENT_NAME} ${ClientSession.id}")
+                "${ClientSession.SERVER_ARGUMENT_NAME} ${ClientSession.id} ${sessionArguments.joinToString(" ")}")
         return GeneralCommandLine(serverPath.toString())
             .withParameters("--ide", "rider", "--log-level", logLevel, ClientSession.SERVER_ARGUMENT_NAME, ClientSession.id)
+            .withParameters(sessionArguments)
     }
 
     companion object {
