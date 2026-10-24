@@ -24,6 +24,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// once the process has exited. A server that sits idle is not re-sampled, but its memory rarely grows then.
 /// </para>
 /// <para>
+/// Requests sent once the process has exited are not recorded: VS reacts to the broken connection by sending
+/// <c>shutdown</c> to the dead server, which would otherwise be reported as what the server was doing.
+/// </para>
+/// <para>
 /// Only LSP method names (a fixed vocabulary, checked against <see cref="SafeMethod"/>) and numbers are reported.
 /// It never consumes a message.
 /// </para>
@@ -58,6 +62,7 @@ internal sealed class ServerActivityTracker : ILspMessageInterceptor
     private readonly Dictionary<string, (string Method, long Sequence)> _pending = new();
     private readonly Process? _process;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<bool> _hasExited;
     private long _sequence;
     private string? _lastMethod;
     private DateTimeOffset _lastRequestAt;
@@ -65,27 +70,51 @@ internal sealed class ServerActivityTracker : ILspMessageInterceptor
     private long? _peakWorkingSetBytes;
     private long? _privateMemoryBytes;
 
-    /// <summary>Creates the tracker for <paramref name="process"/> (<see langword="null"/>: no memory sampling).</summary>
-    public ServerActivityTracker(Process? process, Func<DateTimeOffset>? now = null)
+    /// <summary>
+    /// Creates the tracker for <paramref name="process"/> (<see langword="null"/>: no memory sampling, and requests
+    /// are always recorded). <paramref name="hasExited"/> replaces the check of the process for tests.
+    /// </summary>
+    public ServerActivityTracker(Process? process, Func<DateTimeOffset>? now = null, Func<bool>? hasExited = null)
     {
         _process = process;
         _now = now ?? (() => DateTimeOffset.Now);
+        _hasExited = hasExited ?? ProcessHasExited;
     }
 
     /// <inheritdoc />
     public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken)
     {
+        var isRequest = message.Direction == LspMessageDirection.Send && message.IsRequest && message.Id is not null;
+        // Checked outside the lock: it asks the OS, and only requests need it.
+        if (isRequest && _hasExited())
+            return Task.FromResult(LspInterceptorResult.PassThrough);
+
         var now = _now();
         lock (_gate)
         {
-            if (message.Direction == LspMessageDirection.Send && message.IsRequest && message.Id is not null)
-                RecordRequest(message.Id.ToString(), message.Method!, now);
+            if (isRequest)
+                RecordRequest(message.Id!.ToString(), message.Method!, now);
             else if (message.Direction == LspMessageDirection.Receive && message.IsResponse && message.Id is not null)
                 _pending.Remove(message.Id.ToString());
         }
 
         SampleMemoryIfDue(now);
         return Task.FromResult(LspInterceptorResult.PassThrough);
+    }
+
+    private bool ProcessHasExited()
+    {
+        if (_process is null)
+            return false;
+        try
+        {
+            return _process.HasExited;
+        }
+        catch (Exception)
+        {
+            // Disposed or no longer accessible: it is not a server that can still be working on a request.
+            return true;
+        }
     }
 
     private void RecordRequest(string id, string method, DateTimeOffset now)
