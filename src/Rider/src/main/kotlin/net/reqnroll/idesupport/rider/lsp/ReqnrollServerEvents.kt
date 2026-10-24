@@ -1,5 +1,7 @@
 package net.reqnroll.idesupport.rider.lsp
 
+import com.intellij.execution.process.ProcessHandler
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerListener
@@ -24,7 +26,27 @@ import java.util.concurrent.CopyOnWriteArrayList
 @Service(Service.Level.PROJECT)
 class ReqnrollServerEvents(private val project: Project) : LspServerListener {
     private val runningSubscribers = CopyOnWriteArrayList<() -> Unit>()
-    private val telemetry = ReqnrollServerLifecycleTelemetry(RiderTelemetryTransmitter::transmit)
+    private val processTracker = ReqnrollServerProcessTracker()
+    private val telemetry = ReqnrollServerLifecycleTelemetry(
+        RiderTelemetryTransmitter::transmit,
+        processTracker::startDetails,
+        // Waits for the process to finish terminating, so never on the thread that reported the stop.
+        { onReady ->
+            // Bound now, while the run that stopped is still the current one.
+            val describeExit = processTracker.exitDescriber()
+            ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    onReady(describeExit(ReqnrollServerProcessTracker.EXIT_DETAILS_TIMEOUT_MS))
+                } catch (e: Exception) {
+                    ReqnrollDebugLogger.error("ReqnrollServerEvents: reporting the server exit failed", e)
+                }
+            }
+        },
+    )
+
+    /** The `--server-session-id` for the server being launched; set by [serverStarting]. */
+    val serverSessionId: String?
+        get() = processTracker.sessionId
 
     /**
      * Whether the platform currently has the Reqnroll server in [LspServerState.Running]. Read from the
@@ -37,9 +59,15 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
             .getServersForProvider(ReqnrollLspServerSupportProvider::class.java)
             .firstOrNull()?.state == LspServerState.Running
 
-    /** The server process is about to be launched (first start, or any restart). */
+    /** The server process is about to be launched (first start, or any restart): gives it a fresh session id. */
     fun serverStarting() {
+        processTracker.onStarting()
         telemetry.onStateChanged(LspServerState.Initializing)
+    }
+
+    /** The server process was created; its stderr and exit feed the exit telemetry. */
+    fun serverProcessStarted(handler: ProcessHandler) {
+        processTracker.onProcessStarted(handler)
     }
 
     /** Launching the server process threw, so the platform will not report a stop. */
