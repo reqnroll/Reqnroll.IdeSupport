@@ -50,6 +50,7 @@ import {
   sendTelemetryEvent,
 } from './telemetry';
 import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
+import { ServerProcessTracker } from './lsp/serverProcessTracker';
 import { reportExtensionLifecycle } from './extensionLifecycleTelemetry';
 import {
   SOURCE_ACTIVATION,
@@ -401,18 +402,21 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   }
 
   // ── LSP client ─────────────────────────────────────────────────────────────
+  const serverArgs = [
+    '--ide',
+    'vscode',
+    CLIENT_SESSION_ID_ARGUMENT,
+    CLIENT_SESSION_ID,
+    '--log-level',
+    traceServerToLogLevel(),
+    '--protocol-log-level',
+    protocolLogLevelToArg(),
+  ];
+  // Adds a fresh --server-session-id to serverArgs on every (re)start, for the lifecycle telemetry below.
+  const serverProcessTracker = new ServerProcessTracker(serverArgs);
   const serverOptions: ServerOptions = {
     command: serverPath,
-    args: [
-      '--ide',
-      'vscode',
-      CLIENT_SESSION_ID_ARGUMENT,
-      CLIENT_SESSION_ID,
-      '--log-level',
-      traceServerToLogLevel(),
-      '--protocol-log-level',
-      protocolLogLevelToArg(),
-    ],
+    args: serverArgs,
     options: {
       env: { ...process.env },
     },
@@ -487,7 +491,7 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   ensureTelemetryReporter(context);
   // Install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
   void reportExtensionLifecycle(context, sendTelemetryEvent);
-  serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent);
+  serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent, serverProcessTracker);
   context.subscriptions.push(serverLifecycle);
 
   // Per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't
