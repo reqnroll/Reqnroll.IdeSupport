@@ -1,4 +1,4 @@
-# [vNext]
+# v2026.2 - 2026-10-25
 
 ## Improvements:
 * In Rider, the Run Test and Run Scenarios lenses now save unsaved editor changes before running `dotnet test`, so a run no longer exercises the old file content and shows a stale outcome - see #1147
