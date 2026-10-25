@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using MediatR;
+﻿using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -42,11 +41,6 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IParseCoordinator _parseCoordinator;
     private readonly ILspWorkspaceScopeManager? _scopeManager;
     private readonly ILspTelemetryService? _telemetryService;
-
-    // Feature documents currently open; a didOpen reports Project.FeatureFile.Opened only when it
-    // adds to this set, so a repeated didOpen without an intervening didClose is not double counted.
-    // Keyed by URI string because each didOpen/didClose request carries its own DocumentUri instance.
-    private readonly ConcurrentDictionary<string, byte> _openFeatureDocuments = new(StringComparer.Ordinal);
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
@@ -125,8 +119,12 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         }
 
         _logger.LogInfo($"Document opened: {uri} (version {version})");
+        // The buffer service is the record of which feature documents are open (didClose removes
+        // the entry), so a didOpen for a URI it already holds is not a new open-lifetime.
+        var isNewOpen = !_documentBufferService.TryGet(uri, out _);
         _documentBufferService.Update(uri, version, text);
-        ReportFeatureFileOpened(uri);
+        if (isNewOpen)
+            ReportFeatureFileOpened(uri);
 
         // Off the shared Serial dispatch lane: the buffer update above is
         // synchronous and immediate, but the parse + MatchCacheChangedNotification publish is
@@ -218,7 +216,6 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
         _logger.LogInfo($"Document closed: {uri}");
         _documentBufferService.Remove(uri);
-        _openFeatureDocuments.TryRemove(uri.ToString(), out _);
         _bindingMatchService.InvalidateAllForDocument(uri.ToString());
 
         // Repopulate the match cache from disk so the file's usages remain discoverable by
@@ -242,10 +239,10 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         return Unit.Value;
     }
 
-    /// <summary>Sends <c>Project.FeatureFile.Opened</c> once per open-lifetime of a feature document, identically for every IDE.</summary>
+    /// <summary>Sends <c>Project.FeatureFile.Opened</c> for a newly opened feature document, identically for every IDE.</summary>
     private void ReportFeatureFileOpened(DocumentUri uri)
     {
-        if (_telemetryService is null || !_openFeatureDocuments.TryAdd(uri.ToString(), 0))
+        if (_telemetryService is null)
             return;
 
         var project = _scopeManager?.ResolvePrimaryOwner(uri);
