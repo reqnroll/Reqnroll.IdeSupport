@@ -124,7 +124,8 @@ public static class TelemetryEvents
     /// <summary>
     /// A genuine Go To Step Definition navigation, sent by the client: the Visual Studio client when the user runs
     /// Go To Definition on a step (<c>GoToStepDefinitionPresenter</c>) and the VS Code client for its
-    /// "Go to Step Definition" picker command. VS Code's F12/Ctrl+click and Rider's go-to-declaration
+    /// "Go to Step Definition" picker command; the Rider client for F12/Ctrl+click, when the server's
+    /// <c>textDocument/definition</c> lookup follows its Go To Definition action. VS Code's F12/Ctrl+click
     /// use <c>textDocument/definition</c>, which also fires on hover, so they are not reported as navigations; the
     /// server counts them as <see cref="LookupFindStepDefinitions"/>. Property: <c>LocationCount</c>.
     /// Mirrored verbatim in VS Code's <c>telemetryEvents.ts</c>.

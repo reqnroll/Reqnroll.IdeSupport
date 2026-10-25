@@ -2,6 +2,7 @@ package net.reqnroll.idesupport.rider.telemetry
 
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
+import net.reqnroll.idesupport.rider.navigation.GoToStepDefinitionTelemetry
 
 /**
  * Delegates every [LspServerNotificationsHandler] callback straight through to Rider's own
@@ -59,6 +60,7 @@ class ReqnrollTelemetryEventInterceptor(
                 ReqnrollDebugLogger.verbose("ReqnrollTelemetryEventInterceptor: telemetry/event without eventName; dropping.")
             } else {
                 RiderTelemetryTransmitter.transmit(parsed.eventName, parsed.properties)
+                GoToStepDefinitionTelemetry.onServerEvent(parsed.eventName, parsed.properties)
             }
         } catch (ex: Exception) {
             ReqnrollDebugLogger.verbose("ReqnrollTelemetryEventInterceptor: error forwarding telemetry/event.", ex)

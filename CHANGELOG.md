@@ -1,6 +1,7 @@
 # [vNext]
 
 ## Improvements:
+* Rider now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user runs Go To Definition with F12 or Ctrl+click on a step in a `.feature` file; hover lookups are not counted. Rider 2026.2 and later only, since older versions handle the shortcut without the plugin (Rider) - see #1265
 * Rider now reports language-server crashes like Visual Studio and VS Code: each server start gets its own `--server-session-id`, and `Server.Process.ExitedUnexpectedly` carries `ServerSessionId`, `ExitCode`, `UptimeMs` and the crash report the .NET runtime printed to stderr; a failed start carries `ServerSessionId` (Rider) - see #1282
 * When the language server dies in Visual Studio, `Server.Process.ExitedUnexpectedly` now also says what it was doing: the requests still awaiting a response (count and up to 5 method names), the last request and how long before the exit it was sent, and the server's peak working set and private memory (VS) - see #1282
 * VS Code now reports language-server crashes like Visual Studio: each server start gets its own `--server-session-id`, and `Server.Process.ExitedUnexpectedly` carries `ServerSessionId`, `ExitCode` (or `ExitSignal` on macOS/Linux), `UptimeMs` and the crash report the .NET runtime printed to stderr; a failed start carries `ServerSessionId` (VS Code) - see #1282

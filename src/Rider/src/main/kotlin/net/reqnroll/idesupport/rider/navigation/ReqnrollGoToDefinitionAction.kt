@@ -41,6 +41,7 @@ class ReqnrollGoToDefinitionAction : AnAction() {
         val target = frontendActionOf(registered)
         ReqnrollDebugLogger.info(
             "ReqnrollGoToDefinitionAction: running ${target.javaClass.name} (registered as ${registered.javaClass.name})")
+        GoToStepDefinitionTelemetry.arm()
         ActionUtil.invokeAction(target, e.dataContext, e.place, e.inputEvent, null)
     }
 

@@ -41,7 +41,7 @@ Every event, ordered by name. "From" says where the event originates: the LSP se
 | `Command.FindUnusedStepDefinitions` | Server | The user ran Find Unused Step Definitions. | 3 |
 | `Command.GoToHook` | All clients | The user navigated from a scenario to its hooks. | 5 |
 | `Command.GoToMatchingScenarios` | Server | The user navigated from a hook to the scenarios it applies to. | 3 |
-| `Command.GoToStepDefinition` | VS, VS Code | The user navigated from a step to its definition (VS Code: the picker command only). | 3 |
+| `Command.GoToStepDefinition` | VS, VS Code, Rider | The user navigated from a step to its definition (VS Code: the picker command only). | 3 |
 | `Command.RenameStep` | Server | A step rename ran; sent for every outcome, rejections included. | 3 |
 | `Command.TagLink` | All clients | The user followed a clickable tag link. | 5 |
 | `Error.UnhandledException` | Server, VS Code, Rider | An exception was caught and reported. | 6 |
@@ -278,11 +278,11 @@ as *lookups*, not *runs*.
 *Constant: `TelemetryEvents.CommandGoToStepDefinition`*
 | | |
 |---|---|
-| **Emitters** | Client only: Visual Studio's `GoToStepDefinitionPresenter`; VS Code's `doGoToStepDefinition` (the "Reqnroll: Go to Step Definition" picker command). Rider has no such command and sends nothing |
-| **When** | Visual Studio: each time the user runs Go To Definition (F12 or Ctrl+Click) in a `.feature` file, wherever the caret is. VS Code: each run of the picker command. VS Code's F12/Peek/Ctrl+click and Rider's go-to-declaration use `textDocument/definition`, which those IDEs also send on hover and which a client cannot tell apart from a navigation, so they are **not** reported as navigations (known gap) |
+| **Emitters** | Client only: Visual Studio's `GoToStepDefinitionPresenter`; VS Code's `doGoToStepDefinition` (the "Reqnroll: Go to Step Definition" picker command); Rider's `GoToStepDefinitionTelemetry`, which re-emits the server's `textDocument/definition` lookup |
+| **When** | Visual Studio: each time the user runs Go To Definition (F12 or Ctrl+Click) in a `.feature` file, wherever the caret is. VS Code: each run of the picker command. Rider: each F12 / Ctrl+click handled by `ReqnrollGoToDefinitionAction` (2026.2+, where the platform's shortcut handling is replaced); the action arms a 5-second gate and the next `textDocument/definition` lookup event is reported with the server's `LocationCount`, so hover lookups are not counted (older Riders, whose shortcut never reaches the action, send nothing). VS Code's F12/Peek/Ctrl+click use `textDocument/definition`, which those IDEs also send on hover and which a client cannot tell apart from a navigation, so they are **not** reported as navigations (known gap) |
 | **Properties** | `LocationCount` (int): navigable rows offered (0 when there was nowhere to go) |
 
-**Analytics use.** Go to Step Definition navigation count for Visual Studio and VS Code's picker command;
+**Analytics use.** Go to Step Definition navigation count for Visual Studio, Rider (2026.2+) and VS Code's picker command;
 the honest counterpart to `Lookup.FindStepDefinitions`. The status mix (ambiguous, undefined,
 unresolved) comes from `Lookup.FindStepDefinitions`.
 
@@ -599,7 +599,7 @@ link/content engagement on the welcome/upgrade surfaces.
 
 ## 5. Client-originated navigation events
 
-`Command.GoToStepDefinition` (§ above) is also client-originated, in Visual Studio and, for its picker command, VS Code (constant mirrored in `telemetryEvents.ts`). Rider has no Go to Step Definition command, so it sends none.
+`Command.GoToStepDefinition` (§ above) is also client-originated, in Visual Studio, in VS Code for its picker command (constant mirrored in `telemetryEvents.ts`) and in Rider 2026.2+ for F12/Ctrl+click.
 
 ### `Command.GoToHook`
 
@@ -790,7 +790,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Step Rename failure modes | `Command.RenameStep` (`Erroneous`, `Reason`) |
 | Picker UI trigger rate | `Lookup.RenameTargets` (`TargetCount > 1` share) |
 | Go-to-hooks: lookups vs navigations | `Lookup.FindHooks` (server) vs `Command.GoToHook` (clients) |
-| Go-to-step-definition: lookups vs navigations | `Lookup.FindStepDefinitions` (server; all IDEs) vs `Command.GoToStepDefinition` (client; Visual Studio and VS Code's picker command only - F12/Ctrl+click in VS Code and Rider are not distinguishable from hover) |
+| Go-to-step-definition: lookups vs navigations | `Lookup.FindStepDefinitions` (server; all IDEs) vs `Command.GoToStepDefinition` (client; Visual Studio, Rider 2026.2+ and VS Code's picker command - F12/Ctrl+click in VS Code is not distinguishable from hover) |
 | Run CodeLens: resolves vs actual runs | `Lookup.ResolveTestTargets` / `Lookup.ResolveContainerTestTargets` (lookups) + `Project.TestRun.Completed` (completions) |
 | Crash/error rates | `Error.UnhandledException` (server; VS Code/Rider client code with `ExceptionOrigin = "Client"`) + VS `ExceptionTelemetry` |
 | Adoption lifecycle | All IDEs: `Lifecycle.Extension.Loaded`, `Lifecycle.Extension.Installed`, `Lifecycle.Extension.Upgraded`, `Lifecycle.Usage.Recorded`; VS only: wizard events; `Server.Session.Started` by distinct `ai.user.id` as a cross-check |
