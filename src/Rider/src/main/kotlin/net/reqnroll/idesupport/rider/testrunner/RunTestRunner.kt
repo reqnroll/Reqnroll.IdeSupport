@@ -2,6 +2,7 @@ package net.reqnroll.idesupport.rider.testrunner
 
 import com.google.gson.JsonParser
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -86,6 +87,10 @@ object RunTestRunner {
                     notifyError(project, "No test target(s) resolved for this scenario.")
                     return
                 }
+
+                // `dotnet test` builds from the files on disk, so unsaved editor edits must reach
+                // disk first (as Rider's own run configurations do) or the run exercises stale content.
+                saveAllDocuments()
 
                 // Registers before running: the endpoint must be baked into the dotnet test
                 // command line below (VsTest mode) or discoverable via the LSP server's session
@@ -529,6 +534,17 @@ object RunTestRunner {
             DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
         } finally {
             resultsDir.deleteRecursively()
+        }
+    }
+
+    /** Flushes every unsaved editor document to disk on the EDT; a failure is logged and the run proceeds against what is on disk. */
+    private fun saveAllDocuments() {
+        try {
+            ApplicationManager.getApplication().invokeAndWait {
+                FileDocumentManager.getInstance().saveAllDocuments()
+            }
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("RunTestRunner: saving open documents before dotnet test failed", ex)
         }
     }
 
