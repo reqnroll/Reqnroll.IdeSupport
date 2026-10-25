@@ -3,6 +3,7 @@
 # v2026.2 - 2026-10-25
 
 ## Improvements:
+* Rider now restarts the language server by itself after it crashes, instead of leaving every Reqnroll feature stopped until Restart is clicked in the status-bar widget; it gives up after 4 restarts within 3 minutes (Rider) - see #1290
 * In Rider, the Run Test and Run Scenarios lenses now save unsaved editor changes before running `dotnet test`, so a run no longer exercises the old file content and shows a stale outcome - see #1147
 * Rider now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user runs Go To Definition with F12 or Ctrl+click on a step in a `.feature` file; hover lookups are not counted (Rider) - see #1265
 * Rider now reports language-server crashes like Visual Studio and VS Code: each server start gets its own `--server-session-id`, and `Server.Process.ExitedUnexpectedly` carries `ServerSessionId`, `ExitCode`, `UptimeMs` and the crash report the .NET runtime printed to stderr; a failed start carries `ServerSessionId` (Rider) - see #1282
