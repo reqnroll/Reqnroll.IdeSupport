@@ -231,7 +231,6 @@ public class LspErrorTelemetryServiceTests
     {
         var sut = CreateSut();
 
-        sut.MonitorOpenFeatureFile(null!);
         sut.MonitorExtensionInstalled();
         sut.MonitorExtensionUpgraded("1.0.0");
         sut.MonitorExtensionDaysOfUsage(3);

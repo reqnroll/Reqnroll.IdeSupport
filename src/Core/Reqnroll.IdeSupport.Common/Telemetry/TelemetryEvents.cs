@@ -215,7 +215,7 @@ public static class TelemetryEvents
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProjectSystem</c>) when the extension activates inside an IDE scope.</summary>
     public const string LifecycleExtensionLoaded = "Lifecycle.Extension.Loaded";
 
-    /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenFeatureFile</c>) when a <c>.feature</c> file is opened.</summary>
+    /// <summary>Sent by the LSP server when a <c>.feature</c> document is opened (once per open-lifetime), for every IDE.</summary>
     public const string ProjectFeatureFileOpened = "Project.FeatureFile.Opened";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorExtensionInstalled</c>) on first activation after installation.</summary>

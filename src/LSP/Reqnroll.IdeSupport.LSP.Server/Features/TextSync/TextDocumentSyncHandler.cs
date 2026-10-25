@@ -6,6 +6,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
@@ -14,6 +15,8 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 
@@ -36,6 +39,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IParseCoordinator _parseCoordinator;
+    private readonly ILspWorkspaceScopeManager? _scopeManager;
+    private readonly ILspTelemetryService? _telemetryService;
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
@@ -55,7 +60,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
         IParseCoordinator parseCoordinator,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        ILspWorkspaceScopeManager? scopeManager = null,
+        ILspTelemetryService? telemetryService = null)
     {
         _documentBufferService = documentBufferService;
         _taggerService = taggerService;
@@ -67,6 +74,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _logger = logger;
         _parseCoordinator = parseCoordinator;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _scopeManager = scopeManager;
+        _telemetryService = telemetryService;
     }
 
     /// <summary>Reports the language id (<c>"csharp"</c> or <c>"Gherkin"</c>) the server should associate with the given document URI.</summary>
@@ -110,7 +119,12 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         }
 
         _logger.LogInfo($"Document opened: {uri} (version {version})");
+        // The buffer service is the record of which feature documents are open (didClose removes
+        // the entry), so a didOpen for a URI it already holds is not a new open-lifetime.
+        var isNewOpen = !_documentBufferService.TryGet(uri, out _);
         _documentBufferService.Update(uri, version, text);
+        if (isNewOpen)
+            ReportFeatureFileOpened(uri);
 
         // Off the shared Serial dispatch lane: the buffer update above is
         // synchronous and immediate, but the parse + MatchCacheChangedNotification publish is
@@ -223,6 +237,32 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             });
 
         return Unit.Value;
+    }
+
+    /// <summary>Sends <c>Project.FeatureFile.Opened</c> for a newly opened feature document, identically for every IDE.</summary>
+    private void ReportFeatureFileOpened(DocumentUri uri)
+    {
+        if (_telemetryService is null)
+            return;
+
+        // Telemetry must never break document sync, so a failure here is logged and dropped.
+        try
+        {
+            // Null project properties mean no project owned the file yet (e.g. a tab restored
+            // at startup before project discovery); they are left null rather than deferred.
+            var project = _scopeManager?.ResolvePrimaryOwner(uri);
+            _telemetryService.SendEvent(TelemetryEvents.ProjectFeatureFileOpened, new()
+            {
+                ["ProjectTargetFramework"] = project?.TargetFrameworkMonikers,
+                ["ProgrammingLanguage"] = project is null
+                    ? null
+                    : ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Failed to send {TelemetryEvents.ProjectFeatureFileOpened}: {ex.Message}");
+        }
     }
 
     private static bool IsCSharp(DocumentUri uri) =>
