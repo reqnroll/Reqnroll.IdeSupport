@@ -77,5 +77,7 @@ internal sealed class RunTestCodeLensTaggerProvider : ITaggerProvider
     // and hands the CodeLens host new descriptors, so the OOP data points are re-created and pick up
     // the new outcome (see RunTestCodeLensRedirect.NotifyOutcomesChanged).
     internal static string EncodeElementDescription(int line, IEnumerable<RunTestLensLocation> entriesOnLine) =>
-        LineElementDescription.Encode(line, entriesOnLine.Select(e => e.Key).Append($"outcome-rev:{RunTestCodeLensRedirect.OutcomeRevision}"));
+        LineElementDescription.Encode(line, entriesOnLine.Select(e => e.Key)
+            .Append($"targets-rev:{RunTestCodeLensRedirect.TargetsRevision}")
+            .Append($"outcome-rev:{RunTestCodeLensRedirect.OutcomeRevision}"));
 }

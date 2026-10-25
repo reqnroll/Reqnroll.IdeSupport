@@ -77,6 +77,7 @@ public static class RunTestCodeLensRedirect
     public static void InvalidateFile(string fileUri)
     {
         InvalidateCachedFile?.Invoke(fileUri);
+        Interlocked.Increment(ref _targetsRevision);
         TaggerRegistry.InvalidateFile(fileUri);
     }
 
@@ -84,8 +85,19 @@ public static class RunTestCodeLensRedirect
     public static void InvalidateAll()
     {
         InvalidateAllCached?.Invoke();
+        Interlocked.Increment(ref _targetsRevision);
         TaggerRegistry.InvalidateAll();
     }
+
+    private static int _targetsRevision;
+
+    /// <summary>
+    /// Monotonic counter bumped whenever resolved targets may have changed (<see cref="InvalidateFile"/> /
+    /// <see cref="InvalidateAll"/>). Folded into every Run lens tag's <c>ElementDescription</c> so the
+    /// CodeLens host re-creates the data points and re-resolves their targets; without it a data point
+    /// that resolved to nothing (no generated code-behind yet) keeps that empty result after a build.
+    /// </summary>
+    public static int TargetsRevision => Volatile.Read(ref _targetsRevision);
 
     private static int _outcomeRevision;
 
