@@ -1,6 +1,7 @@
 # [vNext]
 
 ## Improvements:
+* In Rider, the Run Test and Run Scenarios lenses now save unsaved editor changes before running `dotnet test`, so a run no longer exercises the old file content and shows a stale outcome - see #1147
 * Rider now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user runs Go To Definition with F12 or Ctrl+click on a step in a `.feature` file; hover lookups are not counted (Rider) - see #1265
 * Rider now reports language-server crashes like Visual Studio and VS Code: each server start gets its own `--server-session-id`, and `Server.Process.ExitedUnexpectedly` carries `ServerSessionId`, `ExitCode`, `UptimeMs` and the crash report the .NET runtime printed to stderr; a failed start carries `ServerSessionId` (Rider) - see #1282
 * When the language server dies in Visual Studio, `Server.Process.ExitedUnexpectedly` now also says what it was doing: the requests still awaiting a response (count and up to 5 method names), the last request and how long before the exit it was sent, and the server's peak working set and private memory (VS) - see #1282
