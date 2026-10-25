@@ -7,10 +7,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerState
+import com.intellij.util.concurrency.AppExecutorUtil
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
 import org.eclipse.lsp4j.InitializeResult
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 
 /**
  * The Reqnroll server's lifecycle for one project, as seen through the platform's public
@@ -27,6 +29,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class ReqnrollServerEvents(private val project: Project) : LspServerListener {
     private val runningSubscribers = CopyOnWriteArrayList<() -> Unit>()
     private val processTracker = ReqnrollServerProcessTracker()
+    private val restartPolicy = ServerRestartPolicy()
     private val telemetry = ReqnrollServerLifecycleTelemetry(
         RiderTelemetryTransmitter::transmit,
         processTracker::startDetails,
@@ -91,6 +94,28 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
         telemetry.onStateChanged(
             if (shutdownNormally) LspServerState.ShutdownNormally else LspServerState.ShutdownUnexpectedly,
         )
+        if (!shutdownNormally) scheduleRestart()
+    }
+
+    /**
+     * The platform leaves a crashed server registered in [LspServerState.ShutdownUnexpectedly], so it
+     * never starts a replacement on its own. Restarts are capped by [restartPolicy]; past the cap the
+     * server stays stopped until the user restarts it.
+     */
+    private fun scheduleRestart() {
+        if (!restartPolicy.tryAcquire()) {
+            ReqnrollDebugLogger.warn("ReqnrollServerEvents: server crashed again too soon; not restarting automatically")
+            return
+        }
+        AppExecutorUtil.getAppScheduledExecutorService().schedule({
+            try {
+                if (!project.isDisposed) {
+                    LspServerManager.getInstance(project).stopAndRestartIfNeeded(ReqnrollLspServerSupportProvider::class.java)
+                }
+            } catch (e: Exception) {
+                ReqnrollDebugLogger.error("ReqnrollServerEvents: automatic server restart failed", e)
+            }
+        }, RESTART_DELAY_MS, TimeUnit.MILLISECONDS)
     }
 
     /** Calls [onRunning] after every transition to running until the returned handle is invoked. */
@@ -99,5 +124,9 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
         val registration: () -> Unit = { onRunning() }
         runningSubscribers.add(registration)
         return { runningSubscribers.remove(registration) }
+    }
+
+    private companion object {
+        const val RESTART_DELAY_MS = 1000L
     }
 }
