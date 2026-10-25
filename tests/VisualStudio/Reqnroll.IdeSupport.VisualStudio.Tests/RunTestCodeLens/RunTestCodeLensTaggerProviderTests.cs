@@ -71,6 +71,19 @@ public class RunTestCodeLensTaggerProviderTests
     }
 
     [Fact]
+    public void The_encoding_changes_when_targets_are_invalidated()
+    {
+        // A lens that resolved to no target before the build must be re-created after the refresh that
+        // follows it, so the descriptor has to differ even though the scenario itself is unchanged.
+        var entries = new[] { Location() };
+        var before = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries);
+
+        RunTestCodeLensRedirect.InvalidateAll();
+
+        RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries).Should().NotBe(before);
+    }
+
+    [Fact]
     public void Two_different_lines_encode_differently_even_with_identical_scenario_identity()
     {
         var line1 = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Location(line: 1) });
