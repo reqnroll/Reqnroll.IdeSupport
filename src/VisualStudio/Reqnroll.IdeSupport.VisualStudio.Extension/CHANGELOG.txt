@@ -1,5 +1,10 @@
 # [vNext]
 
+# v2026.2 - 2026-10-25
+
+* Fixed configuration bug that prevented a non-English language configured in the reqnroll.json file from taking affect
+* Improved crash detection/recovery
+
 # v2026.1 - 2026-10-21
 
 ## Initial release of Reqnroll IDE Support

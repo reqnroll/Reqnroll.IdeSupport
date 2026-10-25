@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 using Xunit;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
@@ -22,6 +23,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// directly — the real dispatch hops to the VS main thread and needs a host, but the debounce and
 /// rate-guard bookkeeping around it is ordinary logic.
 /// </remarks>
+[Collection(RunTestCodeLensRevisionCollection.Name)]
 public class CodeLensRefreshInterceptorTests
 {
     // Comfortably longer than the interceptor's 400ms debounce window. Used for the *absence* checks

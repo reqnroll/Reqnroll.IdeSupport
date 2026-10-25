@@ -6,6 +6,16 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
+/// Serialises the tests that read or bump <c>RunTestCodeLensRedirect</c>'s process-wide revision counters,
+/// so a refresh in one class cannot change a description another class is comparing.
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class RunTestCodeLensRevisionCollection
+{
+    public const string Name = "RunTestCodeLensRevision";
+}
+
+/// <summary>
 /// Unit tests for <see cref="RunTestCodeLensTaggerProvider.EncodeElementDescription"/> — the
 /// Run-CodeLens-specific revision-key formatting built on the shared
 /// <see cref="LineElementDescription"/> envelope (keyed off <see cref="RunTestLensLocation"/> rather than the resolved
@@ -19,6 +29,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 /// encoding failed to vary with a line's scenario identity, a renamed/re-kinded scenario would never
 /// get its data point recreated.
 /// </remarks>
+[Collection(RunTestCodeLensRevisionCollection.Name)]
 public class RunTestCodeLensTaggerProviderTests
 {
     private static RunTestLensLocation Location(int line = 1, string key = "Scenario|AddTwoNumbers") =>
@@ -68,6 +79,19 @@ public class RunTestCodeLensTaggerProviderTests
 
         RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries)
             .Should().Be(RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries));
+    }
+
+    [Fact]
+    public void The_encoding_changes_when_targets_are_invalidated()
+    {
+        // A lens that resolved to no target before the build must be re-created after the refresh that
+        // follows it, so the descriptor has to differ even though the scenario itself is unchanged.
+        var entries = new[] { Location() };
+        var before = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries);
+
+        RunTestCodeLensRedirect.InvalidateAll();
+
+        RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries).Should().NotBe(before);
     }
 
     [Fact]
