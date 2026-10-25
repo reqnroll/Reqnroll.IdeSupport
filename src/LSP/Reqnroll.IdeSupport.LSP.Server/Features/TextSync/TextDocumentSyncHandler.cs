@@ -45,7 +45,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     // Feature documents currently open; a didOpen reports Project.FeatureFile.Opened only when it
     // adds to this set, so a repeated didOpen without an intervening didClose is not double counted.
-    private readonly ConcurrentDictionary<DocumentUri, byte> _openFeatureDocuments = new();
+    // Keyed by URI string because each didOpen/didClose request carries its own DocumentUri instance.
+    private readonly ConcurrentDictionary<string, byte> _openFeatureDocuments = new(StringComparer.Ordinal);
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
@@ -217,7 +218,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
         _logger.LogInfo($"Document closed: {uri}");
         _documentBufferService.Remove(uri);
-        _openFeatureDocuments.TryRemove(uri, out _);
+        _openFeatureDocuments.TryRemove(uri.ToString(), out _);
         _bindingMatchService.InvalidateAllForDocument(uri.ToString());
 
         // Repopulate the match cache from disk so the file's usages remain discoverable by
@@ -244,7 +245,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     /// <summary>Sends <c>Project.FeatureFile.Opened</c> once per open-lifetime of a feature document, identically for every IDE.</summary>
     private void ReportFeatureFileOpened(DocumentUri uri)
     {
-        if (_telemetryService is null || !_openFeatureDocuments.TryAdd(uri, 0))
+        if (_telemetryService is null || !_openFeatureDocuments.TryAdd(uri.ToString(), 0))
             return;
 
         var project = _scopeManager?.ResolvePrimaryOwner(uri);

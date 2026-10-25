@@ -322,8 +322,10 @@ public class TextDocumentSyncHandlerTests
         var sut = CreateSut();
 
         await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
-        await sut.Handle(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = FeatureUri } }, CancellationToken.None);
-        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        var closeUri = DocumentUri.Parse(FeatureUri.ToString());
+        closeUri.Should().NotBeSameAs(FeatureUri);
+        await sut.Handle(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = closeUri } }, CancellationToken.None);
+        await sut.Handle(OpenParams(DocumentUri.Parse(FeatureUri.ToString())), CancellationToken.None);
 
         _telemetry.Received(2).SendEvent(TelemetryEvents.ProjectFeatureFileOpened, Arg.Any<Dictionary<string, object?>>());
     }
