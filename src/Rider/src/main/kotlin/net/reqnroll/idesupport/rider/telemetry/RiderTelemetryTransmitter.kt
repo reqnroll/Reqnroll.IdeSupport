@@ -92,6 +92,12 @@ object RiderTelemetryTransmitter {
      */
     internal const val COMMAND_GO_TO_HOOK = "Command.GoToHook"
 
+    /** A genuine Go To Definition (F12 / Ctrl+click) on a step. Property `LocationCount`: navigable bindings offered, 0 when there was nowhere to go. */
+    internal const val COMMAND_GO_TO_STEP_DEFINITION = "Command.GoToStepDefinition"
+
+    /** Server-originated lookup event; read by [net.reqnroll.idesupport.rider.navigation.GoToStepDefinitionTelemetry]. */
+    internal const val LOOKUP_FIND_STEP_DEFINITIONS = "Lookup.FindStepDefinitions"
+
     /** A clickable tag's link was followed. No properties: the URL and tag text are never sent. */
     internal const val COMMAND_TAG_LINK = "Command.TagLink"
 

@@ -136,6 +136,9 @@ for what is available in each IDE.</p>
     <!-- Tells ReqnrollFormattingService which reformats the user asked for explicitly (issue #1172). -->
     <listener class="net.reqnroll.idesupport.rider.formatting.ExplicitReformatActionListener"
               topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />
+    <!-- Arms Command.GoToStepDefinition telemetry when Go To Declaration runs in a .feature file. -->
+    <listener class="net.reqnroll.idesupport.rider.navigation.GoToStepDefinitionActionListener"
+              topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />
   </applicationListeners>
 
   <actions>
