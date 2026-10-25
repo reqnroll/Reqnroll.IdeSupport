@@ -2,13 +2,17 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TextSync;
 
@@ -30,9 +34,18 @@ public class TextDocumentSyncHandlerTests
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
 
+    private readonly ILspTelemetryService _telemetry = Substitute.For<ILspTelemetryService>();
+    private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
+
     private TextDocumentSyncHandler CreateSut() =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
-            _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator);
+            _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator,
+            scopeManager: _scopeManager, telemetryService: _telemetry);
+
+    private static DidOpenTextDocumentParams OpenParams(DocumentUri uri) => new()
+    {
+        TextDocument = new TextDocumentItem { Uri = uri, Version = 1, Text = "Feature: F\n", LanguageId = "Gherkin" }
+    };
 
     /// <summary>Awaits the coordinator's pending entry for <paramref name="uri"/> so a test can observe the effects of Handle's scheduled (not awaited) parse/discovery work.</summary>
     private Task WaitForScheduledWorkAsync(DocumentUri uri) =>
@@ -290,5 +303,48 @@ public class TextDocumentSyncHandlerTests
         buffer.Text.Should().Be("Feature: BeforeSave\n");
 
         await _reparser.DidNotReceiveWithAnyArgs().ReparseOpenDocumentAsync(default!, default, default);
+    }
+
+    [Fact]
+    public async Task Handle_DidOpen_feature_reports_FeatureFile_Opened_once_per_open_lifetime()
+    {
+        var sut = CreateSut();
+
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+
+        _telemetry.Received(1).SendEvent(TelemetryEvents.ProjectFeatureFileOpened, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task Handle_DidOpen_feature_after_didClose_reports_FeatureFile_Opened_again()
+    {
+        var sut = CreateSut();
+
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await sut.Handle(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = FeatureUri } }, CancellationToken.None);
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+
+        _telemetry.Received(2).SendEvent(TelemetryEvents.ProjectFeatureFileOpened, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task Handle_DidOpen_feature_without_owning_project_sends_null_project_profile()
+    {
+        _scopeManager.ResolvePrimaryOwner(FeatureUri).Returns((LspReqnrollProject?)null);
+
+        await CreateSut().Handle(OpenParams(FeatureUri), CancellationToken.None);
+
+        _telemetry.Received(1).SendEvent(
+            TelemetryEvents.ProjectFeatureFileOpened,
+            Arg.Is<Dictionary<string, object?>>(p => p["ProjectTargetFramework"] == null && p["ProgrammingLanguage"] == null));
+    }
+
+    [Fact]
+    public async Task Handle_DidOpen_csharp_does_not_report_FeatureFile_Opened()
+    {
+        await CreateSut().Handle(OpenParams(CsUri), CancellationToken.None);
+
+        _telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
 }

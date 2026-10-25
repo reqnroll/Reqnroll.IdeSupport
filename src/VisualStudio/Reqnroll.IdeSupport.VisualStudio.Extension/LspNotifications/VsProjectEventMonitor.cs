@@ -62,8 +62,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
     private readonly CancellationTokenSource _cts = new();
 
     // Resolved lazily (not in the constructor) since MEF composition may not be ready yet at
-    // construction time; cached thereafter. Used only for the MonitorOpenFeatureFile telemetry
-    // signal and for evicting its cached project scopes on project removal/solution close —
+    // construction time; cached thereafter. Used only for evicting its cached project scopes on project removal/solution close —
     // every other responsibility in this class talks to DTE/the LSP pipe directly.
     private IVsIdeScope? _ideScope;
 
@@ -319,37 +318,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         if (action != DocumentActivationAction.SendNow)
             return;
 
-        // Telemetry: fires exactly once per open-lifetime (SendNow only, guarded by the phase
-        // machine above), matching "feature file opened" semantics rather than "activated" —
-        // MonitorOpenFeatureFile is implemented but called nowhere else; this is that signal's
-        // natural trigger point.
-        MonitorFeatureFileOpened(filePath);
-
         await SendDocumentActivatedAsync(filePath, ct).ConfigureAwait(false);
-    }
-
-    /// <summary>Best-effort <see cref="ITelemetryService.MonitorOpenFeatureFile"/> call — never allowed to break document activation.</summary>
-    private void MonitorFeatureFileOpened(string filePath)
-    {
-        ThreadHelper.ThrowIfNotOnUIThread();
-        try
-        {
-            var project = FindProjectContaining(filePath);
-            if (project is null)
-                return;
-
-            _ideScope ??= VsUtils.ResolveMefDependency<IVsIdeScope>(_serviceProvider);
-            if (_ideScope is null)
-                return;
-
-            var projectScope = _ideScope.GetProjectScope(project);
-            var settings = projectScope.GetProjectSettings();
-            _ideScope.TelemetryService.MonitorOpenFeatureFile(settings);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "VsProjectEventMonitor: MonitorFeatureFileOpened failed for {FilePath}", filePath);
-        }
     }
 
     // Best-effort, UI-thread-safe reads for the diagnostic log line above — must not throw or

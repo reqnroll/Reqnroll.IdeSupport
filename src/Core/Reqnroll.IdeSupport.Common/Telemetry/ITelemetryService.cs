@@ -16,8 +16,8 @@ public interface ITelemetryService : IErrorTelemetryService
     // MonitorOpenProject(ProjectSettings, int?) — retired: the "Project loaded" event it sent
     // duplicated the LSP server's "Project.Opened" (which carries FeatureFileCount) and
     // "Project.Discovery.Executed" / "Project.Characteristics.Reported" events, which are identical across IDEs.
-    /// <summary>Records that a feature file was opened.</summary>
-    void MonitorOpenFeatureFile(ProjectSettings projectSettings);
+    // MonitorOpenFeatureFile(ProjectSettings) — retired: Project.FeatureFile.Opened is sent by the LSP
+    // server on textDocument/didOpen, identically for every IDE.
     // MonitorParserParse(ProjectSettings, Dictionary<string, object>) — retired, not just unwired:
     // VS does not parse .feature files locally (all parsing is server-side, uniformly across
     // every IDE, into LSP.Core's IdeSupportGherkinParser). The modern equivalent of "parse

@@ -53,8 +53,6 @@ public sealed class LspErrorTelemetryService : ITelemetryService
 
     /// <summary>No-op: the LSP server does not track project-system open telemetry.</summary>
     public void MonitorOpenProjectSystem(IIdeScope ideScope) { }
-    /// <summary>No-op: the LSP server does not track feature-file-open telemetry.</summary>
-    public void MonitorOpenFeatureFile(ProjectSettings projectSettings) { }
     /// <summary>No-op: the LSP server does not track extension-install telemetry.</summary>
     public void MonitorExtensionInstalled() { }
     /// <summary>No-op: the LSP server does not track extension-upgrade telemetry.</summary>

@@ -35,13 +35,6 @@ public class TelemetryService : ITelemetryService
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.LifecycleExtensionLoaded));
     }
 
-    /// <summary>Transmits the "Project.FeatureFile.Opened" event with project settings.</summary>
-    public void MonitorOpenFeatureFile(ProjectSettings projectSettings)
-    {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectFeatureFileOpened,
-            GetProjectSettingsProps(projectSettings)));
-    }
-
     // EXTENSION
 
     /// <summary>Transmits the "Lifecycle.Extension.Installed" event.</summary>

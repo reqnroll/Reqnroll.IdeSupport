@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿using System.Collections.Concurrent;
+using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -6,6 +7,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
@@ -14,6 +16,8 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 
@@ -36,6 +40,12 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IParseCoordinator _parseCoordinator;
+    private readonly ILspWorkspaceScopeManager? _scopeManager;
+    private readonly ILspTelemetryService? _telemetryService;
+
+    // Feature documents currently open; a didOpen reports Project.FeatureFile.Opened only when it
+    // adds to this set, so a repeated didOpen without an intervening didClose is not double counted.
+    private readonly ConcurrentDictionary<DocumentUri, byte> _openFeatureDocuments = new();
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
@@ -55,7 +65,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
         IParseCoordinator parseCoordinator,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        ILspWorkspaceScopeManager? scopeManager = null,
+        ILspTelemetryService? telemetryService = null)
     {
         _documentBufferService = documentBufferService;
         _taggerService = taggerService;
@@ -67,6 +79,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _logger = logger;
         _parseCoordinator = parseCoordinator;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _scopeManager = scopeManager;
+        _telemetryService = telemetryService;
     }
 
     /// <summary>Reports the language id (<c>"csharp"</c> or <c>"Gherkin"</c>) the server should associate with the given document URI.</summary>
@@ -111,6 +125,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
         _logger.LogInfo($"Document opened: {uri} (version {version})");
         _documentBufferService.Update(uri, version, text);
+        ReportFeatureFileOpened(uri);
 
         // Off the shared Serial dispatch lane: the buffer update above is
         // synchronous and immediate, but the parse + MatchCacheChangedNotification publish is
@@ -202,6 +217,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
         _logger.LogInfo($"Document closed: {uri}");
         _documentBufferService.Remove(uri);
+        _openFeatureDocuments.TryRemove(uri, out _);
         _bindingMatchService.InvalidateAllForDocument(uri.ToString());
 
         // Repopulate the match cache from disk so the file's usages remain discoverable by
@@ -223,6 +239,22 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             });
 
         return Unit.Value;
+    }
+
+    /// <summary>Sends <c>Project.FeatureFile.Opened</c> once per open-lifetime of a feature document, identically for every IDE.</summary>
+    private void ReportFeatureFileOpened(DocumentUri uri)
+    {
+        if (_telemetryService is null || !_openFeatureDocuments.TryAdd(uri, 0))
+            return;
+
+        var project = _scopeManager?.ResolvePrimaryOwner(uri);
+        _telemetryService.SendEvent(TelemetryEvents.ProjectFeatureFileOpened, new()
+        {
+            ["ProjectTargetFramework"] = project?.TargetFrameworkMonikers,
+            ["ProgrammingLanguage"] = project is null
+                ? null
+                : ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),
+        });
     }
 
     private static bool IsCSharp(DocumentUri uri) =>

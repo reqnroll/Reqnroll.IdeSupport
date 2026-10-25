@@ -65,7 +65,7 @@ Every event, ordered by name. "From" says where the event originates: the LSP se
 | `Project.Creation.Started` | VS | The new-project wizard opened. | 4 |
 | `Project.Discovery.Executed` | Server | A binding-discovery run completed (Roslyn or connector). | 2 |
 | `Project.FeatureFile.Added` | VS | A feature file was added through the add-item command. | 4 |
-| `Project.FeatureFile.Opened` | VS | A `.feature` file was opened. | 4 |
+| `Project.FeatureFile.Opened` | Server | A `.feature` file was opened (once per open-lifetime). | 3 |
 | `Project.Opened` | Server | A Reqnroll project was discovered in the workspace for the first time. | 3 |
 | `Project.ReqnrollConfig.Added` | VS | A `reqnroll.json` was added through the add-item command. | 4 |
 | `Project.TagIndex.FirstScanCompleted` | Server | A project's tag index was built for the first time (the cost of the first tag completion). | 3 |
@@ -440,11 +440,23 @@ how many scenarios a hook typically applies to.
 | | |
 |---|---|
 | **Emitter** | `LspWorkspaceScopeManager` (server) |
-| **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Project.FeatureFile.Opened` |
+| **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the retired per-client `Project.FeatureFile.Opened` |
 | **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero); `ProjectTargetFramework` (string, the full TFM moniker); `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`, from the project-file extension — never the path). The Reqnroll version is *not* here: they are reported by the first `Project.Discovery.Executed` |
 
 **Analytics use.** Active-session project counts; per-solution feature-file scale. A *sessions*
 proxy: one event per project per server lifetime.
+
+### `Project.FeatureFile.Opened`
+
+*Constant: `TelemetryEvents.ProjectFeatureFileOpened`*
+| | |
+|---|---|
+| **Emitter** | `TextDocumentSyncHandler` (server), on `textDocument/didOpen` for a `.feature` document |
+| **When** | Once per open-lifetime: a repeated `didOpen` without an intervening `didClose` is not counted again. Identical for VS, VS Code and Rider (the VS client no longer sends it) |
+| **Properties** | `ProjectTargetFramework` (string, the primary owner's full TFM moniker) and `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`); both `null` when no project owns the file yet. The VS-only `ReqnrollVersion`, `LegacySpecFlow` and `SingleFileGeneratorUsed` are no longer sent on this event; the Reqnroll version is on `Project.Discovery.Executed` |
+
+**Analytics use.** Feature files opened per session, comparable across IDEs. One event per open;
+volume is bounded by the number of tabs a user opens.
 
 ### `Lookup.RenameTargets`
 
@@ -553,7 +565,6 @@ only originate here.
 | Event | Emitter / when | Properties |
 |---|---|---|
 | `Lifecycle.Extension.Loaded` | `MonitorOpenProjectSystem` — on extension activation in an IDE scope | — |
-| `Project.FeatureFile.Opened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
 | `Lifecycle.Extension.Installed` | `MonitorExtensionInstalled` — first activation after installation | — |
 | `Lifecycle.Extension.Upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
 | `Lifecycle.Usage.Recorded` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService`, right after incrementing `UsageDays`); the running day count is the `UsageDays` property | `UsageDays` |
@@ -588,7 +599,7 @@ three values in the application-level `PropertiesComponent` under `net.reqnroll.
 counting true new installs. `ai.user.id` remains per IDE, so one person using two IDEs counts as two users.
 `Server.Session.Started` (from all IDEs) is available as a cross-check.
 
-**Project-level information comes from the server.** Reqnroll version, TFM, language and counts are reported by `Project.Opened`, `Project.Discovery.Executed` and `Project.Characteristics.Reported`, identically for all IDEs; the VS host sends no separate project-loaded event. The Reqnroll version is reported on discovery, not duplicated on `Project.Opened`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available server-side (the connector does not expose them), so they exist only on the VS `Project.FeatureFile.Opened`, `Project.FeatureFile.Added` and `Project.ReqnrollConfig.Added` events (see ¹), as per-event rather than per-project-open signals.
+**Project-level information comes from the server.** Reqnroll version, TFM, language and counts are reported by `Project.Opened`, `Project.Discovery.Executed` and `Project.Characteristics.Reported`, identically for all IDEs; the VS host sends no separate project-loaded event. The Reqnroll version is reported on discovery, not duplicated on `Project.Opened`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available server-side (the connector does not expose them), so they exist only on the VS `Project.FeatureFile.Added` and `Project.ReqnrollConfig.Added` events (see ¹), as per-event rather than per-project-open signals.
 
 **Analytics use.** Adoption lifecycle: install→upgrade funnel, daily-active heartbeat (rollup
 `Lifecycle.Usage.Recorded` by `UsageDays`), project-scale signals (ReqnrollVersion/TFM distribution,
