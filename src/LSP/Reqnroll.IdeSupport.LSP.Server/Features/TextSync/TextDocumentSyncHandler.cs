@@ -245,14 +245,24 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         if (_telemetryService is null)
             return;
 
-        var project = _scopeManager?.ResolvePrimaryOwner(uri);
-        _telemetryService.SendEvent(TelemetryEvents.ProjectFeatureFileOpened, new()
+        // Telemetry must never break document sync, so a failure here is logged and dropped.
+        try
         {
-            ["ProjectTargetFramework"] = project?.TargetFrameworkMonikers,
-            ["ProgrammingLanguage"] = project is null
-                ? null
-                : ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),
-        });
+            // Null project properties mean no project owned the file yet (e.g. a tab restored
+            // at startup before project discovery); they are left null rather than deferred.
+            var project = _scopeManager?.ResolvePrimaryOwner(uri);
+            _telemetryService.SendEvent(TelemetryEvents.ProjectFeatureFileOpened, new()
+            {
+                ["ProjectTargetFramework"] = project?.TargetFrameworkMonikers,
+                ["ProgrammingLanguage"] = project is null
+                    ? null
+                    : ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Failed to send {TelemetryEvents.ProjectFeatureFileOpened}: {ex.Message}");
+        }
     }
 
     private static bool IsCSharp(DocumentUri uri) =>

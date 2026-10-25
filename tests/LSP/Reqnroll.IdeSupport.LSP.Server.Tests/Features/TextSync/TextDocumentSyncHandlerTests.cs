@@ -343,6 +343,18 @@ public class TextDocumentSyncHandlerTests
     }
 
     [Fact]
+    public async Task Handle_DidOpen_feature_still_syncs_document_when_telemetry_throws()
+    {
+        _telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => throw new InvalidOperationException("sink down"));
+
+        var act = () => CreateSut().Handle(OpenParams(FeatureUri), CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        _bufferService.TryGet(FeatureUri, out _).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_DidOpen_csharp_does_not_report_FeatureFile_Opened()
     {
         await CreateSut().Handle(OpenParams(CsUri), CancellationToken.None);

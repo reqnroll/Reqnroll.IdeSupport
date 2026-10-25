@@ -62,8 +62,8 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
     private readonly CancellationTokenSource _cts = new();
 
     // Resolved lazily (not in the constructor) since MEF composition may not be ready yet at
-    // construction time; cached thereafter. Used only for evicting its cached project scopes on project removal/solution close —
-    // every other responsibility in this class talks to DTE/the LSP pipe directly.
+    // construction time; cached thereafter. Used only for evicting its cached project scopes on
+    // project removal/solution close — every other responsibility in this class talks to DTE/the LSP pipe directly.
     private IVsIdeScope? _ideScope;
 
     // Subscribed lazily, on first need (a projectLoaded baseline that went out with
