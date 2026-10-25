@@ -5,10 +5,10 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Turns the server's `textDocument/definition` lookup event into `Command.GoToStepDefinition`, but
- * only for a lookup that follows an explicit Go To Definition ([ReqnrollGoToDefinitionAction]).
+ * only for a lookup that follows an explicit Go To Definition ([GoToStepDefinitionActionListener], [ReqnrollGoToDefinitionAction]).
  *
  * The platform sends `textDocument/definition` on hover as well, so the lookup alone is not a
- * navigation. The action [arm]s this gate just before running the platform action; the next
+ * navigation. They [arm] this gate just before the platform action runs; the next
  * `Lookup.FindStepDefinitions` for `textDocument/definition` within [WINDOW_MILLIS] is then
  * reported with the same `LocationCount` the server computed, and the gate disarms.
  */
