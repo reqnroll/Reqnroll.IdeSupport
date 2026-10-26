@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Text;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Rename;
 
@@ -9,7 +10,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.Rename;
 /// Shared parsing of step-definition expression text into parameter slots and the static
 /// (literal) segments around them. A parameter slot is a Cucumber placeholder (<c>{int}</c>,
 /// <c>{string}</c>, <c>{}</c>, …) or a regex capturing group (an unescaped <c>(</c> that is not
-/// a non-capturing / look-around group).
+/// a non-capturing / look-around group). In a Cucumber expression only the placeholders are
+/// slots: <c>(text)</c> is optional text, not a parameter.
 /// </summary>
 public static class StepExpressionParameters
 {
@@ -32,9 +34,11 @@ public static class StepExpressionParameters
 
     /// <summary>
     /// Returns the length of the parameter slot starting at <paramref name="index"/> in
-    /// <paramref name="s"/>, or 0 when no slot starts there.
+    /// <paramref name="s"/>, or 0 when no slot starts there. <paramref name="isCucumber"/> says
+    /// whether <paramref name="s"/> is a Cucumber expression, where <c>(</c> opens optional text
+    /// rather than a capturing group.
     /// </summary>
-    public static int SlotLengthAt(string s, int index)
+    public static int SlotLengthAt(string s, int index, bool isCucumber = false)
     {
         var c = s[index];
 
@@ -60,11 +64,28 @@ public static class StepExpressionParameters
                 else if (s[j] == ')' && !IsEscaped(s, j)) depth--;
                 j++;
             }
-            return depth == 0 ? j - index : 0;
+            var length = depth == 0 ? j - index : 0;
+
+            // In a Cucumber expression a group of plain words is optional text. A group holding
+            // regex syntax is still a capturing group, which keeps a hybrid such as
+            // "{int} cukes and (\d+) apples" resolving as it always has.
+            if (isCucumber && length > 0 && !ContainsRegexSyntax(s, index + 1, length - 2))
+                return 0;
+
+            return length;
         }
 
         return 0;
     }
+
+    /// <summary>Whether <paramref name="expression"/> is written in Cucumber-expression syntax rather than as a regex.</summary>
+    public static bool IsCucumberExpression(string expression)
+        => CucumberExpressionDetector.IsCucumberExpression(expression);
+
+    private static bool ContainsRegexSyntax(string s, int start, int count)
+        => s.IndexOfAny(RegexMetacharacters, start, count) >= 0;
+
+    private static readonly char[] RegexMetacharacters = { '\\', '.', '*', '+', '?', '[', ']', '|', '^', '$', '(', ')' };
 
     /// <summary>
     /// Walks the parameter slots of <paramref name="expression"/> in order, replacing each with
@@ -75,12 +96,13 @@ public static class StepExpressionParameters
     /// </summary>
     internal static string ReplaceSlotsWithValues(string expression, IReadOnlyList<string> values)
     {
+        var isCucumber = CucumberExpressionDetector.IsCucumberExpression(expression);
         var sb = new StringBuilder();
         var valueIdx = 0;
         var i = 0;
         while (i < expression.Length)
         {
-            var slotLength = SlotLengthAt(expression, i);
+            var slotLength = SlotLengthAt(expression, i, isCucumber);
             if (slotLength > 0)
             {
                 if (valueIdx < values.Count)
@@ -100,11 +122,12 @@ public static class StepExpressionParameters
     /// <summary>Returns the ordered parameter-slot substrings of <paramref name="expression"/>.</summary>
     public static List<string> ExtractSlots(string expression)
     {
+        var isCucumber = CucumberExpressionDetector.IsCucumberExpression(expression);
         var slots = new List<string>();
         var i = 0;
         while (i < expression.Length)
         {
-            var slotLength = SlotLengthAt(expression, i);
+            var slotLength = SlotLengthAt(expression, i, isCucumber);
             if (slotLength > 0)
             {
                 slots.Add(expression.Substring(i, slotLength));
@@ -147,12 +170,13 @@ public static class StepExpressionParameters
     /// </summary>
     public static List<string> StaticSegments(string expression)
     {
+        var isCucumber = CucumberExpressionDetector.IsCucumberExpression(expression);
         var segments = new List<string>();
         var sb = new StringBuilder();
         var i = 0;
         while (i < expression.Length)
         {
-            var slotLength = SlotLengthAt(expression, i);
+            var slotLength = SlotLengthAt(expression, i, isCucumber);
             if (slotLength > 0)
             {
                 segments.Add(sb.ToString());
