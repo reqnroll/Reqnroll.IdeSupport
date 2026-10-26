@@ -220,4 +220,44 @@ public class StepExpressionParametersTests
         StepExpressionParameters.ReplaceSlotsWithValues("{int}{string}", new List<string> { "5", "\"x\"" })
             .Should().Be("5\"x\"");
     }
+
+    // ── Cucumber optional text is not a parameter slot ──────────────────────────────
+
+    [Fact]
+    public void SlotLengthAt_returns_zero_for_optional_text_when_told_the_expression_is_cucumber()
+    {
+        StepExpressionParameters.SlotLengthAt("I have (an) apple", 7, isCucumber: true).Should().Be(0);
+    }
+
+    [Fact]
+    public void ExtractSlots_ignores_optional_text_in_a_cucumber_expression()
+    {
+        StepExpressionParameters.ExtractSlots("I have {int} cuke(s)").Should().Equal("{int}");
+    }
+
+    [Fact]
+    public void ExtractSlots_ignores_optional_text_in_a_cucumber_expression_without_placeholders()
+    {
+        StepExpressionParameters.ExtractSlots("I have (an) apple").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ReplaceSlotsWithValues_keeps_optional_text_in_a_cucumber_expression()
+    {
+        StepExpressionParameters.ReplaceSlotsWithValues("I have {int} cuke(s)", new[] { "5" })
+            .Should().Be("I have 5 cuke(s)");
+    }
+
+    [Fact]
+    public void StaticSegments_keeps_optional_text_in_a_cucumber_expression()
+    {
+        StepExpressionParameters.StaticSegments("I have {int} cuke(s)")
+            .Should().Equal("I have ", " cuke(s)");
+    }
+
+    [Fact]
+    public void ExtractSlots_still_treats_a_regex_group_as_a_slot()
+    {
+        StepExpressionParameters.ExtractSlots(@"^I have (\d+) cuke(s)?$").Should().Equal(@"(\d+)", "(s)");
+    }
 }

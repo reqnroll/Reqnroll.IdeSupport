@@ -415,12 +415,13 @@ internal sealed class CSharpAttributeLiteralResolver
         if (newSlots.Count != originalSlots.Count)
             return newExpression;
 
+        var isCucumber = StepExpressionParameters.IsCucumberExpression(newExpression);
         var sb = new System.Text.StringBuilder();
         var slotIndex = 0;
         var i = 0;
         while (i < newExpression.Length)
         {
-            var slotLength = StepExpressionParameters.SlotLengthAt(newExpression, i);
+            var slotLength = StepExpressionParameters.SlotLengthAt(newExpression, i, isCucumber);
             if (slotLength > 0)
             {
                 sb.Append(originalSlots[slotIndex]);
