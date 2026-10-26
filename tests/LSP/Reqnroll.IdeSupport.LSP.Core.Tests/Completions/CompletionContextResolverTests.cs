@@ -332,6 +332,31 @@ public class CompletionContextResolverTests
         ctx.Step.Should().BeSameAs(StepLine2);
     }
 
+    [Fact]
+    public void Cursor_past_end_of_step_line_is_clamped_to_the_line_end()
+    {
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new[] { StepTag(StepLine2, snapshot) });
+
+        // Line 2 is 19 characters long; column 500 does not exist.
+        var ctx = (StepCompletionContext)_sut.Resolve(snapshot, 2, 500, ProjectBindingRegistry.Invalid, "en")!;
+
+        ctx.TypedAfterKeyword.Should().Be("some text");
+    }
+
+    [Fact]
+    public void Cursor_past_end_of_definition_line_returns_null_without_throwing()
+    {
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
+
+        var ctx = _sut.Resolve(snapshot, 1, 500, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeNull();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static IGherkinTextSnapshot Snapshot(string text) => new FakeSnapshot(text);
