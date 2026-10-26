@@ -46,7 +46,7 @@ sequenceDiagram
     participant SRV as Server
     participant PM as ProjectManager
 
-    VSC->>E: activate (onLanguage:reqnroll / plaintext, or workspaceContains **/*.feature)
+    VSC->>E: activate (onLanguage:reqnroll, or workspaceContains **/*.feature)
     E->>E: register commands, create output and trace channels
     E->>E: resolve server binary for host RID
     E->>LC: construct (--ide vscode) and start
@@ -89,7 +89,7 @@ sequenceDiagram
 ## 6. Behaviour and contracts
 
 **Manifest.** Publisher `Reqnroll`, name `reqnroll-ide-support-vscode`. Activation: `onLanguage:reqnroll`,
-`onLanguage:plaintext`, `workspaceContains:**/*.feature`. `.feature` is registered to language `reqnroll` with the
+`workspaceContains:**/*.feature`. Plain-text files do not activate it: `.feature` is always typed `reqnroll`, and the client's document selector only matches that language. `.feature` is registered to language `reqnroll` with the
 TextMate scope `text.reqnroll.feature`. For that language the extension is the default formatter and
 `editor.formatOnType` is on (table auto-formatting). Settings: `reqnroll.trace.server` (`off`/`messages`/`verbose`),
 `reqnroll.protocolLogLevel` (default `Warning`), `reqnroll.testOutcomes.enabled` (default off). Minimum VS Code is 1.96

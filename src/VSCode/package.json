@@ -39,7 +39,6 @@
     "feature"
   ],
   "activationEvents": [
-    "onLanguage:plaintext",
     "onLanguage:reqnroll",
     "workspaceContains:**/*.feature"
   ],

@@ -130,7 +130,7 @@ the GitHub tracker with the `Reqnroll` output channel and, for protocol problems
 
 A single server instance serves all open workspace folders (multi-root). It ends when the IDE workspace closes. Launch
 timing differs: **Visual Studio** eagerly at extension load; **Rider** at project startup through `postStartupActivity`;
-**VS Code** lazily on a matching activation event (`onLanguage:reqnroll`, `onLanguage:plaintext`) or earlier when
+**VS Code** lazily on a matching activation event (`onLanguage:reqnroll`) or earlier when
 `workspaceContains:**/*.feature`.
 
 ## 7. Pitfalls and design decisions
