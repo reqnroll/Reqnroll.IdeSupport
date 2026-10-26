@@ -17,6 +17,12 @@
   "engines": {
     "vscode": "^1.96.0"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Reqnroll evaluates the workspace's project files with MSBuild and writes test settings into the workspace, which can run code from an untrusted repository."
+    }
+  },
   "categories": [
     "Programming Languages",
     "Testing",
