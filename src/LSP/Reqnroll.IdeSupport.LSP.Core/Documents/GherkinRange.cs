@@ -78,6 +78,20 @@ public class GherkinRange : IEquatable<GherkinRange>
             && ReferenceEquals(Snapshot, other.Snapshot);
     }
 
+    /// <summary>Determines whether <paramref name="obj"/> is a <see cref="GherkinRange"/> equal to this range.</summary>
+    public override bool Equals(object? obj) => obj is GherkinRange other && Equals(other);
+
+    /// <summary>Returns a hash code consistent with <see cref="Equals(GherkinRange)"/>: the snapshot contributes by reference.</summary>
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hashCode = Start;
+            hashCode = (hashCode * 397) ^ Length;
+            return (hashCode * 397) ^ System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Snapshot);
+        }
+    }
+
     // Line/character resolution — needed by LSP response mapping
     /// <summary>Gets the (line, character) position of the start of the range.</summary>
     public (int Line, int Character) StartLinePosition => ResolveOffset(Snapshot, Start);

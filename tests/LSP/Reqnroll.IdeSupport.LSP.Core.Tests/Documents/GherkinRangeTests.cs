@@ -12,6 +12,31 @@ public class GherkinRangeTests
 
     private static StubGherkinTextSnapshot CreateSnapshot(string text) => new(text);
 
+    // ── Equality ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Ranges_over_the_same_snapshot_with_the_same_extent_are_equal_and_hash_alike()
+    {
+        var snapshot = CreateSnapshot(ThreeLines);
+        var first = new GherkinRange(snapshot, 2, 3);
+        object second = new GherkinRange(snapshot, 2, 3);
+
+        first.Equals(second).Should().BeTrue();
+        second.GetHashCode().Should().Be(first.GetHashCode());
+    }
+
+    [Fact]
+    public void Ranges_differing_in_start_length_or_snapshot_are_not_equal()
+    {
+        var snapshot = CreateSnapshot(ThreeLines);
+        var range = new GherkinRange(snapshot, 2, 3);
+
+        range.Equals((object)new GherkinRange(snapshot, 3, 3)).Should().BeFalse();
+        range.Equals((object)new GherkinRange(snapshot, 2, 4)).Should().BeFalse();
+        range.Equals((object)new GherkinRange(CreateSnapshot(ThreeLines), 2, 3)).Should().BeFalse();
+        range.Equals((object)"not a range").Should().BeFalse();
+    }
+
     // ── ResolveOffset via StartLinePosition/EndLinePosition ─────────────────────
 
     [Fact]
