@@ -61,15 +61,25 @@ public class LspFrameCodecTests
         reEncoded.Should().Contain("\"2026-10-25T10:11:12Z\"");
     }
 
-    [Fact]
-    public async Task ReadNextFrameAsync_treats_content_after_the_json_object_as_malformed()
+    [Theory]
+    [InlineData("{\"jsonrpc\":\"2.0\"} trailing")]
+    [InlineData("{\"jsonrpc\":\"2.0\"} {\"id\":1}")]
+    [InlineData("{\"jsonrpc\":\"2.0\"} 5")]
+    [InlineData("{\"jsonrpc\":\"2.0\"} []")]
+    [InlineData("{\"jsonrpc\":\"2.0\"} /* comment */")]
+    [InlineData("{\"jsonrpc\":\"2.0\"}   ")]
+    public async Task ReadNextFrameAsync_accepts_a_body_exactly_when_JObject_Parse_does(string json)
     {
+        var parseAccepts = true;
+        try { JObject.Parse(json); }
+        catch (Exception) { parseAccepts = false; }
+
         var pipe = new Pipe();
-        await pipe.Writer.WriteAsync(RawFrame("{\"jsonrpc\":\"2.0\"} trailing"));
+        await pipe.Writer.WriteAsync(RawFrame(json));
 
         var frame = await LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None);
 
-        frame!.Body.Should().BeNull();
+        (frame!.Body is not null).Should().Be(parseAccepts);
     }
 
     [Fact]
