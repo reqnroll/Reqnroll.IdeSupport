@@ -43,6 +43,7 @@ internal sealed class TagLinkTracker
     private readonly IIdeSupportLogger? _logger;
     private readonly object _gate = new();
     private CancellationTokenSource? _refresh;
+    private int _missingUriRetried;
     private volatile IReadOnlyList<TrackedLink> _links = Array.Empty<TrackedLink>();
 
     /// <summary>Raised, from any thread, when the set of links changed; the span covers the whole buffer.</summary>
@@ -104,7 +105,9 @@ internal sealed class TagLinkTracker
         CancellationTokenSource refresh;
         lock (_gate)
         {
+            // Cancelled before disposal: a superseded refresh still holds its token and observes the cancellation.
             _refresh?.Cancel();
+            _refresh?.Dispose();
             refresh = _refresh = new CancellationTokenSource();
         }
 
@@ -120,8 +123,17 @@ internal sealed class TagLinkTracker
 
             var getLinks = TagLinkRedirect.GetLinksAsync;
             var fileUri = TryGetFileUri();
-            if (getLinks is null || fileUri is null)
+            if (getLinks is null)
                 return;
+
+            if (fileUri is null)
+            {
+                // The buffer's document may be attached just after the tracker is created: look once more shortly,
+                // rather than waiting for the next edit.
+                if (Interlocked.Exchange(ref _missingUriRetried, 1) == 0)
+                    ScheduleRefresh(DebounceMilliseconds);
+                return;
+            }
 
             var entries = await getLinks(fileUri, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
