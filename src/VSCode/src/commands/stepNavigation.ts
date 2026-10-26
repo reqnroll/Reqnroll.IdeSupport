@@ -24,7 +24,7 @@ interface FindStepDefinitionsResponse {
  * Navigates directly if there's exactly one binding, or shows a `QuickPick` of
  * `Class.Method` / `[Given("expression")]` / file:line — the same rows Visual Studio and Rider list,
  * which show why a step is ambiguous. A binding whose source isn't on this machine is listed and
- * explained rather than left out. F12 / Peek Definition still use the standard request.
+ * explained rather than left out. F12 / Ctrl+Click use the standard request and are reported by `lsp/definitionNavigation.ts`.
  */
 export async function doGoToStepDefinition(client: LanguageClient): Promise<void> {
   const editor = vscode.window.activeTextEditor;

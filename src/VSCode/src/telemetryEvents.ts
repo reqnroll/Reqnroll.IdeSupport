@@ -9,7 +9,7 @@
  * for events the VS Code client emits directly, where only the client is the source of truth.
  */
 export const TelemetryEvents = {
-  /** A genuine "Go to Step Definition" navigation via `doGoToStepDefinition`; `LocationCount`. F12/Ctrl+click use `textDocument/definition`, which also fires on hover, so they are not reported (the server counts them as lookups). */
+  /** A genuine "Go to Step Definition" navigation: `doGoToStepDefinition`, or F12/Ctrl+click once the editor lands on a `textDocument/definition` target (`lsp/definitionNavigation.ts`; the request alone also fires on hover, so the server counts it as a lookup); `LocationCount`. */
   commandGoToStepDefinition: 'Command.GoToStepDefinition',
   /** A genuine "Go to Hooks" navigation via `doGoToHooks` — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
   commandGoToHook: 'Command.GoToHook',

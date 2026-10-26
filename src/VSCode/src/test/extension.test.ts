@@ -24,6 +24,7 @@ import './lsp/serverRestart.test';
 // up -- see the doc comment atop `lsp/codeLensRefresh.test.ts`.
 import './lsp/codeLensRefresh.test';
 import './lsp/tagLinks.test';
+import './lsp/definitionNavigation.test';
 import './telemetry.test';
 import './clientExceptionTelemetry.test';
 import './resolveServerPath.test';

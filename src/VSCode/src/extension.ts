@@ -22,6 +22,12 @@ import {
   openTagLink,
   registerTagLinkRefresh,
 } from './lsp/tagLinks';
+import {
+  DefinitionNavigationTracker,
+  createDefinitionNavigationMiddleware,
+  registerDefinitionNavigationTracking,
+  reportDefinitionNavigation,
+} from './lsp/definitionNavigation';
 import { getCodeLensRefreshEvent } from './commands/codeLensRefresh';
 import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
@@ -428,6 +434,11 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // Lets the formatting middleware tell format-on-save from an explicit Format Document.
   context.subscriptions.push(registerSaveTracking());
 
+  // F12 / Ctrl+Click go through textDocument/definition, which also fires on hover; a navigation is
+  // only reported once the editor actually lands on a returned location (lsp/definitionNavigation.ts).
+  const definitionNavigation = new DefinitionNavigationTracker(reportDefinitionNavigation);
+  context.subscriptions.push(registerDefinitionNavigationTracking(definitionNavigation));
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: REQNROLL_LANGUAGE_ID, pattern: '**/*.feature' }],
     synchronize: {
@@ -465,6 +476,8 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
       // this re-targets each at 'reqnroll.openTagLink' so a click is observable (telemetry), and
       // keeps the linked tags permanently underlined.
       ...createTagLinkMiddleware(tagLinkDecorations),
+      // F12 / Ctrl+Click on a step: reports Command.GoToStepDefinition once the navigation is confirmed.
+      ...createDefinitionNavigationMiddleware(definitionNavigation),
     },
   };
 
