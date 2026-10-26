@@ -62,6 +62,17 @@ public class LspFrameCodecTests
     }
 
     [Fact]
+    public async Task ReadNextFrameAsync_treats_content_after_the_json_object_as_malformed()
+    {
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(RawFrame("{\"jsonrpc\":\"2.0\"} trailing"));
+
+        var frame = await LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None);
+
+        frame!.Body.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ReadNextFrameAsync_delivers_a_frame_split_across_many_small_writes()
     {
         // Feeds the codec's ReadAsync loop bytes one at a time -- exercises both the "haven't seen

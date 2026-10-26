@@ -161,6 +161,8 @@ internal static class LspFrameCodec
                 DateParseHandling = DateParseHandling.None
             };
             body = JObject.Load(jsonReader);
+            // JObject.Parse rejects content after the object; Load does not, so read to the end to keep that.
+            while (jsonReader.Read()) { }
         }
         catch (Exception)
         {
