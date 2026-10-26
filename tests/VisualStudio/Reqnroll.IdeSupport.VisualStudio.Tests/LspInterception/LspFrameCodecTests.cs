@@ -49,6 +49,19 @@ public class LspFrameCodecTests
     }
 
     [Fact]
+    public async Task ReadNextFrameAsync_keeps_date_like_strings_unchanged_through_a_re_encode()
+    {
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(RawFrame("{\"jsonrpc\":\"2.0\",\"params\":{\"stamp\":\"2026-10-25T10:11:12Z\"}}"));
+
+        var frame = await LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None);
+
+        frame!.Body!["params"]!["stamp"]!.Type.Should().Be(JTokenType.String);
+        var reEncoded = Encoding.UTF8.GetString(LspFrameCodec.EncodeFrame(frame.Body));
+        reEncoded.Should().Contain("\"2026-10-25T10:11:12Z\"");
+    }
+
+    [Fact]
     public async Task ReadNextFrameAsync_delivers_a_frame_split_across_many_small_writes()
     {
         // Feeds the codec's ReadAsync loop bytes one at a time -- exercises both the "haven't seen
