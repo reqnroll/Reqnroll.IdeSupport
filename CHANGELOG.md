@@ -1,5 +1,8 @@
 # [vNext]
 
+## Bug fixes:
+* In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
+
 # v2026.2 - 2026-10-25
 
 ## Improvements:
