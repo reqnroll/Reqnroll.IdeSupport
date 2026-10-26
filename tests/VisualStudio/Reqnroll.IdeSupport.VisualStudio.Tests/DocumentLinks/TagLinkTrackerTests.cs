@@ -81,6 +81,42 @@ public class TagLinkTrackerTests
         }
     }
 
+    [Fact]
+    public async Task A_document_attached_just_after_the_tracker_is_created_is_picked_up_without_an_edit()
+    {
+        var fetched = new TaskCompletionSource<string>();
+        TagLinkRedirect.GetLinksAsync = (uri, _) =>
+        {
+            fetched.TrySetResult(uri);
+            return Task.FromResult<IReadOnlyList<TagLinkEntry>>(Array.Empty<TagLinkEntry>());
+        };
+        TagLinkTracker? tracker = null;
+        try
+        {
+            var snapshot = CreateSnapshot();
+            var buffer = Substitute.For<ITextBuffer>();
+            buffer.Properties.Returns(new PropertyCollection());
+            buffer.CurrentSnapshot.Returns(snapshot);
+
+            tracker = TagLinkTracker.GetOrCreate(buffer, null);
+            await Task.Delay(100); // the constructor's refresh found no document
+            fetched.Task.IsCompleted.Should().BeFalse();
+
+            var document = Substitute.For<ITextDocument>();
+            document.FilePath.Returns("C:/repo/a.feature");
+            buffer.Properties.AddProperty(typeof(ITextDocument), document);
+
+            var winner = await Task.WhenAny(fetched.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().BeSameAs(fetched.Task, "the tracker retries once when the document was not there yet");
+        }
+        finally
+        {
+            TagLinkRedirect.GetLinksAsync = null;
+            if (tracker is not null)
+                TagLinkRedirect.TrackerRegistry.UnregisterTagger(tracker, TagLinkTracker.RegistryKey);
+        }
+    }
+
     // ── TryGetSpan ───────────────────────────────────────────────────────────
 
     [Fact]
