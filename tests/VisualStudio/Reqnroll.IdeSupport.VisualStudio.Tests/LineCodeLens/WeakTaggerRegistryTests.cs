@@ -173,6 +173,24 @@ public class WeakTaggerRegistryTests
         refreshed.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Registering_a_tagger_drops_the_references_of_collected_ones()
+    {
+        var sut = CreateSut(out _);
+        RegisterATaggerThatIsThenAbandoned(sut, "*");
+        RegisterATaggerThatIsThenAbandoned(sut, "*");
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var live = new FakeTagger();
+        sut.RegisterTagger(live, "*");
+
+        sut.HeldReferenceCount("*").Should().Be(1);
+        GC.KeepAlive(live);
+    }
+
     /// <summary>
     /// Registers a tagger without letting the caller hold a strong reference to it, so it's
     /// actually eligible for collection once this method returns — a local variable in the calling

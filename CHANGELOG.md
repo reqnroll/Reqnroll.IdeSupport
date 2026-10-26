@@ -2,6 +2,8 @@
 
 ## Improvements:
 * VS Code now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user navigates from a step in a `.feature` file with F12 or Ctrl+click, as Visual Studio and Rider do. Previously only the explicit Go to Step Definition command was reported. A navigation is counted only once the editor arrives at one of the returned locations, so hovering with Ctrl held is not counted, and Peek Definition is not counted either (VS Code) - see #1266
+## Bug fixes:
+* In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
 
 # v2026.2 - 2026-10-25
 

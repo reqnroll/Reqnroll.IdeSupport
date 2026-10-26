@@ -5,6 +5,7 @@ using System.IO.Pipelines;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -153,7 +154,15 @@ internal static class LspFrameCodec
         JObject? body;
         try
         {
-            body = JObject.Parse(Utf8NoBom.GetString(bodyBytes));
+            // DateParseHandling.None keeps ISO-date-looking strings as strings, so a frame that is
+            // mutated and re-encoded does not have such values rewritten as DateTime.
+            using var jsonReader = new JsonTextReader(new System.IO.StringReader(Utf8NoBom.GetString(bodyBytes)))
+            {
+                DateParseHandling = DateParseHandling.None
+            };
+            body = JObject.Load(jsonReader);
+            // JObject.Parse rejects content after the object; Load does not, so read to the end to keep that.
+            while (jsonReader.Read()) { }
         }
         catch (Exception)
         {

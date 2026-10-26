@@ -151,13 +151,14 @@ public class FeatureStepTextBuilderTests
         // Two literal backslashes before '(' is an *escaped backslash* followed by a genuine,
         // unescaped capturing group -- not an escaped '(' (which would be a single backslash).
         // A naive one-character-lookback escape check misclassifies this as escaped and skips
-        // the group entirely, silently leaving the captured value un-injected.
+        // the group entirely, silently leaving the captured value un-injected. The anchors mark the
+        // expression as a regex; unanchored, "(is captured)" would be Cucumber optional text.
         var result = FeatureStepTextBuilder.Build(
-            @"value \\(is captured)", oldExpression: null,
+            @"^value \\(is captured)$", oldExpression: null,
             new Regex(@"^value (\d+)$"),
             "value 42");
 
-        result.Should().Be(@"value \\42");
+        result.Should().Be(@"^value \\42$");
     }
 
     // ── Scenario Outline with divergent step text ──────────────────────────────

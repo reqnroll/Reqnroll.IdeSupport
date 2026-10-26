@@ -53,7 +53,7 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
         if (stepTag?.Data is IdeSupportGherkinStep cursorStep)
         {
             var snapshotLine = snapshot.GetLineFromLineNumber(cursorLine);
-            var cursorOffset = snapshotLine.Start + cursorChar;
+            var cursorOffset = ClampedCursorOffset(snapshotLine, cursorChar);
 
             // Gherkin Location.Column is 1-based; Keyword includes the trailing space.
             var stepTextStart = snapshotLine.Start
@@ -85,7 +85,7 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
         if (definitionKeywordTag is not null)
         {
             var snapshotLine = snapshot.GetLineFromLineNumber(cursorLine);
-            var cursorOffset = snapshotLine.Start + cursorChar;
+            var cursorOffset = ClampedCursorOffset(snapshotLine, cursorChar);
             if (cursorOffset >= definitionKeywordTag.Range.End)
                 return null;
         }
@@ -96,4 +96,8 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
 
         return new KeywordCompletionContext(dialect, tokens);
     }
+
+    // A stale or out-of-range character position must not read past the line: clamp it to the line's text.
+    private static int ClampedCursorOffset(IGherkinTextSnapshotLine line, int cursorChar) =>
+        line.Start + Math.Max(0, Math.Min(cursorChar, line.GetText().TrimEnd('\r', '\n').Length));
 }

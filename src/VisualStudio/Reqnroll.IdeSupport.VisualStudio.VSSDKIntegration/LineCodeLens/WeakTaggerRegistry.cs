@@ -36,8 +36,17 @@ internal sealed class WeakTaggerRegistry<TTagger> where TTagger : class
         lock (_lock)
         {
             var list = _taggersByFile.GetOrAdd(fileUri, _ => new List<WeakReference<TTagger>>());
+            // Buckets that are never invalidated or unregistered per file would otherwise keep every collected tagger's reference.
+            list.RemoveAll(w => !w.TryGetTarget(out _));
             list.Add(new WeakReference<TTagger>(tagger));
         }
+    }
+
+    /// <summary>The number of references held for <paramref name="fileUri"/>, dead ones included.</summary>
+    internal int HeldReferenceCount(string fileUri)
+    {
+        lock (_lock)
+            return _taggersByFile.TryGetValue(fileUri, out var list) ? list.Count : 0;
     }
 
     public void UnregisterTagger(TTagger tagger, string fileUri)

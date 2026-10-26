@@ -1,4 +1,4 @@
-// Error and exception rates by day and IdeClient: unhandled exceptions and language-server failure events,
+// Error and exception rates by day, IdeClient and ExtensionVersion: unhandled exceptions and language-server failure events,
 // with the number of sessions started that day so the counts can be read as a rate.
 //
 // Table: customEvents (classic / Application Insights resource-scoped Logs). This is the legacy
@@ -9,7 +9,7 @@
 // Status: verified 2026-10-16 in the dev resource using this form (customEvents): returned Rider
 // client-origin UnhandledException rows with Sessions and EventsPer100Sessions populated. The
 // ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted paths and the AppEvents form have not
-// been run yet.
+// been run yet. The ExtensionVersion split has not been run against live data yet.
 //
 // Sources
 // - UnhandledException: exceptions are sent as EVENTS (not to the Application Insights exceptions table), by the
@@ -22,7 +22,10 @@
 // - Events: how many were sent. AffectedUsers: distinct user_Id, so one user in a failure loop is one affected user.
 // - AffectedSessions: distinct ClientSessionId (IDE sessions) with at least one such event; 0 for events from a client
 //   that predates #1199.
-// - Sessions: ServerSessionStarted that day for the same IdeClient. EventsPer100Sessions = Events / Sessions * 100.
+// - ExtensionVersion: the extension build, stamped by the host on every event it transmits (server- and host-originated
+//   alike), so failures and the session denominator are both split by the version that produced them. Events with no
+//   ExtensionVersion (older clients) group under an empty string.
+// - Sessions: ServerSessionStarted that day for the same IdeClient and ExtensionVersion. EventsPer100Sessions = Events / Sessions * 100.
 //   For ServerStartFailed this is relative to sessions that DID start, so it understates the true failure rate.
 // - UnhandledException stack frames are only attached for the first ~25 distinct stacks per session, but the event
 //   itself is always sent and counted, so Events is complete (subject to ingestion loss).
@@ -83,21 +86,22 @@ let failureEvents = dynamic(["Error.UnhandledException", "Server.Process.StartFa
 let sessionsPerDay = customEvents
     | where timestamp > ago(lookback)
     | where CanonicalEventName(name) == "Server.Session.Started"
-    | extend IdeClient = tostring(customDimensions.IdeClient)
-    | summarize Sessions = dcount(tostring(customDimensions.SessionId)) by Day = bin(timestamp, 1d), IdeClient;
+    | extend IdeClient = tostring(customDimensions.IdeClient), ExtensionVersion = tostring(customDimensions.ExtensionVersion)
+    | summarize Sessions = dcount(tostring(customDimensions.SessionId)) by Day = bin(timestamp, 1d), IdeClient, ExtensionVersion;
 customEvents
 | where timestamp > ago(lookback)
 | where CanonicalEventName(name) in (failureEvents)
 | extend IdeClient = tostring(customDimensions.IdeClient),
+         ExtensionVersion = tostring(customDimensions.ExtensionVersion),
          Origin = iff(CanonicalEventName(name) == "Error.UnhandledException",
                       iff(tostring(customDimensions.ExceptionOrigin) == "Client", "Client", "Server"),
                       ""),
          Reason = iff(CanonicalEventName(name) == "Error.UnhandledException", "", tostring(customDimensions.Reason))
 | summarize Events = count(), AffectedUsers = dcount(user_Id),
             AffectedSessions = dcount(tostring(customDimensions.ClientSessionId))
-        by Day = bin(timestamp, 1d), IdeClient, EventName = CanonicalEventName(name), Origin, Reason
-| join kind=leftouter sessionsPerDay on Day, IdeClient
+        by Day = bin(timestamp, 1d), IdeClient, ExtensionVersion, EventName = CanonicalEventName(name), Origin, Reason
+| join kind=leftouter sessionsPerDay on Day, IdeClient, ExtensionVersion
 | extend Sessions = coalesce(Sessions, 0)
 | extend EventsPer100Sessions = iff(Sessions > 0, round(100.0 * Events / Sessions, 1), real(null))
-| project Day, IdeClient, EventName, Origin, Reason, Events, AffectedUsers, AffectedSessions, Sessions, EventsPer100Sessions
+| project Day, IdeClient, ExtensionVersion, EventName, Origin, Reason, Events, AffectedUsers, AffectedSessions, Sessions, EventsPer100Sessions
 | order by Day desc, Events desc
