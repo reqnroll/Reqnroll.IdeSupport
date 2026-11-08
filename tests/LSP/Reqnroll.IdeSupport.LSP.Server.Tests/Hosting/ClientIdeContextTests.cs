@@ -145,7 +145,7 @@ public class ClientIdeContextTests
             context.ApplyClientInfo(new ClientInfo { Name = name });
 
             context.Behaviours.RequiresPushedSemanticTokens.Should().BeFalse($"'{name}' is a VS Code client");
-            context.Behaviours.RunsVscodeOpenCommandLocally.Should().BeTrue($"'{name}' is a VS Code client");
+            context.Behaviours.HonorsShowDocumentRequests.Should().BeTrue($"'{name}' is a VS Code client");
         }
     }
 

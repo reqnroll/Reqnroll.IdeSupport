@@ -241,7 +241,7 @@ rather than asking "is this Visual Studio?".
 flowchart LR
     A["--ide argument<br/>or clientInfo.name"] --> B["ClientIdeContext<br/>(MapClientInfoNameToIde)"]
     B --> C["IdeBehavioursResolver<br/>the only IDE-identity switch"]
-    C --> D["IdeBehaviours<br/>9 capability flags"]
+    C --> D["IdeBehaviours<br/>8 capability flags"]
     D --> E["20 read sites<br/>in 11 server files"]
 ```
 
@@ -260,13 +260,9 @@ flowchart LR
 | `UsesCustomCodeLensRefresh` | 1: `CodeLensRefreshRequester` |
 | `HonorsShowDocumentRequests` | 1: `DefineStepsTriggeredHandler` |
 | `NavigatesStepsViaFindStepDefinitions` | 1: `DefinitionHandler` |
-| `RunsVscodeOpenCommandLocally` | **0.** It is set for VS Code and asserted in tests, but no production code reads it |
 
 Findings:
 
-- `RunsVscodeOpenCommandLocally` is dead in production. Either wire it to the code action that emits
-  `vscode.open` (its doc comment describes that guard), or remove it together with its row in
-  [server-protocol.md](server-protocol.md).
 - `SupportsCodeLensResolve` is read five times inside one handler. A single "resolve now or defer"
   helper on the handler would make the VS/non-VS lens difference visible in one place.
 
@@ -296,5 +292,4 @@ None of these has been filed as an issue. In rough order of value for Beta reada
 1. **Comment hygiene pass** (§7), file by file starting with the table above, plus a check that
    rejects new `#NNN` references in comments.
 2. **Split `TestOutcomeTcpListener.HandleConnectionAsync`** into a per-connection state object (§4).
-3. **Resolve `RunsVscodeOpenCommandLocally`**: wire it or delete it (§8).
-4. **Rider `RunTestRunner.kt`**: separate the runner modes (§4), together with its comment cleanup.
+3. **Rider `RunTestRunner.kt`**: separate the runner modes (§4), together with its comment cleanup.

@@ -127,7 +127,6 @@ Behaviours, as the resolver sets them today:
 | `RequestsCompletionAfterDeletion` | The client asks for completion after a deletion, reporting the deleted text as `triggerCharacter` with kind `Invoked`; answer with an empty list | Visual Studio |
 | `AppliesRenameResponseEditNatively` | The client applies whatever edit the rename response carries, so the server pushes the real edit with `workspace/applyEdit` and returns an empty edit | Visual Studio |
 | `NavigatesStepsViaFindStepDefinitions` | Step navigation goes through `reqnroll/findStepDefinitions`; gates telemetry for `textDocument/definition` only | Visual Studio |
-| `RunsVscodeOpenCommandLocally` | The client runs the built-in `vscode.open` command itself | VS Code |
 | `HonorsShowDocumentRequests` | `window/showDocument` reliably opens a document | VS Code |
 | `SupportsCodeLensResolve` | The client issues `codeLens/resolve`, so per-lens counts can be deferred | none currently |
 

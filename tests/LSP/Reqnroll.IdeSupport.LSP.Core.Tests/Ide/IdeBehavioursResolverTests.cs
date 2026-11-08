@@ -16,7 +16,6 @@ public class IdeBehavioursResolverTests
 
     private static readonly IdeBehaviours VSCodeBehaviours = new()
     {
-        RunsVscodeOpenCommandLocally = true,
         HonorsShowDocumentRequests = true,
     };
 
@@ -31,7 +30,7 @@ public class IdeBehavioursResolverTests
     [Theory]
     [InlineData("vscode")]
     [InlineData("VSCode")]
-    public void VS_Code_gets_the_vscode_open_behaviours_and_none_of_the_VS_workarounds(string ide)
+    public void VS_Code_gets_the_show_document_behaviour_and_none_of_the_VS_workarounds(string ide)
     {
         IdeBehavioursResolver.Resolve(ide, null).Should().Be(VSCodeBehaviours);
     }
