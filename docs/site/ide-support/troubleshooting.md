@@ -18,6 +18,9 @@ below).
 * **All IDEs** — a project that targets more than one framework
   (`<TargetFrameworks>`) is analysed for a single target framework only. See
   [Multi-targeted projects](#multi-targeted-projects-use-a-single-target-framework).
+* **All IDEs** — while you edit a `.cs` file, binding attribute arguments are only understood
+  when they are plain string literals. See
+  [Bindings that use constants or other non-literal arguments](#bindings-that-use-constants-or-other-non-literal-arguments).
 
 ## A dialog explains why a rename, format or comment did nothing
 
@@ -58,6 +61,38 @@ listing the framework you want analysed first in `TargetFrameworks` selects it.
 
 Full support for multi-targeted projects is not planned for the Beta; the reasoning is recorded
 in [issue #1177](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/1177).
+
+## Bindings that use constants or other non-literal arguments
+
+```{warning}
+While you edit a `.cs` file, Reqnroll IDE Support reads its binding attributes from the source
+text alone, without compiling it. It only understands arguments written as a **string literal**
+(`"..."` or `@"..."`). A `const` reference, `nameof(...)`, a concatenation (`"a" + "b"`) or an
+interpolated string (`$"..."`) cannot be evaluated, and is treated as if no argument had been
+given.
+```
+
+For example, with `[Given(Texts.Login)] public void UserLogsIn()` the binding is handled like
+`[Given] public void UserLogsIn()`: its matching text comes from the method name and parameters,
+not from the value of `Texts.Login`. No diagnostic is shown. You may see:
+
+* **Wrong matches.** Steps whose text resembles the method name are linked to the binding, in
+  Go to Definition, hover, CodeLens counts and Find Step Usages.
+* **False "undefined step" diagnostics.** Steps that match the constant's real text can be
+  reported as undefined, with an offer to create a new step definition.
+* **Rename refused.** Rename Step cannot rewrite an attribute argument that is not a literal and
+  reports that the step definition expression cannot be detected.
+* **Lost scope and tag filters.** The same applies to `[Scope(Tag = ...)]`, `[Scope(Feature = ...)]`
+  and `[Scope(Scenario = ...)]`, to the tag arguments of hook attributes such as
+  `[BeforeScenario("...")]`, and to the `Order` argument of a hook. A non-literal value is dropped,
+  so the scope, tag filter or ordering is lost or weakened.
+
+After a successful build, bindings come from the compiled assembly and have their real values.
+The next time you edit that `.cs` file, the source text is read again and the wrong results can
+return until the next build.
+
+**Workaround:** write the arguments as string literals, or build the project and avoid editing the
+affected `.cs` file until you have finished reviewing the results.
 
 ## Can I have both extensions installed at once?
 
