@@ -1,9 +1,11 @@
 import * as assert from 'assert';
+import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { resolveLogDirectory } from '../../logging/logPaths';
 import {
+  FileLspTraceChannel,
   createTraceChannel,
   protocolLogLevelToArg,
   traceServerToLogLevel,
@@ -157,5 +159,81 @@ suite('createTraceChannel file output', () => {
       if (!found) await new Promise((r) => setTimeout(r, 100));
     }
     assert.ok(found, 'expected the trace entry in a fresh reqnroll-vscode-inspector-*.log file');
+  });
+});
+
+// An async stream failure (disk full, EBUSY, permissions) must not surface as an unhandled
+// 'error' event: it is reported once and later trace entries are discarded.
+suite('FileLspTraceChannel stream errors', () => {
+  const traceMessage = 'Sending request \'textDocument/hover - (7)\'.\nParams: {"x":1}';
+  let channel: FileLspTraceChannel | undefined;
+  let warnings: string[];
+
+  setup(() => {
+    warnings = [];
+  });
+
+  teardown(() => {
+    channel?.dispose();
+    channel = undefined;
+  });
+
+  function createFake(): {
+    stream: fs.WriteStream;
+    writes: string[];
+    emitter: EventEmitter;
+    destroyed: () => number;
+  } {
+    const emitter = new EventEmitter();
+    const writes: string[] = [];
+    let destroyCount = 0;
+    const fake = Object.assign(emitter, {
+      write(chunk: string): boolean {
+        writes.push(chunk);
+        return true;
+      },
+      end(): void {},
+      destroy(): void {
+        destroyCount++;
+      },
+    });
+    return {
+      stream: fake as unknown as fs.WriteStream,
+      writes,
+      emitter,
+      destroyed: () => destroyCount,
+    };
+  }
+
+  test('registers an error listener so the event is not unhandled', () => {
+    const { stream, emitter } = createFake();
+    channel = new FileLspTraceChannel(stream, (m) => warnings.push(m));
+
+    assert.strictEqual(emitter.listenerCount('error'), 1);
+    assert.doesNotThrow(() => emitter.emit('error', new Error('ENOSPC')));
+  });
+
+  test('logs once and drops later trace entries after an error', () => {
+    const { stream, writes, emitter, destroyed } = createFake();
+    channel = new FileLspTraceChannel(stream, (m) => warnings.push(m));
+
+    channel.trace(traceMessage);
+    emitter.emit('error', new Error('ENOSPC'));
+    emitter.emit('error', new Error('ENOSPC again'));
+    channel.trace(traceMessage);
+
+    assert.strictEqual(writes.length, 1, 'only the pre-error entry reaches the file');
+    assert.strictEqual(warnings.length, 1, 'the failure is reported exactly once');
+    assert.match(warnings[0], /ENOSPC/);
+    assert.strictEqual(destroyed(), 1);
+  });
+
+  test('dispose after an error does not throw', () => {
+    const { stream, emitter } = createFake();
+    channel = new FileLspTraceChannel(stream, (m) => warnings.push(m));
+
+    emitter.emit('error', new Error('EBUSY'));
+
+    assert.doesNotThrow(() => channel!.dispose());
   });
 });

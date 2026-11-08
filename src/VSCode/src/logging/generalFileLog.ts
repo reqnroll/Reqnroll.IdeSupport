@@ -47,6 +47,9 @@ export class GeneralFileLogChannel implements vscode.LogOutputChannel {
     this._inner = inner ?? vscode.window.createOutputChannel(name, { log: true });
     this.name = this._inner.name;
     this._stream = stream;
+    // Disk-full, permission and EBUSY failures arrive as asynchronous 'error' events after the
+    // stream is created; without a listener Node rethrows them as unhandled errors.
+    stream?.on('error', (err: Error) => this._disableStreamAfterError(stream, err));
     this._autoShowOnWarnOrError = autoShowOnWarnOrError;
   }
 
@@ -127,6 +130,17 @@ export class GeneralFileLogChannel implements vscode.LogOutputChannel {
     if (!this._autoShowOnWarnOrError || this._hasAutoShownOnWarnOrError) return;
     this._hasAutoShownOnWarnOrError = true;
     this.show(true);
+  }
+
+  /**
+   * Reports the first stream failure on the inner channel (not through `_write`, so the failing
+   * file is never written to again) and drops the stream so later log calls only reach the panel.
+   */
+  private _disableStreamAfterError(failed: fs.WriteStream, err: Error): void {
+    if (this._stream !== failed) return;
+    this._stream = undefined;
+    failed.destroy();
+    this._inner.warn(`File logging disabled after a write error: ${err.message}`);
   }
 
   private _write(level: string, message: string): void {
