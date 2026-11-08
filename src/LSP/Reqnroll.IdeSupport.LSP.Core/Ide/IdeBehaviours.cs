@@ -57,18 +57,10 @@ public sealed record IdeBehaviours
     /// <summary>
     /// The client reliably opens a document in response to a <c>window/showDocument</c> request, so
     /// the server uses it to reveal the generated file after the Define Steps command (when the
-    /// client also advertises that capability). Opt-in: we have only confirmed this for clients that
-    /// also run the built-in <c>vscode.open</c> command locally.
+    /// client also advertises that capability). Opt-in: so far this has been confirmed only in VS Code;
+    /// Visual Studio and Rider have not been verified.
     /// </summary>
     public bool HonorsShowDocumentRequests { get; init; }
-
-    /// <summary>
-    /// The client recognises the built-in <c>vscode.open</c> command and runs it locally, without a
-    /// <c>workspace/executeCommand</c> round trip. Clients without this forward any command to the
-    /// server, where <c>vscode.open</c> has no handler and replies "Method not found", so a code
-    /// action carrying only that command would silently do nothing there.
-    /// </summary>
-    public bool RunsVscodeOpenCommandLocally { get; init; }
 
     /// <summary>
     /// The client actually issues <c>codeLens/resolve</c> for a lens returned without a

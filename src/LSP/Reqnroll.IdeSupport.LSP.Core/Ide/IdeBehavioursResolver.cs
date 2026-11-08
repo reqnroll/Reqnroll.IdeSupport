@@ -68,7 +68,6 @@ public static class IdeBehavioursResolver
         {
             return new IdeBehaviours
             {
-                RunsVscodeOpenCommandLocally = true,
                 HonorsShowDocumentRequests = true,
             };
         }

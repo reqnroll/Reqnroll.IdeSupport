@@ -18,7 +18,6 @@ public class ClientIdeContextBehavioursTests
 
     private static readonly IdeBehaviours VSCodeBehaviours = new()
     {
-        RunsVscodeOpenCommandLocally = true,
         HonorsShowDocumentRequests = true,
     };
 
