@@ -11,6 +11,13 @@ expressions that apply there:
 
 Selecting an entry navigates to the C# hook method.
 
+```{note}
+Tag and `[Scope]` filters are only understood when written as string literals, and a hook's
+`Order` only as an integer literal. A non-literal value, such as a constant, is dropped while you
+edit the `.cs` file, so a hook can be listed where it does not apply. See
+[Bindings that use constants or other non-literal arguments](../troubleshooting.md#bindings-that-use-constants-or-other-non-literal-arguments).
+```
+
 :::{tab-set}
 
 ```{tab-item} Visual Studio
