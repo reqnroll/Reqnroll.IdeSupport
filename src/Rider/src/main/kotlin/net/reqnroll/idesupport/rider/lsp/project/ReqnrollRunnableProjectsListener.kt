@@ -12,6 +12,7 @@ import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectLoadedParams
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectUnloadedParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Feeds `reqnroll/projectLoaded`/`reqnroll/projectUnloaded` from Rider's own runnable-projects
@@ -87,19 +88,21 @@ class ReqnrollRunnableProjectsListener : ProjectActivity {
  * fixture.
  */
 internal class ProjectLoadedTracker {
-    private val lastSentParams = mutableMapOf<String, ReqnrollProjectLoadedParams>()
+    // Touched from the UI thread (server already running) and from the LSP state-change callback
+    // thread (server still starting), so every operation is a single atomic map call.
+    private val lastSentParams = ConcurrentHashMap<String, ReqnrollProjectLoadedParams>()
 
-    /** Returns project file paths that were previously tracked but are absent from [currentFiles], and stops tracking them. */
-    fun removedSince(currentFiles: Set<String>): Set<String> {
-        val removed = lastSentParams.keys - currentFiles
-        removed.forEach { lastSentParams.remove(it) }
-        return removed
-    }
+    /**
+     * Returns project file paths that were previously tracked but are absent from [currentFiles], and stops tracking them.
+     * Each path is reported by exactly one caller even when calls race: only the caller whose `remove` succeeds reports it.
+     */
+    fun removedSince(currentFiles: Set<String>): Set<String> =
+        lastSentParams.keys.filter { it !in currentFiles && lastSentParams.remove(it) != null }.toSet()
 
-    /** Returns `true` (and records [params] as sent) only if [params] differs from what was last sent for [projectFilePath]. */
-    fun shouldSend(projectFilePath: String, params: ReqnrollProjectLoadedParams): Boolean {
-        if (lastSentParams[projectFilePath] == params) return false
-        lastSentParams[projectFilePath] = params
-        return true
-    }
+    /**
+     * Returns `true` (and records [params] as sent) only if [params] differs from what was last sent for [projectFilePath].
+     * The compare and the update are one atomic `put`, so concurrent calls with equal params yield `true` at most once.
+     */
+    fun shouldSend(projectFilePath: String, params: ReqnrollProjectLoadedParams): Boolean =
+        lastSentParams.put(projectFilePath, params) != params
 }

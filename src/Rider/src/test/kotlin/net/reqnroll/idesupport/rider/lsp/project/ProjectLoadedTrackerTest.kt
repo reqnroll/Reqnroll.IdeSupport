@@ -1,6 +1,11 @@
 package net.reqnroll.idesupport.rider.lsp.project
 
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectLoadedParams
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,5 +76,56 @@ class ProjectLoadedTrackerTest {
     fun `removedSince with no prior tracking returns empty`() {
         val tracker = ProjectLoadedTracker()
         assertEquals(emptySet(), tracker.removedSince(setOf("a.csproj")))
+    }
+
+    @Test
+    fun `concurrent shouldSend with equal params reports true exactly once`() {
+        repeat(200) {
+            val tracker = ProjectLoadedTracker()
+            val p = params("a.csproj")
+            val threads = 8
+            val start = CountDownLatch(1)
+            val trues = AtomicInteger()
+            val pool = Executors.newFixedThreadPool(threads)
+            try {
+                val futures = (1..threads).map {
+                    pool.submit {
+                        start.await()
+                        if (tracker.shouldSend("a.csproj", p.copy())) trues.incrementAndGet()
+                    }
+                }
+                start.countDown()
+                futures.forEach { it.get(10, TimeUnit.SECONDS) }
+            } finally {
+                pool.shutdownNow()
+            }
+            assertEquals(1, trues.get())
+        }
+    }
+
+    @Test
+    fun `concurrent removedSince reports each removed path exactly once`() {
+        repeat(200) {
+            val tracker = ProjectLoadedTracker()
+            (1..20).forEach { tracker.shouldSend("p$it.csproj", params("p$it.csproj")) }
+            val threads = 8
+            val start = CountDownLatch(1)
+            val reported = ConcurrentLinkedQueue<String>()
+            val pool = Executors.newFixedThreadPool(threads)
+            try {
+                val futures = (1..threads).map {
+                    pool.submit {
+                        start.await()
+                        reported.addAll(tracker.removedSince(emptySet()))
+                    }
+                }
+                start.countDown()
+                futures.forEach { it.get(10, TimeUnit.SECONDS) }
+            } finally {
+                pool.shutdownNow()
+            }
+            assertEquals(20, reported.size)
+            assertEquals(20, reported.toSet().size)
+        }
     }
 }

@@ -59,7 +59,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         // why that happens repeatedly during solution load) doesn't re-walk and re-send it. Keyed
         // on the TFM too: a project whose outputs (and so TFM) arrive in a later snapshot must be
         // re-sent, or its baseline stays filed under the stale TFM.
-        var previousProjectFiles = emptyMap<String, String>()
+        val previousProjectFiles = ProjectSnapshotTracker()
 
         val lifetime = project.createLifetime()
 
@@ -76,8 +76,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
                 val currentFiles = projects.associate { it.projectFilePath to ReqnrollProjectBaseline.targetFrameworkMoniker(it) }
                 projectTfms.set(currentFiles)
 
-                if (currentFiles == previousProjectFiles) return@advise
-                previousProjectFiles = currentFiles
+                if (!previousProjectFiles.shouldProcess(currentFiles)) return@advise
 
                 // advise() fires immediately at project open, before the server is typically even
                 // started — see ReqnrollLspServerReadiness for why this must be deferred.
@@ -178,4 +177,16 @@ class ReqnrollProjectFilesSync : ProjectActivity {
 
         else -> emptyList()
     }
+}
+
+/**
+ * Remembers the last project-file -> TFM snapshot a baseline was triggered for, so a same-content
+ * re-fire of `advise` is skipped. The compare and the update are one atomic `getAndSet`, so the
+ * check stays correct if more than one thread ever reaches it.
+ */
+internal class ProjectSnapshotTracker {
+    private val last = java.util.concurrent.atomic.AtomicReference<Map<String, String>>(emptyMap())
+
+    /** Returns `true` (and records [current]) only if [current] differs from the previously recorded snapshot. */
+    fun shouldProcess(current: Map<String, String>): Boolean = last.getAndSet(current) != current
 }
