@@ -5,6 +5,12 @@ C# `[Given("...")]`/`[When("...")]`/`[Then("...")]` attribute string —
 updates every occurrence across the workspace: the attribute string in the
 binding class, and every matching step in every `.feature` file.
 
+```{note}
+Rename can only rewrite an attribute argument that is a string literal. If the binding uses a
+constant, `nameof(...)`, a concatenation or an interpolated string, the rename is refused. See
+[Bindings that use constants or other non-literal arguments](../troubleshooting.md#bindings-that-use-constants-or-other-non-literal-arguments).
+```
+
 ::::{tab-set}
 
 ```{tab-item} Visual Studio
