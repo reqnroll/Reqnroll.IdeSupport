@@ -43,14 +43,22 @@ import { resolveLogDirectory } from '../logging/logPaths';
  *   macOS   : ~/Library/Logs/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
  *   Linux   : ~/.local/share/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
  */
-class FileLspTraceChannel implements vscode.LogOutputChannel {
+export class FileLspTraceChannel implements vscode.LogOutputChannel {
   readonly name = 'Reqnroll LSP Trace (file only)';
   private _stream: fs.WriteStream | undefined;
   private readonly _onDidChangeLogLevel = new vscode.EventEmitter<vscode.LogLevel>();
   private readonly _configListener: vscode.Disposable;
 
-  constructor(stream: fs.WriteStream | undefined) {
+  constructor(
+    stream: fs.WriteStream | undefined,
+    // Test seam: lets unit tests observe the one-time stream-failure report.
+    private readonly _reportStreamError: (message: string) => void = (message) =>
+      console.warn(message),
+  ) {
     this._stream = stream;
+    // Disk-full, permission and EBUSY failures arrive as asynchronous 'error' events after the
+    // stream is created; without a listener Node rethrows them as unhandled errors.
+    stream?.on('error', (err: Error) => this._disableStreamAfterError(stream, err));
     // vscode-languageclient's own onDidChangeConfiguration listener calls
     // refreshTrace(), but that reads a *cached* copy of logLevel that only
     // updates via onDidChangeLogLevel — so this channel must fire its own
@@ -97,6 +105,17 @@ class FileLspTraceChannel implements vscode.LogOutputChannel {
     this._stream = undefined;
     this._configListener.dispose();
     this._onDidChangeLogLevel.dispose();
+  }
+
+  /**
+   * Logs the first stream failure to the extension host console (this channel has no Output
+   * panel) and drops the stream so later trace entries are discarded.
+   */
+  private _disableStreamAfterError(failed: fs.WriteStream, err: Error): void {
+    if (this._stream !== failed) return;
+    this._stream = undefined;
+    failed.destroy();
+    this._reportStreamError(`LSP inspector log disabled after a write error: ${err.message}`);
   }
 
   private _writeLspEntry(message: string): void {

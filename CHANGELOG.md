@@ -4,6 +4,7 @@
 * VS Code now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user navigates from a step in a `.feature` file with F12 or Ctrl+click, as Visual Studio and Rider do. Previously only the explicit Go to Step Definition command was reported. A navigation is counted only once the editor arrives at one of the returned locations, so hovering with Ctrl held is not counted, and Peek Definition is not counted either (VS Code) - see #1266
 ## Bug fixes:
 * In Rider, the bookkeeping that decides when `projectLoaded`/`projectUnloaded` and the project-files baseline are sent is now safe to use from the UI thread and the language-server callback thread at once, so a project is no longer sent twice or skipped when the two race (Rider) - see #988
+* VS Code no longer raises an unhandled error in the extension host when a log file cannot be written after it was opened (disk full, permission denied, file locked): the failure is reported once, file logging stops, and the extension keeps running (VS Code) - see #1011
 * In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
 
 # v2026.2 - 2026-10-25
