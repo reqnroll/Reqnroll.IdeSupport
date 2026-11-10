@@ -58,6 +58,7 @@ the faster path since you don't have to invoke anything.
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
 | [Running Scenarios](running-scenarios.md) | ❌⁴ | ✅ | ⚠️⁵ |
+| [Breakpoints in `.feature` files](running-scenarios.md#breakpoints-in-feature-files) | ✅ | ✅ | ❌⁶ |
 
 ## Project Setup
 
@@ -88,6 +89,9 @@ extension and use its own Test Explorer/CodeLens instead — see
 Rider's native Unit Tests tool window. See
 [Running Scenarios](running-scenarios.md) for the details and the
 workaround for debugging.
+
+⁶ Rider does not yet let you set a breakpoint in a `.feature` file. Set it in the step definition
+instead.
 
 ```{admonition} Preview status
 :class: note
