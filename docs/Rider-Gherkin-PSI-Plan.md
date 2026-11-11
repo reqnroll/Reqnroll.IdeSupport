@@ -156,7 +156,7 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
 | 2 | **Run / Debug gutter** | `RunTestCodeVisionProvider` inline lens; no Debug | `RunLineMarkerContributor` gives a native gutter marker with the standard Run/Debug menu on `SCENARIO` / `SCENARIO_OUTLINE` | `RunTestCodeVisionProvider` (after a deprecation release behind a setting). `FailedStepGutterMarks` stays: it paints per-run state, not structure | Medium |
 | 3 | **Breakpoints** | Spike registers the debugger policy for `TEXT`, so every plain-text file passes Gate 1 | Register the policy for `Gherkin` only | The `TEXT` line in `plugin.xml`. The backend stub stays | Low |
 | 4 | **Navigation and refactoring entry points** | Promoter and action for F12 / Ctrl+B / Ctrl+click; claimed Shift+F6; Comment action overridden by ID | `Commenter`; `renameHandler` extension point for Rename Step; navigation re-evaluated in [Phase 8](#6-phases) | `ReqnrollCommentByLineCommentAction` (if parity holds). Shift+F6 claim | **High** for navigation, Low for the rest |
-| 5 | **Hand-managed editor visuals** | `editorFactoryListener`s drive `foldingModel` and `inlayModel`; tag links by hand | `FoldingBuilder` from the tree; declarative `InlayHintsProvider` fed by the server's `inlayHint` request; native Structure view on every supported Rider | `ReqnrollFeatureFoldingController`, `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureInlayHintsSettings`, the "Show Feature Inlay Hints" action | Medium |
+| 5 | **Hand-managed editor visuals** | `editorFactoryListener`s drive `foldingModel` and `inlayModel`; tag links by hand | **Prefer what Rider's generic LSP client now does itself** (see the principle below): native folding from 2025.2.2, native inlay hints from 2025.2.2, native outline from 2025.3, driven by the server's responses. Our controllers remain only for older builds and are switched off where the platform does the work | The folding controller, once `pluginSinceBuild` reaches 2025.2.2; the inlay-hint controller likewise, after checking for double rendering | Medium |
 | 6 | **Typing assists** | Two `typedHandler`s for `|` realignment and `@` / space popups | Same handlers, now language-scoped. Add `SpellcheckingStrategy`, `IndexPatternBuilder` (TODO), breadcrumbs | Nothing | Low |
 
 ### Notes per area
@@ -174,11 +174,20 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
    has no C# PSI to offer. So this area is an investigation with a go/no-go, not a committed rewrite. The
    committed parts are the `Commenter` and a native `renameHandler`. Rename Step stays a server rename:
    the handler only changes how it is invoked (Refactor menu, user keymaps), not how the edit is built.
-5. **Visuals.** Fold ranges now come from the tree, so folding no longer waits for the server and the
-   Rider path stops depending on `textDocument/foldingRange` (the server handler stays for other IDEs).
-   Hints still come from the server because binding data is semantic. The declarative provider also
-   brings a Settings page and per-hint toggles. Tag links (`ReqnrollFeatureTagLinkController`): read
-   `TagLinkSupport` first. If the link target is a server `documentLink`, keep it as is.
+5. **Visuals.** *Principle (decided after building a tree-based folding and Structure view and then
+   reversing it):* anything the server already answers through a standard LSP request is driven by that
+   response in every IDE, so there is one set of rules. The PSI is for what an LSP response cannot give:
+   instant colour before the server starts, the breakpoint gate, run markers, the rename handler. A
+   tree-based copy of the fold and outline rules drifted from the server's within one commit (a Feature's
+   fold started on a different line), so it was removed.
+   - **Folding:** the server's `foldingRange`. Rider 2025.2.2+ folds from it natively (verified in the 2026.2
+     binaries: `LspFoldingBuilder` registered for any language, on by default); `NativeLspFolding` switches the
+     old controller off there. Below that the controller renders the same ranges.
+   - **Outline:** the server's `documentSymbol`, native from Rider 2025.3. Rider before that has no outline.
+   - **Inlay hints, code lens, document links:** Rider's client also gained native support for these (inlay
+     hints 2025.2.2, document links 2025.1, code lens 2026.1, per JetBrains' LSP page). Phase 6 starts by
+     checking, on a new Rider, whether the platform already draws what our controllers draw, since both
+     being active would double-render.
 
 ## 4. Cross-cutting concerns
 
@@ -250,8 +259,8 @@ Sizes are rough estimates in working days and have not been validated.
 | **3** | **Highlighting and matchers**: `SyntaxHighlighter`, `BraceMatcher`, `QuoteHandler`, `Commenter`; retire the comment action override if parity holds | First paint coloured before the server starts; comment toggling matches the server's behaviour | 2–3 |
 |  | *Status: built and unit-tested. Done: the lexer-based `SyntaxHighlighter` (sharing `ReqnrollFeatureTextAttributes` with the semantic tokens, with header and body table cells distinguished), the `Commenter`, and re-parsing open files when `reqnroll.json` / `specflow.json` changes (`FeatureLanguageConfigListener`). **Not done, deliberately:** `BraceMatcher` and `QuoteHandler` (the grammar has no bracket or quote tokens: a placeholder is one token and quotes are plain step text), and retiring the comment action override (it stays until a live check shows the platform action matches the server's toggle for doc strings and tables). Unverified: that `FileContentUtil.reparseFiles` also refreshes an open editor's highlighter, and that nothing flickers when semantic tokens arrive.* | | |
 | **4** | **Breakpoints on `Gherkin`**: switch the policy, drop `TEXT` | `.txt` gutter clicks no longer reach Gate 1 | 0.5 |
-| **5** | **Folding and Structure view**: `FoldingBuilder`, `StructureViewBuilder`; delete the folding controller | Folds identical to today's; outline works on the oldest supported Rider | 3 |
-|  | *Status: built, unit-tested and `verifyPlugin`-compatible on all six builds. `ReqnrollFeatureFoldingBuilder` and `ReqnrollFeatureStructureViewFactory` are registered for Gherkin; the folding controller, its test, its `plugin.xml` entry, its refresh call in the inlay-hint interceptor and the now-unused `foldingRange` sender are deleted. Behaviour differences to expect: a Feature or Rule folds from its keyword line (the server folded from the line after `Feature:`), and the Structure view is ours on every Rider, taking precedence over the platform's generic language-server outline, which is registered for any language (read from its registration, not yet observed). Not verified live: that the Structure view and folds look right, that fold state survives edits, and which outline Rider actually shows.* | | |
+| **5** | **Folding and Structure view**: ~~`FoldingBuilder`, `StructureViewBuilder` from the tree~~ — reversed, see §3 note 5; server ranges and symbols in every IDE | Rider 2025.2.2+ folds natively with the controller off; older Rider folds through the controller; both use the server's ranges | 1 |
+|  | *Status: a tree-based `FoldingBuilder` and Structure view were built and committed, then reverted in favour of server ranges everywhere. Done: `NativeLspFolding` (checks for the platform's `LspFoldingRangeSupport` class) switches the folding controller off on builds with native folding; docs corrected (the old claim that Rider's client has no folding consumer was true only for 2024.3). Left as it was: no outline before Rider 2025.3. Unverified: native folding in a live Rider with `Gherkin` as the PSI language (does the platform's any-language builder still apply, does its cache refresh while typing), and that the controller really is off there.* | | |
 | **6** | **Inlay hints**: declarative provider, Settings page; delete the controller, settings object and toggle action | One hint per binding, no duplicates; toggles persist | 3–4 |
 | **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release | Run works from the gutter; failed-step marks unaffected | 3 |
 | **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
@@ -282,7 +291,7 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 | Project whose default language is not English, no header | PSI and server agree on keywords |
 | Invalid file (unterminated doc string, unknown language) | Whole text still in the tree; no exception in the log |
 | Large file (several thousand lines) | No typing lag; no EDT stalls in the log; measure the lexer rescan cost |
-| Fold / unfold, Structure view | Match today's ranges; outline present on the oldest supported Rider |
+| Fold / unfold, Structure view | Same folds as VS Code on the same file (Rider 2025.2.2+ natively, older through the controller, never both); outline from Rider 2025.3 |
 | Inlay hints | No duplicates; Settings page toggles them |
 | Gutter marker | Run works; failed-step marks appear after a failed run |
 | Breakpoints | As in the earlier plan's table; no response on a `.txt` gutter |

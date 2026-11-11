@@ -75,8 +75,7 @@ sequenceDiagram
 | `ReqnrollCodeLensRefreshInterceptor`, `ReqnrollInlayHintRefreshInterceptor` | Wrap the platform's notification handler so refresh requests also refresh CodeVision and inlay hints. |
 | `ReqnrollSemanticTokensSupport` | A `TextAttributesKey` per `reqnroll.*` legend name (the platform default maps only about 23 standard names). |
 | `StepUsagesCodeVisionProvider`, `HookCodeVisionProvider`, `StepHooksCodeVisionProvider`, `RunTestCodeVisionProvider` | The lenses; `HookLensSupport` holds shared logic. |
-| `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureTagLinkController` | `editorFactoryListener`s that call the standard requests directly and render with `Editor.inlayModel` and tag links. |
-| `ReqnrollFeatureFoldingBuilder`, `ReqnrollFeatureStructureViewFactory` | Folding and Structure view from the tree (`FoldingBuilder`, `PsiStructureViewFactory`); no server round trip. |
+| `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureFoldingController`, `ReqnrollFeatureTagLinkController` | `editorFactoryListener`s that call the standard requests directly and render with `Editor.inlayModel`, `foldingModel` and tag links. |
 | `ReqnrollFeatureOnTypeFormattingHandler`, `ReqnrollFeatureCompletionAutoPopupHandler` | `typedHandler`s: `\|`-triggered table realignment; auto-popup completion. |
 | `FindStepUsagesAction`, `FindUnusedStepDefinitionsAction`, `GoToHooksAction`, `ReqnrollResultPopup` | Tools-menu and editor-context actions with a shared chooser popup. |
 | `RenameFeatureStepAction`, `RenameCSharpStepAction`, `RenameStepRunner`, `RenameWorkspaceEditApplier` | Step rename (`.feature` bound to Shift+F6; `.cs` context-menu only). |
@@ -134,8 +133,8 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
 ## 8. Known limitations
 
 - No Debug action for scenarios; no native Unit Tests tool window presence.
-- Older Rider versions have no outline (the native Structure view renders the standard `documentSymbol` response on
-  current Rider).
+- Rider before 2025.3 has no outline (the native Structure view renders the standard `documentSymbol` response from
+  2025.3).
 - Lenses are inline, not gutter icons.
 
 ## 9. Testing

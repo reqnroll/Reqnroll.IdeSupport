@@ -134,7 +134,7 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
             val gate = editor.getUserData(SESSION_KEY)?.gate ?: return
 
             // ReqnrollRequestSender.documentLink uses sendRequestSync, which blocks the calling thread, so the
-            // request runs on a background thread - same rationale as ReqnrollFeatureInlayHintsController. The gate
+            // request runs on a background thread - same rationale as ReqnrollFeatureFoldingController. The gate
             // applies only the newest response and skips a failed (null) one.
             gate.fetchThenApply(
                 fetch = fetch@{
