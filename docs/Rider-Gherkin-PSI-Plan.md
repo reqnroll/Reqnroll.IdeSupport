@@ -1,6 +1,8 @@
 # Rider: a PSI for `.feature` files — implementation and rework plan
 
-Status: **plan, not implemented.** This supersedes the scope of
+Status: **in progress.** Phases 1 (backend module, Gradle wiring, closed one-release range), 2a, 2b and the
+Phase 4 policy switch are committed on `feature/453-rider-gherkin-psi`; none has been run in a live Rider, and
+the CI matrix, publishing automation and Phases 3 and 5–10 are not started. This supersedes the scope of
 [Rider-Feature-Breakpoints-Plan.md](Rider-Feature-Breakpoints-Plan.md). That plan's backend module is
 kept unchanged as [Phase 1](#6-phases); its frontend half (§4, the `TEXT` registration) becomes a
 temporary shim that [Phase 4](#6-phases) removes.
@@ -187,9 +189,13 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
   Phase 2 ships a `SpellcheckingStrategy` that skips keywords, tags, placeholders and step parameters,
   so users do not get a wall of squiggles.
 - **Legacy plugin (`net.reqnroll`).** It registers its own `.feature` file type and PSI. With both
-  plugins present, two parsers fight over one extension. The incompatibility decision in open question
-  O9 stops being optional: declare `<incompatible-with>net.reqnroll</incompatible-with>`, and verify
-  Rider honours it for a plugin ID.
+  plugins present, two parsers fight over one extension. **Done:** `plugin.xml` declares
+  `<incompatible-with>net.reqnroll</incompatible-with>` and its description no longer tells users they can run
+  both. Still to verify: that Rider honours it for a plugin ID.
+- **What the PSI does and does not tie to Rider releases.** The PSI is Kotlin, compiled against 2024.3.5, and
+  stays one build for 243 – 262.\* (`verifyPlugin` checks it across the range). Only the backend module is tied
+  to one release, and only builds made with `-PwithBackend=true` carry it; see the closed-range rules in
+  [the breakpoints plan §6.2](Rider-Feature-Breakpoints-Plan.md#62-gradle).
 - **Formatting.** `ReqnrollFormattingService` is registered `order="first"` and keeps winning. No
   `FormattingModelBuilder` is added, so Reformat Code still goes through the server.
 - **Compatibility range.** The Kotlin jar is shared by all legs (243 – 262.*). Every extension point
@@ -236,7 +242,7 @@ Sizes are rough estimates in working days and have not been validated.
 | Phase | Deliverable | Exit criterion | Est. |
 |---|---|---|---|
 | **0** | Live check of the backend spike in `runIde` | Go/no-go for Phase 1 (checks in [§8](#8-verification)) | 1 |
-| **1** | Backend module, Gradle wiring, `TEXT` shim (**already built, uncommitted**), CI matrix per the earlier plan | Breakpoint binds and hits | per earlier plan |
+| **1** | Backend module and Gradle wiring (**built and committed**; the `TEXT` shim is gone). Build now derives a closed one-release range from `riderSdkVersion` and defaults to frontend-only. Still to do: CI matrix, per-release backend smoke test, publishing automation, changelog-rendered change notes (breakpoints plan §6–7) | Breakpoint binds and hits in a live Rider | per earlier plan |
 | **2a** | **Parser bridge**: Java source set, Gherkin 39.1.0 dependency, same-package adapter, `PsiBuilder` builder, restartable lexer; no registration yet | Shared corpus passes; invalid files yield a full tree; spike confirms classloading in Rider | 3–4 |
 |  | *Status: built and unit-tested (corpus, lexer, `PsiBuilder` replay via `ParsingTestCase`); `ReqnrollFeatureParserDefinition` exists but is deliberately not registered in `plugin.xml`. Classloading in a real Rider is the open item.* | | |
 | **2b** | **PSI foundation**: `ParserDefinition`, typed elements, per-file default language, `SpellcheckingStrategy`, no behavioural change otherwise | Every existing feature still works with the language now real; no double rendering | 2–3 |
@@ -307,6 +313,7 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 1. Commit to the PSI programme, or ship Phase 1 alone and stop.
 2. Phase 2 sequencing: before Phase 1 ships, or after. The proposal is **after** (Phase 1 is built and
    independent).
-3. Legacy plugin: declare it incompatible (proposed: yes).
+3. ~~Legacy plugin: declare it incompatible~~ — done; verify Rider enforces it.
+3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
 4. Keep the inline Run lens as a setting for one release (proposed: yes).
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.

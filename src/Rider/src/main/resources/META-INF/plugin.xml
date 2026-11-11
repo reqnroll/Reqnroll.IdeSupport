@@ -12,8 +12,9 @@ completion, diagnostics and more for your <code>.feature</code> files and the C#
 language server with a native extension for <b>Visual Studio</b>, <b>VS Code</b> and <b>Rider</b>, replacing the
 separate legacy extensions. It is in a preview period and we would like to hear how it works for you.</p>
 <ul>
-  <li>If you hit a severe problem, the earlier Reqnroll plugin is still available: you can disable this one and
-      switch back at any time. (Only keep one enabled for the same <code>.feature</code> files.)</li>
+  <li>If you hit a severe problem, the earlier Reqnroll plugin is still available: uninstall or disable this one
+      and install the earlier one instead. The two cannot be enabled together, because both handle the same
+      <code>.feature</code> files.</li>
   <li>Please report bugs and ideas on <a href="https://github.com/reqnroll/Reqnroll.IdeSupport/issues">GitHub Issues</a>.
       Include your Rider and plugin versions and, if you can, the log output.</li>
   <li>For how to locate the logs and turn up the log level, see
@@ -43,6 +44,10 @@ for what is available in each IDE.</p>
 
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.modules.rider</depends>
+
+  <!-- The earlier Reqnroll plugin registers its own .feature file type, language and breakpoint support.
+       With both enabled, two plugins would handle the same files, so Rider is asked to refuse that. -->
+  <incompatible-with>net.reqnroll</incompatible-with>
   <!-- Not `com.intellij.modules.lsp` — that module ID isn't registered in Rider's
        distribution (confirmed via runIde: "requires plugin 'com.intellij.modules.lsp'
        to be installed" with no such plugin found). The com.intellij.platform.lsp.api.*
