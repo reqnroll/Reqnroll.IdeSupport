@@ -31,7 +31,7 @@ class FeatureSyntaxTest {
 
     @Test
     fun `tags, comment and table cells are reported separately`() {
-        val tokens = tokens("@a @b\nFeature: f\n  # note\n  Scenario: s\n    Given x\n      | k | v \\| w |\n")
+        val tokens = tokens("@a @b\nFeature: f\n  # note\n  Scenario: s\n    Given x\n      | k | v \\| w |\n      | 1 | 2 |\n")
 
         assertEquals(
             listOf(GherkinTokenKind.TAG to "@a", GherkinTokenKind.TAG to "@b"),
@@ -40,11 +40,31 @@ class FeatureSyntaxTest {
         assertTrue(GherkinTokenKind.COMMENT to "# note" in tokens)
         assertEquals(
             listOf(
-                GherkinTokenKind.PIPE to "|", GherkinTokenKind.CELL to "k",
-                GherkinTokenKind.PIPE to "|", GherkinTokenKind.CELL to "v \\| w",
+                GherkinTokenKind.PIPE to "|", GherkinTokenKind.HEADER_CELL to "k",
+                GherkinTokenKind.PIPE to "|", GherkinTokenKind.HEADER_CELL to "v \\| w",
+                GherkinTokenKind.PIPE to "|",
+                GherkinTokenKind.PIPE to "|", GherkinTokenKind.CELL to "1",
+                GherkinTokenKind.PIPE to "|", GherkinTokenKind.CELL to "2",
                 GherkinTokenKind.PIPE to "|",
             ),
-            tokens.takeLast(5),
+            tokens.takeLast(10),
+        )
+    }
+
+    @Test
+    fun `each table starts again with a header row`() {
+        val tokens = tokens(
+            "Feature: f\n  Scenario Outline: s\n    Given x\n      | a |\n      | b |\n" +
+                "    Examples:\n      | n |\n      | 1 |\n",
+        )
+
+        val cells = tokens.filter { it.first == GherkinTokenKind.HEADER_CELL || it.first == GherkinTokenKind.CELL }
+        assertEquals(
+            listOf(
+                GherkinTokenKind.HEADER_CELL to "a", GherkinTokenKind.CELL to "b",
+                GherkinTokenKind.HEADER_CELL to "n", GherkinTokenKind.CELL to "1",
+            ),
+            cells,
         )
     }
 

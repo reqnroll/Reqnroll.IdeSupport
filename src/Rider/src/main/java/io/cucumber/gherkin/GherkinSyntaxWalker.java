@@ -58,6 +58,7 @@ public final class GherkinSyntaxWalker {
         private final GherkinSyntaxSink sink;
         private final List<int[]> lines = new ArrayList<>();
         private final Deque<String> openRules = new ArrayDeque<>();
+        private int rowsInTable;
 
         Walker(String text, GherkinSyntaxSink sink) {
             this.text = text;
@@ -100,6 +101,9 @@ public final class GherkinSyntaxWalker {
         public void startRule(Parser.RuleType rule) {
             if (!isReported(rule)) {
                 return;
+            }
+            if (rule == Parser.RuleType.DataTable || rule == Parser.RuleType.ExamplesTable) {
+                rowsInTable = 0;
             }
             openRules.push(rule.name());
             sink.startRule(rule.name());
@@ -229,6 +233,8 @@ public final class GherkinSyntaxWalker {
 
         private void tableRow(int contentStart, int contentEnd) {
             boolean placeholders = !openRules.contains("ExamplesTable");
+            GherkinTokenKind cellKind = rowsInTable == 0 ? GherkinTokenKind.HEADER_CELL : GherkinTokenKind.CELL;
+            rowsInTable++;
             int cellStart = -1;
             int i = contentStart;
             while (i < contentEnd) {
@@ -239,7 +245,7 @@ public final class GherkinSyntaxWalker {
                 }
                 if (c == '|') {
                     if (cellStart >= 0) {
-                        cell(cellStart, i, placeholders);
+                        cell(cellStart, i, cellKind, placeholders);
                     }
                     sink.token(GherkinTokenKind.PIPE, i, i + 1);
                     cellStart = i + 1;
@@ -247,20 +253,20 @@ public final class GherkinSyntaxWalker {
                 i++;
             }
             if (cellStart >= 0 && cellStart < contentEnd) {
-                cell(cellStart, contentEnd, placeholders);
+                cell(cellStart, contentEnd, cellKind, placeholders);
             }
         }
 
-        private void cell(int start, int end, boolean placeholders) {
+        private void cell(int start, int end, GherkinTokenKind kind, boolean placeholders) {
             int cellStart = skipWhitespace(start, end);
             int cellEnd = trimEnd(cellStart, end);
             if (cellStart >= cellEnd) {
                 return;
             }
             if (placeholders) {
-                withPlaceholders(GherkinTokenKind.CELL, cellStart, cellEnd);
+                withPlaceholders(kind, cellStart, cellEnd);
             } else {
-                sink.token(GherkinTokenKind.CELL, cellStart, cellEnd);
+                sink.token(kind, cellStart, cellEnd);
             }
         }
 

@@ -20,7 +20,9 @@ public enum GherkinTokenKind {
     PLACEHOLDER,
     /** A {@code |} between table cells. */
     PIPE,
-    /** The text of one table cell, outside placeholders. */
+    /** The text of one cell of a table's first row (its header), outside placeholders. */
+    HEADER_CELL,
+    /** The text of one cell of any other table row, outside placeholders. */
     CELL,
     /** A {@code """} or {@code ```} doc-string delimiter. */
     DOC_STRING_DELIMITER,

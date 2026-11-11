@@ -40,6 +40,31 @@ class PluginXmlPsiRegistrationTest {
     }
 
     @Test
+    fun `the syntax highlighter and commenter are registered for Gherkin and resolve`() {
+        val highlighter = registrations("lang.syntaxHighlighterFactory").single()
+        val commenter = registrations("lang.commenter").single()
+
+        assertEquals("Gherkin", highlighter.getAttribute("language"))
+        assertEquals(
+            ReqnrollFeatureSyntaxHighlighterFactory::class.java,
+            Class.forName(highlighter.getAttribute("implementationClass")),
+        )
+        assertEquals("Gherkin", commenter.getAttribute("language"))
+        assertEquals(ReqnrollFeatureCommenter::class.java, Class.forName(commenter.getAttribute("implementationClass")))
+    }
+
+    @Test
+    fun `the config change listener is registered on the bulk file topic and resolves`() {
+        val stream = javaClass.getResourceAsStream("/META-INF/plugin.xml")!!
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(stream)
+        val listeners = (0 until document.getElementsByTagName("listener").length)
+            .map { document.getElementsByTagName("listener").item(it) as Element }
+            .filter { it.getAttribute("class") == FeatureLanguageConfigListener::class.java.name }
+
+        assertEquals(listOf("com.intellij.openapi.vfs.newvfs.BulkFileListener"), listeners.map { it.getAttribute("topic") })
+    }
+
+    @Test
     fun `the debugger support policy is registered for Gherkin only`() {
         val policies = registrations("rider.debuggerSupportPolicy")
 

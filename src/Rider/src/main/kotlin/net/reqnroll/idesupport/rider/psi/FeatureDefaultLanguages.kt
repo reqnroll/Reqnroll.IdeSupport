@@ -47,6 +47,21 @@ internal object FeatureDefaultLanguages {
         return FeatureSyntax.FALLBACK_LANGUAGE
     }
 
+    /**
+     * The directory a configuration file at [path] configures, or null when [path] is not one of the files this
+     * object reads. Used to find which open feature files a configuration change affects.
+     */
+    fun configDirectoryOf(path: String): String? {
+        val file = runCatching { Paths.get(path) }.getOrNull() ?: return null
+        val name = file.fileName?.toString() ?: return null
+        return if (configFileNames.any { it.equals(name, ignoreCase = true) }) file.parent?.toString() else null
+    }
+
+    /** True when [path] is [directory] itself or lies below it. */
+    fun isWithin(directory: String, path: String): Boolean = runCatching {
+        Paths.get(path).normalize().startsWith(Paths.get(directory).normalize())
+    }.getOrDefault(false)
+
     private fun holdsProjectFile(directory: Path): Boolean = runCatching {
         Files.newDirectoryStream(directory).use { entries ->
             entries.any { it.fileName.toString().substringAfterLast('.', "").lowercase() in projectFileExtensions }

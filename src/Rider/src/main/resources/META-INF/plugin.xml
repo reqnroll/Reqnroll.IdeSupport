@@ -64,6 +64,18 @@ for what is available in each IDE.</p>
         language="Gherkin"
         implementationClass="net.reqnroll.idesupport.rider.psi.ReqnrollFeatureParserDefinition" />
 
+    <!-- Colours the file from its tokens as soon as it opens; the server's semantic tokens (same colours)
+         then add what only it knows: step parameters and undefined or ambiguous steps. -->
+    <lang.syntaxHighlighterFactory
+        language="Gherkin"
+        implementationClass="net.reqnroll.idesupport.rider.psi.ReqnrollFeatureSyntaxHighlighterFactory" />
+
+    <!-- Supplies the `#` line comment prefix to platform features; the Comment action itself is still the
+         ReqnrollCommentByLineCommentAction override below. -->
+    <lang.commenter
+        language="Gherkin"
+        implementationClass="net.reqnroll.idesupport.rider.psi.ReqnrollFeatureCommenter" />
+
     <!-- Only prose is spell-checked; keywords, tags, placeholders and data are skipped. -->
     <spellchecker.support
         language="Gherkin"
@@ -156,6 +168,10 @@ for what is available in each IDE.</p>
   </extensions>
 
   <applicationListeners>
+    <!-- Re-parses open feature files when the project's reqnroll.json / specflow.json changes, since its
+         default dialect decides how a file without a `# language:` header is lexed. -->
+    <listener class="net.reqnroll.idesupport.rider.psi.FeatureLanguageConfigListener"
+              topic="com.intellij.openapi.vfs.newvfs.BulkFileListener" />
     <!-- Tells ReqnrollFormattingService which reformats the user asked for explicitly (issue #1172). -->
     <listener class="net.reqnroll.idesupport.rider.formatting.ExplicitReformatActionListener"
               topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />

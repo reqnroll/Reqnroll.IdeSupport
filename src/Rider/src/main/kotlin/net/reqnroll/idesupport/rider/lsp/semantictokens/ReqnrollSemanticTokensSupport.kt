@@ -1,9 +1,8 @@
 package net.reqnroll.idesupport.rider.lsp.semantictokens
 
-import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
-import com.intellij.openapi.editor.colors.CodeInsightColors
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
+import net.reqnroll.idesupport.rider.psi.ReqnrollFeatureTextAttributes
 
 /**
  * The custom `reqnroll.*` semantic-token type names, matching
@@ -56,49 +55,21 @@ class ReqnrollSemanticTokensSupport : LspSemanticTokensSupport() {
         KEYS[tokenType]
 
     companion object {
+        // The keys, and the reasons behind each default colour, live in ReqnrollFeatureTextAttributes so the
+        // lexer-based highlighter and these server tokens share them.
         private val KEYS: Map<String, TextAttributesKey> = mapOf(
-            ReqnrollSemanticTokenTypes.KEYWORD to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_KEYWORD", DefaultLanguageHighlighterColors.KEYWORD),
-            ReqnrollSemanticTokenTypes.TAG to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_TAG", DefaultLanguageHighlighterColors.METADATA),
-            ReqnrollSemanticTokenTypes.DESCRIPTION to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_DESCRIPTION", DefaultLanguageHighlighterColors.DOC_COMMENT),
-            ReqnrollSemanticTokenTypes.COMMENT to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_COMMENT", DefaultLanguageHighlighterColors.LINE_COMMENT),
-            ReqnrollSemanticTokenTypes.DOC_STRING to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_DOC_STRING", DefaultLanguageHighlighterColors.STRING),
-            ReqnrollSemanticTokenTypes.DATA_TABLE to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_DATA_TABLE", DefaultLanguageHighlighterColors.STRING),
-            ReqnrollSemanticTokenTypes.DATA_TABLE_HEADER to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_DATA_TABLE_HEADER", DefaultLanguageHighlighterColors.CONSTANT),
-            // DefaultLanguageHighlighterColors.PARAMETER was the original choice, but most default
-            // color schemes leave "Parameter" with little or no distinct styling (unlike the other
-            // keys below, which are all strongly colored everywhere) — confirmed via live testing
-            // (2026-07-13): tokens were arriving and mapped correctly, just not visually distinct
-            // until the color scheme's Parameter style was customized. NUMBER renders distinctly in
-            // every default IntelliJ/Rider scheme.
-            ReqnrollSemanticTokenTypes.STEP_PARAMETER to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_STEP_PARAMETER", DefaultLanguageHighlighterColors.NUMBER),
-            // INSTANCE_FIELD was the original choice, but it's the same class of "soft" fallback
-            // that bit STEP_PARAMETER's original PARAMETER mapping above — no distinct default
-            // styling in most schemes. NUMBER renders distinctly everywhere; reusing it here
-            // (rather than picking a third arbitrary key) also matches the VS extension's own
-            // DeveroomClassifications, which bases ScenarioOutlinePlaceholder on "number" too
-            // (plus italic). Safe to share with STEP_PARAMETER's color since the two never
-            // co-occur on the same step (DeveroomTagParser skips StepParameter tags entirely for
-            // scenario outline steps whose text contains a placeholder).
-            ReqnrollSemanticTokenTypes.SCENARIO_OUTLINE_PLACEHOLDER to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_SCENARIO_OUTLINE_PLACEHOLDER", DefaultLanguageHighlighterColors.NUMBER),
-            // WARNINGS_ATTRIBUTES (a background-fill style) was the original choice, but it
-            // renders close enough to the IDE's own caret-row highlight to be confusing when the
-            // undefined step also happens to be the active line — confirmed via live testing
-            // (2026-07-13). ERRORS_ATTRIBUTES (squiggly-underline style) is visually distinct from
-            // any row-background highlight, and a better semantic fit anyway: an undefined step
-            // genuinely will fail at runtime, not just a soft warning.
-            ReqnrollSemanticTokenTypes.UNDEFINED_STEP to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_UNDEFINED_STEP", CodeInsightColors.ERRORS_ATTRIBUTES),
-            ReqnrollSemanticTokenTypes.AMBIGUOUS_STEP to TextAttributesKey.createTextAttributesKey(
-                "REQNROLL_AMBIGUOUS_STEP", CodeInsightColors.WEAK_WARNING_ATTRIBUTES),
+            ReqnrollSemanticTokenTypes.KEYWORD to ReqnrollFeatureTextAttributes.KEYWORD,
+            ReqnrollSemanticTokenTypes.TAG to ReqnrollFeatureTextAttributes.TAG,
+            ReqnrollSemanticTokenTypes.DESCRIPTION to ReqnrollFeatureTextAttributes.DESCRIPTION,
+            ReqnrollSemanticTokenTypes.COMMENT to ReqnrollFeatureTextAttributes.COMMENT,
+            ReqnrollSemanticTokenTypes.DOC_STRING to ReqnrollFeatureTextAttributes.DOC_STRING,
+            ReqnrollSemanticTokenTypes.DATA_TABLE to ReqnrollFeatureTextAttributes.DATA_TABLE,
+            ReqnrollSemanticTokenTypes.DATA_TABLE_HEADER to ReqnrollFeatureTextAttributes.DATA_TABLE_HEADER,
+            ReqnrollSemanticTokenTypes.STEP_PARAMETER to ReqnrollFeatureTextAttributes.STEP_PARAMETER,
+            ReqnrollSemanticTokenTypes.SCENARIO_OUTLINE_PLACEHOLDER to
+                ReqnrollFeatureTextAttributes.SCENARIO_OUTLINE_PLACEHOLDER,
+            ReqnrollSemanticTokenTypes.UNDEFINED_STEP to ReqnrollFeatureTextAttributes.UNDEFINED_STEP,
+            ReqnrollSemanticTokenTypes.AMBIGUOUS_STEP to ReqnrollFeatureTextAttributes.AMBIGUOUS_STEP,
         )
     }
 }
