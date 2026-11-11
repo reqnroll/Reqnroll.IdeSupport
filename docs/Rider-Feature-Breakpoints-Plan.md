@@ -5,6 +5,9 @@ Status: **plan, not implemented.** Nothing below has been built or run in Rider 
 `ilspycmd` on `lib/ReSharperHost/*.dll`) or against this repository; everything else is a design
 decision or an assumption that the spike in [§8](#8-work-breakdown) must confirm.
 
+> **Superseded in scope** by [Rider-Gherkin-PSI-Plan.md](Rider-Gherkin-PSI-Plan.md), which treats this
+> backend module as Phase 1 and replaces the frontend `TEXT` shim (§4) with a real frontend PSI.
+
 Related: GitHub issue #453 (VS Code half shipped separately), open questions
 [O6 and O9](LSP-IDE-Support-Open-Questions.md), and the limitations list in
 [Test-Runner-Integration-Design §12](Test-Runner-Integration-Design.md).

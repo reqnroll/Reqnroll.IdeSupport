@@ -54,6 +54,16 @@ for what is available in each IDE.</p>
     <platform.lsp.serverSupportProvider
         implementation="net.reqnroll.idesupport.rider.lsp.ReqnrollLspServerSupportProvider" />
 
+    <!-- Lets Rider's breakpoint machinery consider .feature files at all. Rider keys this on the
+         PSI file's language, and .feature files have no ParserDefinition (see
+         ReqnrollFeatureInlayHintsController), so IntelliJ's plain-text fallback reports TEXT rather
+         than Gherkin. Rider's backend then decides per file: the bundled backend module offers a
+         breakpoint on .feature lines, and no module does for other plain-text files, so they stay
+         non-breakpointable. Harmless on its own when the backend module isn't bundled. -->
+    <rider.debuggerSupportPolicy
+        language="TEXT"
+        implementationClass="com.jetbrains.rider.debugger.RiderDebuggerSupportPolicy" />
+
     <fileType
         name="Reqnroll Feature"
         implementationClass="net.reqnroll.idesupport.rider.ReqnrollFeatureFileType"

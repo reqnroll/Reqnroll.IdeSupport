@@ -1,0 +1,309 @@
+# Rider: a PSI for `.feature` files — implementation and rework plan
+
+Status: **plan, not implemented.** This supersedes the scope of
+[Rider-Feature-Breakpoints-Plan.md](Rider-Feature-Breakpoints-Plan.md). That plan's backend module is
+kept unchanged as [Phase 1](#6-phases); its frontend half (§4, the `TEXT` registration) becomes a
+temporary shim that [Phase 4](#6-phases) removes.
+
+Facts marked *(verified)* were checked against this repository or the Rider 2026.2.3.1 binaries.
+Everything else is a design decision or an assumption listed in [§9](#9-not-verified).
+
+## 1. Why
+
+The Rider plugin registers `.feature` as a file type whose language (`ReqnrollFeatureLanguage`, id
+`Gherkin`) has **no `ParserDefinition`** *(verified)*. IntelliJ therefore builds a plain-text PSI whose
+language is `TEXT`, not `Gherkin`. Every platform feature that dispatches by PSI language then either
+never fires for us or fires for the wrong language. The plugin has worked around that one feature at a
+time, with hand-managed `Editor` models and action overrides *(verified: `plugin.xml`, the doc comments
+of `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureFoldingController`,
+`RunTestCodeVisionProvider`, `ReqnrollCommentByLineCommentAction`)*.
+
+The goal is to give `.feature` a real, thin PSI and move each workaround onto the platform extension
+point it was standing in for. Users gain native behaviour. The plugin loses code it has to keep
+working on every Rider release.
+
+### Non-goals
+
+- Replacing the language server. Diagnostics, step binding, completion content, rename edits and test
+  discovery stay server-side. The PSI describes **structure**, never meaning.
+- A backend (ReSharper) Gherkin PSI. The Phase 1 stub stays a stub.
+- Changing VS or VS Code.
+
+## 2. Design
+
+### 2.1 Thin PSI, server stays authoritative
+
+The PSI is a lexer plus a tree parser, **both built on the Cucumber Gherkin parser** rather than
+written by hand ([§2.5](#25-reusing-the-gherkin-parser)). It never reports errors (the server owns
+diagnostics) and never resolves anything. It exists so the platform can answer "what language, what
+token, what block is this line in".
+
+### 2.2 Lexer
+
+A `LexerBase` that replays the real Gherkin token matcher over the buffer ([§2.5](#25-reusing-the-gherkin-parser))
+and emits one IntelliJ token per matched span. It produces these token kinds:
+
+| Token | Notes |
+|---|---|
+| Structural keyword | `Feature`, `Rule`, `Background`, `Scenario`, `Scenario Outline`, `Examples` and their localised forms |
+| Step keyword | `Given`, `When`, `Then`, `And`, `But`, `*` and localised forms |
+| Text | Names, descriptions, step text |
+| Tag | `@name` |
+| Comment | `# …` |
+| Language header | `# language: xx` |
+| Pipe / table cell | Table rows |
+| Doc-string delimiter / content | `"""` and ` ``` ` |
+| Placeholder | `<name>` inside Outline steps and cells |
+| Whitespace / newline | |
+
+- **Localisation.** The matcher resolves keywords from `# language: xx` using the library's own
+  dialect data (`GherkinDialects` is public API), so nothing is bundled or duplicated. Editing the
+  header therefore needs one full re-highlight.
+- **Restartable state.** The simple version rescans the whole buffer on every `start()` and caches the
+  token list per document modification stamp. Linear cost; measure on a large file
+  ([§8](#8-verification)). Restarting from saved state would be faster but needs the matcher's private
+  state, so it is a later optimisation.
+- **Project default language.** The server resolves a per-project default language and falls back from
+  `en-US` to `en` (`ReqnrollGherkinDialectProvider`). The client needs that value too, as per-file user
+  data, with a re-parse when it changes. Until it is wired, files that rely on project config for a
+  non-English language mis-parse in the PSI (the server still treats them correctly).
+- **Colour parity.** Each token type maps to the same `TextAttributesKey` that
+  `ReqnrollSemanticTokensSupport` already assigns to the matching `reqnroll.*` legend name. When the
+  server's tokens arrive the file looks identical, so the swap is invisible apart from the instant
+  first paint.
+
+### 2.3 Tree
+
+```
+FEATURE_FILE
+  FEATURE (tags, keyword, name, description)
+    BACKGROUND (STEP*)
+    RULE
+      SCENARIO | SCENARIO_OUTLINE
+        STEP (DOC_STRING | TABLE)?
+        EXAMPLES (TABLE)
+```
+
+The tree comes from Gherkin's own grammar: the library parser's `startRule` / `endRule` / `build(token)`
+callbacks map directly onto `PsiBuilder` markers and tokens, so rule boundaries (including Gherkin's
+description-versus-step and doc-string corner cases) are exactly the grammar's. A malformed file still
+produces a full tree, because the adapter closes every open marker on an error or end of file; the tree
+must never throw away text.
+
+- Typed elements only where a feature needs them: `ReqnrollStep` (keyword, text, owning scenario),
+  `ReqnrollScenario` (name, kind, line range), `ReqnrollTable`. Everything else is a generic
+  `ASTWrapperPsiElement`.
+- **No `PsiNamedElement` and no `PsiReference` in the first iterations.** Naming an element or giving
+  it a reference makes platform Rename, Find Usages and "highlight usages" engage on it, and none of
+  those can be answered without a PSI target in a C# file, which the Rider frontend does not have
+  *(see [§9](#9-not-verified))*.
+
+### 2.4 Registration
+
+```xml
+<lang.parserDefinition language="Gherkin" implementationClass="…ReqnrollFeatureParserDefinition"/>
+<lang.syntaxHighlighterFactory language="Gherkin" implementationClass="…"/>
+```
+
+`ReqnrollFeatureFileType` already declares `language="Gherkin"`, so no file-type change is needed.
+
+### 2.5 Reusing the Gherkin parser
+
+Checked against the published jars (Maven Central `io.cucumber:gherkin`, NuGet `Gherkin`) and the
+server's `IdeSupportGherkinParser`. The bridge itself has not been built.
+
+| Option | Verdict |
+|---|---|
+| **Java `GherkinParser` (public API) as the tree source** | Rejected. Given an invalid file (unterminated doc string, unknown `# language:`) it returns a `ParseError` and **no partial document** *(verified by running it)*. A PSI must cover the whole text. Fine only as a structure-only side channel, which cannot anchor markers or highlighting. |
+| **.NET `Gherkin` package, via the server** | Rejected. The server already does this and tolerates errors, but the PSI is needed synchronously on the frontend. |
+| **Java internal parser, driving `PsiBuilder`** | **Chosen.** `Parser`, `Token`, `TokenScanner` and `GherkinTokenMatcher` are package-private *(verified)*, but `Parser.Builder` is exactly the callback shape `PsiBuilder` needs. |
+| **Hand-written lexer and parser** | Rejected. It would re-implement the grammar's corner cases and keyword tables and need to track upstream. |
+
+**Version.** Use Java `io.cucumber:gherkin` **39.1.0**, the version matching the server's `Gherkin`
+39.1.0 *(verified: both are published through 42.0.1 in lock-step)*. Dependencies are `messages` and
+`jspecify`; the jar is about 240 KB and `messages` about 120 KB, with Jackson only as a test dependency
+of `messages` *(verified from the POMs)*. Gherkin is MIT-licensed upstream.
+
+**Reaching the internal classes.** Put one small adapter class in package `io.cucumber.gherkin` inside
+our plugin jar, written in Java (the Gradle build gains a Java source set; today it is Kotlin only), so
+it can use the package-private types on the classpath. The fallback is to vendor the library source.
+Both need checking in Rider ([§9](#9-not-verified)).
+
+**Adapter responsibilities.**
+
+1. A `Parser.Builder` that maps `startRule` / `endRule` to `PsiBuilder` markers and `build(token)` to
+   tokens, using each token's line and column for offsets.
+2. Catch the exception the library throws at an error or at end of file, and close all open markers so
+   the tree is complete.
+3. A restartable `Lexer` that replays `TokenScanner` and `GherkinTokenMatcher` and emits sub-line spans
+   (keyword, text, tags, table cells, doc-string content) from each `Token`.
+4. The per-file default language ([§2.2](#22-lexer)).
+
+**Parity with the server.** Both sides come from the same Cucumber release train, so grammar and
+keywords should agree. Contract tests: run the Cucumber shared test corpus (the `good/*.feature` files
+with their expected token output) through the adapter, and compare structure for a fixed sample against
+the server's `documentSymbol`.
+
+## 3. Area-by-area rework
+
+Ranked by user impact, as agreed. Each row names the code that goes away.
+
+| # | Area | Today | After the PSI | Removed / changed | Risk |
+|---|---|---|---|---|---|
+| 1 | **Instant syntax colour** | Semantic tokens only; nothing coloured until the server answers | `SyntaxHighlighter` from the lexer; semantic tokens overlay it | Nothing removed; adds `BraceMatcher`, `QuoteHandler` | Low |
+| 2 | **Run / Debug gutter** | `RunTestCodeVisionProvider` inline lens; no Debug | `RunLineMarkerContributor` gives a native gutter marker with the standard Run/Debug menu on `SCENARIO` / `SCENARIO_OUTLINE` | `RunTestCodeVisionProvider` (after a deprecation release behind a setting). `FailedStepGutterMarks` stays: it paints per-run state, not structure | Medium |
+| 3 | **Breakpoints** | Spike registers the debugger policy for `TEXT`, so every plain-text file passes Gate 1 | Register the policy for `Gherkin` only | The `TEXT` line in `plugin.xml`. The backend stub stays | Low |
+| 4 | **Navigation and refactoring entry points** | Promoter and action for F12 / Ctrl+B / Ctrl+click; claimed Shift+F6; Comment action overridden by ID | `Commenter`; `renameHandler` extension point for Rename Step; navigation re-evaluated in [Phase 8](#6-phases) | `ReqnrollCommentByLineCommentAction` (if parity holds). Shift+F6 claim | **High** for navigation, Low for the rest |
+| 5 | **Hand-managed editor visuals** | `editorFactoryListener`s drive `foldingModel` and `inlayModel`; tag links by hand | `FoldingBuilder` from the tree; declarative `InlayHintsProvider` fed by the server's `inlayHint` request; native Structure view on every supported Rider | `ReqnrollFeatureFoldingController`, `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureInlayHintsSettings`, the "Show Feature Inlay Hints" action | Medium |
+| 6 | **Typing assists** | Two `typedHandler`s for `|` realignment and `@` / space popups | Same handlers, now language-scoped. Add `SpellcheckingStrategy`, `IndexPatternBuilder` (TODO), breadcrumbs | Nothing | Low |
+
+### Notes per area
+
+1. **Highlighting.** Platform brace matching and quote handling arrive with the language. Check that
+   the semantic-token overlay does not flicker against the lexer colours when a file is first opened.
+2. **Run gutter.** The marker's actions call the existing `RunTestRunner`, so execution is unchanged.
+   The **Debug** entry has to start `dotnet test` with the VSTest host-debug handshake and attach the
+   .NET debugger. That is separate work ([Phase 10](#6-phases)): the PSI supplies the entry point but
+   not the launch. Keep the inline lens for one release so users who like it can switch back.
+3. **Breakpoints.** Gate 1 keys on `psiFile.language`, which becomes `Gherkin`. Do this as soon as
+   Phase 2 lands rather than leaving the `TEXT` shim in place.
+4. **Navigation.** Go to Definition works today through the generic LSP client plus the 2026.2
+   promoter. A `PsiReference` on step text would need a PSI target in a `.cs` file, and Rider's frontend
+   has no C# PSI to offer. So this area is an investigation with a go/no-go, not a committed rewrite. The
+   committed parts are the `Commenter` and a native `renameHandler`. Rename Step stays a server rename:
+   the handler only changes how it is invoked (Refactor menu, user keymaps), not how the edit is built.
+5. **Visuals.** Fold ranges now come from the tree, so folding no longer waits for the server and the
+   Rider path stops depending on `textDocument/foldingRange` (the server handler stays for other IDEs).
+   Hints still come from the server because binding data is semantic. The declarative provider also
+   brings a Settings page and per-hint toggles. Tag links (`ReqnrollFeatureTagLinkController`): read
+   `TagLinkSupport` first. If the link target is a server `documentLink`, keep it as is.
+
+## 4. Cross-cutting concerns
+
+- **Double rendering during migration.** Today's workaround controllers and the new language-scoped
+  platform features will both fire once the language is real. Every area migrates in a single PR that
+  adds the platform feature **and** removes its workaround. No area lands half-way.
+- **Spell checking, TODO indexing and other language-dispatched features start running on `.feature`.**
+  Phase 2 ships a `SpellcheckingStrategy` that skips keywords, tags, placeholders and step parameters,
+  so users do not get a wall of squiggles.
+- **Legacy plugin (`net.reqnroll`).** It registers its own `.feature` file type and PSI. With both
+  plugins present, two parsers fight over one extension. The incompatibility decision in open question
+  O9 stops being optional: declare `<incompatible-with>net.reqnroll</incompatible-with>`, and verify
+  Rider honours it for a plugin ID.
+- **Formatting.** `ReqnrollFormattingService` is registered `order="first"` and keeps winning. No
+  `FormattingModelBuilder` is added, so Reformat Code still goes through the server.
+- **Compatibility range.** The Kotlin jar is shared by all legs (243 – 262.*). Every extension point
+  used must exist in 2024.3. `verifyPlugin` checks binary compatibility of that Kotlin code across the
+  range, so the PSI work is partly self-checking, unlike the .NET backend.
+- **Marketplace.** No new legs. The frontend-only leg for older Rider gets the PSI features too
+  (highlighting, gutter run, folding, outline), since none of them need the backend. Only breakpoints
+  need the backend leg.
+- **Parity with the server.** See [§2.5](#25-reusing-the-gherkin-parser). Pin the Java jar to the
+  server's Gherkin version and bump them together.
+- **Packaging and classloading.** The Gherkin and `messages` jars ship inside the plugin. The
+  split-package adapter and any `io.cucumber` classes already in the IDE need checking
+  ([§9](#9-not-verified)).
+- **Testing in Rider.** Rider's `BasePlatformTestCase` fixtures fail with "solution can't be null"
+  (recorded from issue 566). Lexer and parser tests must therefore be plain unit tests or
+  `ParsingTestCase`-style tests with a mock application, and the earlier plan's `BasePlatformTestCase`
+  for the breakpoint policy registration should instead be a test that parses `plugin.xml`.
+
+## 5. Dependency order
+
+```mermaid
+flowchart LR
+    P1["1 Backend breakpoints<br/>(TEXT shim)"] --> P4
+    P2["2 PSI foundation"] --> P3["3 Highlight + matchers"]
+    P2 --> P4["4 Breakpoints on Gherkin"]
+    P2 --> P5["5 Folding + outline"]
+    P2 --> P6["6 Inlay hints"]
+    P2 --> P7["7 Run gutter"]
+    P2 --> P8["8 Rename + navigation"]
+    P3 --> P9["9 Cleanup + docs"]
+    P4 --> P9
+    P5 --> P9
+    P6 --> P9
+    P7 --> P9
+    P8 --> P9
+    P7 -.-> P10["10 Debug launch"]
+```
+
+## 6. Phases
+
+Sizes are rough estimates in working days and have not been validated.
+
+| Phase | Deliverable | Exit criterion | Est. |
+|---|---|---|---|
+| **0** | Live check of the backend spike in `runIde` | Go/no-go for Phase 1 (checks in [§8](#8-verification)) | 1 |
+| **1** | Backend module, Gradle wiring, `TEXT` shim (**already built, uncommitted**), CI matrix per the earlier plan | Breakpoint binds and hits | per earlier plan |
+| **2a** | **Parser bridge**: Java source set, Gherkin 39.1.0 dependency, same-package adapter, `PsiBuilder` builder, restartable lexer; no registration yet | Shared corpus passes; invalid files yield a full tree; spike confirms classloading in Rider | 3–4 |
+| **2b** | **PSI foundation**: `ParserDefinition`, typed elements, per-file default language, `SpellcheckingStrategy`, no behavioural change otherwise | Every existing feature still works with the language now real; no double rendering | 2–3 |
+| **3** | **Highlighting and matchers**: `SyntaxHighlighter`, `BraceMatcher`, `QuoteHandler`, `Commenter`; retire the comment action override if parity holds | First paint coloured before the server starts; comment toggling matches the server's behaviour | 2–3 |
+| **4** | **Breakpoints on `Gherkin`**: switch the policy, drop `TEXT` | `.txt` gutter clicks no longer reach Gate 1 | 0.5 |
+| **5** | **Folding and Structure view**: `FoldingBuilder`, `StructureViewBuilder`; delete the folding controller | Folds identical to today's; outline works on the oldest supported Rider | 3 |
+| **6** | **Inlay hints**: declarative provider, Settings page; delete the controller, settings object and toggle action | One hint per binding, no duplicates; toggles persist | 3–4 |
+| **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release | Run works from the gutter; failed-step marks unaffected | 3 |
+| **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
+| **9** | **Cleanup and docs**: remove dead workarounds, update `client-rider.md` §7 and §8, feature pages, CHANGELOG | Doc comments no longer say "no PSI" | 1–2 |
+| **10** | **Debug launch** for scenarios (separate track) | F5-style Debug from the gutter attaches and hits `.feature` breakpoints | tbd |
+
+Phases 3 and 5–8 are independent of each other once Phase 2 is in, so they can be reviewed as
+separate PRs in any order. Phase 2 is the only large risk: it changes the language of every `.feature`
+editor.
+
+## 7. Rollback
+
+- Phases 2–8 each ship as one PR with a revert path. Phase 2's `ParserDefinition` registration is a
+  single `plugin.xml` line, so a field problem with the PSI can be mitigated by removing it while the
+  platform features keep their old controllers, but only if the controllers of later phases are still
+  present. That is why each migration removes its workaround in the same PR as it adds the replacement,
+  and why Phase 2 must not remove anything.
+- The Run lens stays behind a setting for one release (Phase 7).
+
+## 8. Verification
+
+Live, in Rider, on a sample Reqnroll project (Windows first).
+
+| Check | Expected |
+|---|---|
+| Open a `.feature` with the server stopped | Coloured at once; the colours do not change when the server starts |
+| Localised file (`# language: fr`) | Keywords coloured and folded correctly; editing the header re-highlights |
+| Project whose default language is not English, no header | PSI and server agree on keywords |
+| Invalid file (unterminated doc string, unknown language) | Whole text still in the tree; no exception in the log |
+| Large file (several thousand lines) | No typing lag; no EDT stalls in the log; measure the lexer rescan cost |
+| Fold / unfold, Structure view | Match today's ranges; outline present on the oldest supported Rider |
+| Inlay hints | No duplicates; Settings page toggles them |
+| Gutter marker | Run works; failed-step marks appear after a failed run |
+| Breakpoints | As in the earlier plan's table; no response on a `.txt` gutter |
+| Comment, Rename Step, F12 | Unchanged behaviour on all supported Rider versions |
+| Spell check | No squiggles on keywords, tags, placeholders or parameters |
+| Legacy plugin also installed | Rider reports the incompatibility |
+
+## 9. Not verified
+
+- Everything in the backend breakpoint spike (see the earlier plan §11).
+- That a frontend PSI is created for `.feature` in Rider, and how it interacts with the platform LSP
+  client's own `.feature` handling. The legacy plugin does it, which is the only evidence.
+- That Rider's frontend has no usable PSI for C# files, which decides whether Phase 8's navigation
+  go/no-go can be a go.
+- Whether the semantic-token overlay and the lexer highlighter composite without flicker on every
+  supported Rider.
+- Whether `RunLineMarkerContributor` markers show the standard Debug entry for a non-C# language in
+  Rider, rather than needing a custom action.
+- Whether a `Commenter` reproduces the server's comment toggle for doc strings and tables.
+- That a class in package `io.cucumber.gherkin` inside our plugin jar can reach the package-private
+  parser types in Rider's plugin classloader (the same runtime package), and that the IDE bundles no
+  conflicting `io.cucumber` classes. Fallback: vendor the source.
+- That Java Gherkin 39.1.0 behaves the same as .NET 39.1.0 on the shared corpus.
+- Whole-buffer lexer rescans stay fast enough on large files.
+- That the parser's error behaviour at end of file lets the adapter always close a complete tree.
+- The effort estimates in [§6](#6-phases).
+
+## 10. Decisions needed
+
+1. Commit to the PSI programme, or ship Phase 1 alone and stop.
+2. Phase 2 sequencing: before Phase 1 ships, or after. The proposal is **after** (Phase 1 is built and
+   independent).
+3. Legacy plugin: declare it incompatible (proposed: yes).
+4. Keep the inline Run lens as a setting for one release (proposed: yes).
+5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.

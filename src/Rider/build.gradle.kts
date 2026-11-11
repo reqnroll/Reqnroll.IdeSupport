@@ -256,6 +256,42 @@ val publishServer by tasks.registering(Exec::class) {
     )
 }
 
+// ── Rider backend module (.feature breakpoints) ──
+//
+// A small .NET module that runs in Rider's ReSharper backend process and lets the debugger offer
+// breakpoints in .feature files (see docs/Rider-Feature-Breakpoints-Plan.md). Unlike the Kotlin code, it is
+// compiled against one Rider SDK version, so a build that includes it is only compatible with that
+// Rider version (pluginSinceBuild/pluginUntilBuild must be narrowed to match). `withBackend=false`
+// produces the frontend-only build that works across the whole range.
+//
+// Pre-built by CI and passed in with -PbackendBuildDir (a directory holding the module's DLL), in
+// which case compileBackend is skipped, mirroring -PlspServerBuildDir above.
+val withBackend = (findProperty("withBackend") as String? ?: "true").toBoolean()
+val backendDir = layout.projectDirectory.dir("dotnet")
+val backendAssemblyName = "Reqnroll.IdeSupport.Rider.Backend"
+val backendProject = File(backendDir.asFile, "$backendAssemblyName/$backendAssemblyName.csproj")
+val backendOutputDir = layout.projectDirectory.dir("dotnet/$backendAssemblyName/bin/Release/net472")
+val externalBackendBuildDir = (findProperty("backendBuildDir") as String?)?.let { File(it) }
+val riderSdkVersion = findProperty("riderSdkVersion") as String?
+
+val compileBackend by tasks.registering(Exec::class) {
+    group = "reqnroll"
+    description = "Builds the Rider backend module against the Rider SDK. Skipped when -PbackendBuildDir " +
+        "is set or -PwithBackend=false."
+    onlyIf { withBackend && externalBackendBuildDir == null }
+
+    inputs.files(fileTree(backendDir) { exclude("**/bin/**", "**/obj/**") })
+    inputs.property("riderSdkVersion", riderSdkVersion ?: "default")
+    outputs.dir(backendOutputDir)
+
+    commandLine(
+        buildList {
+            addAll(listOf("dotnet", "build", backendProject.toString(), "--configuration", "Release", "--nologo"))
+            if (riderSdkVersion != null) add("-p:RiderSdkVersion=$riderSdkVersion")
+        }
+    )
+}
+
 // ── Bundle the Reqnroll.IdeSupport.TestLogger (LSP-server outcome pipeline, #700/#702) ──
 //
 // Unlike the server above, the logger targets netstandard2.0 with no self-contained runtime
@@ -366,6 +402,23 @@ tasks.withType<PrepareSandboxTask>().configureEach {
                     into("${project.name}/server/$rid")
                     makeServerBinariesExecutable()
                 }
+            }
+        }
+    }
+
+    if (withBackend) {
+        val externalBackendDir = externalBackendBuildDir
+        val backendFiles = listOf("$backendAssemblyName.dll", "$backendAssemblyName.pdb")
+        if (externalBackendDir == null) {
+            dependsOn(compileBackend)
+            from(backendOutputDir) {
+                include(backendFiles)
+                into("${project.name}/dotnet")
+            }
+        } else {
+            from(externalBackendDir) {
+                include(backendFiles)
+                into("${project.name}/dotnet")
             }
         }
     }
