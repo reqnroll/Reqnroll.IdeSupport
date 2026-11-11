@@ -205,8 +205,9 @@ reasoning behind it are in [docs/Rider-Feature-Breakpoints-Plan.md](../../docs/R
 - `-PbackendBuildDir=<dir>` bundles an already-built module from `<dir>` instead of running `dotnet build`, the
   same way `-PlspServerBuildDir` does for the server.
 - Unit tests for the SDK-free logic: `dotnet test dotnet/Reqnroll.IdeSupport.Rider.Backend.Tests`.
-- The `rider.debuggerSupportPolicy` registration in `plugin.xml` is for the `TEXT` language on purpose: `.feature`
-  files have no `ParserDefinition`, so IntelliJ treats them as plain text for this check.
+- The `rider.debuggerSupportPolicy` registration in `plugin.xml` is for the `Gherkin` language, which is the PSI
+  language of `.feature` files now that the file type has a `ParserDefinition`. Rider's breakpoint check keys on
+  that language.
 
 ## Local install of a dev build
 

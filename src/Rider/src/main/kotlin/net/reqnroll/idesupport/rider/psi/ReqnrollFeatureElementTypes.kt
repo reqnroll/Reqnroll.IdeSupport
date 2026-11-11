@@ -1,5 +1,8 @@
 package net.reqnroll.idesupport.rider.psi
 
+import com.intellij.lang.ASTNode
+import com.intellij.lang.PsiBuilderFactory
+import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.IFileElementType
 import net.reqnroll.idesupport.rider.ReqnrollFeatureLanguage
@@ -19,10 +22,24 @@ object ReqnrollFeatureTokenTypes {
     fun of(kind: GherkinTokenKind): IElementType = byKind.getValue(kind)
 }
 
+/**
+ * The file element type. It parses the file's contents itself so the lexer and parser can be given the default
+ * dialect of the file's project, which a [com.intellij.lang.ParserDefinition]'s project-wide lexer cannot know.
+ */
+class ReqnrollFeatureFileElementType : IFileElementType("REQNROLL_FEATURE_FILE", ReqnrollFeatureLanguage) {
+    override fun doParseContents(chameleon: ASTNode, psi: PsiElement): ASTNode? {
+        val language = FeatureDefaultLanguages.languageFor(psi.containingFile?.viewProvider?.virtualFile)
+        val builder = PsiBuilderFactory.getInstance().createBuilder(
+            psi.project, chameleon, ReqnrollFeatureLexer(language), ReqnrollFeatureLanguage, chameleon.chars,
+        )
+        return ReqnrollFeatureParser(language).parse(this, builder).firstChildNode
+    }
+}
+
 /** Composite element types of a feature file's tree: the file itself and one per Gherkin grammar rule. */
 object ReqnrollFeatureElementTypes {
     @JvmField
-    val FILE = IFileElementType("REQNROLL_FEATURE_FILE", ReqnrollFeatureLanguage)
+    val FILE: IFileElementType = ReqnrollFeatureFileElementType()
 
     /** The grammar rules the Gherkin parser reports, by the library's own rule names. */
     internal val knownRules: List<String> = listOf(
