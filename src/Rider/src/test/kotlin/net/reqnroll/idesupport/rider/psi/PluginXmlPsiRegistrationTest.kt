@@ -54,6 +54,27 @@ class PluginXmlPsiRegistrationTest {
     }
 
     @Test
+    fun `folding and the structure view are registered for Gherkin and resolve`() {
+        val folding = registrations("lang.foldingBuilder").single()
+        val structure = registrations("lang.psiStructureViewFactory").single()
+
+        assertEquals("Gherkin", folding.getAttribute("language"))
+        assertEquals(ReqnrollFeatureFoldingBuilder::class.java, Class.forName(folding.getAttribute("implementationClass")))
+        assertEquals("Gherkin", structure.getAttribute("language"))
+        assertEquals(
+            ReqnrollFeatureStructureViewFactory::class.java,
+            Class.forName(structure.getAttribute("implementationClass")),
+        )
+    }
+
+    @Test
+    fun `the old folding controller is no longer registered`() {
+        val editorListeners = registrations("editorFactoryListener").map { it.getAttribute("implementation") }
+
+        assertTrue(editorListeners.none { it.contains("FoldingController") }, editorListeners.toString())
+    }
+
+    @Test
     fun `the config change listener is registered on the bulk file topic and resolves`() {
         val stream = javaClass.getResourceAsStream("/META-INF/plugin.xml")!!
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(stream)

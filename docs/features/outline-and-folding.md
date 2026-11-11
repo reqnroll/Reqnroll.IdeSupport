@@ -20,10 +20,10 @@ flowchart LR
     TAG --> FRS["FoldingRangeService<br/>(LSP.Core)"]
     DSS --> DSH["DocumentSymbolHandler<br/>documentSymbol"]
     FRS --> FRH["FoldingRangeHandler<br/>foldingRange"]
-    DSH --> VSC["VS Code, Rider: native Outline / Structure"]
+    DSH --> VSC["VS Code: native Outline"]
     DSH --> VSN["Visual Studio:<br/>reqnroll/documentSymbolHierarchical<br/>→ navigation-bar dropdowns"]
     FRH --> VSF["VS Code, Visual Studio: native folding"]
-    FRH --> RDF["Rider: ReqnrollFeatureFoldingController<br/>→ Editor.foldingModel"]
+    TREE["Rider: Gherkin PSI tree"] --> RDF["ReqnrollFeatureFoldingBuilder,<br/>ReqnrollFeatureStructureViewFactory"]
 ```
 
 ## 3. Flows
@@ -64,7 +64,7 @@ sequenceDiagram
 | `FoldingRangeService`, `GherkinFoldingRange`, `IFoldingRangeService` | `…LSP.Core/Folding` | Computes ranges. |
 | `FoldingRangeHandler` | `…LSP.Server/Features/Folding` | Statically registered handler. |
 | `GherkinNavigationBarSymbolService`, `GherkinDropdownBarClient` | `src/VisualStudio/…Extension/NavigationBar`, `…VSSDKIntegration/NavigationBar` | Visual Studio navigation bar. |
-| `ReqnrollFeatureFoldingController` | `src/Rider/…/folding` | Rider rendering. |
+| `ReqnrollFeatureFoldingBuilder`, `ReqnrollFeatureStructureViewFactory` | `src/Rider/…/psi` | Rider folding and Structure view, computed from the PSI tree. |
 
 ## 6. Behaviour and contracts
 
@@ -81,27 +81,31 @@ populated (open question O2 in the [register](../LSP-IDE-Support-Open-Questions.
 listener attaches by `[ContentType("Gherkin")]`, so it depends on the activation work in
 [../VS-LSP-Activation.md](../VS-LSP-Activation.md), and is gated off in diff views.
 
-**Rider.** The native Structure view renders the standard `documentSymbol` response on current Rider; older Rider has no
-outline. Folding has no rendering consumer in Rider's generic client, so `ReqnrollFeatureFoldingController` is an
-`EditorFactoryListener` (not a PSI `FoldingBuilder`, since `.feature` has no `ParserDefinition`) that calls the standard
-request directly and renders against `Editor.foldingModel`, debounced on edits. Fold regions are tagged through
-`FoldRegion`'s `UserDataHolder`, so a rebuild touches only Reqnroll-owned regions and restores each one's expand/collapse
-state by `(startOffset, endOffset)`.
+**Rider.** Both come from the Gherkin PSI tree (the tree is built on the Cucumber Gherkin parser), not from the server:
+`ReqnrollFeatureFoldingBuilder` is a `FoldingBuilder` and `ReqnrollFeatureStructureViewFactory` a
+`PsiStructureViewFactory`, both registered for the Gherkin language. They are available as soon as the file opens and on
+every supported Rider version, including those whose generic LSP client has no outline. A Feature, Rule, Background,
+Scenario, Examples block, doc string or table folds from the end of its first line (a Feature or Rule from the end of its
+keyword line, not a tag line above it) to the end of its content. The platform keeps each region's expand/collapse state
+across edits. The Structure view is registered for Gherkin, which takes precedence over the platform's own generic outline
+(registered for any language), so it replaces the `documentSymbol`-driven view on newer Rider. The server's
+`documentSymbol` and `foldingRange` handlers are still used by VS Code and Visual Studio.
 
 **VS Code and Visual Studio** render folding purely through the generic LSP client.
 
 ## 7. Pitfalls and design decisions
 
-1. **Rider rebuilds must preserve user fold state.** Otherwise every keystroke silently re-expands everything the user
-   collapsed.
-2. **Do not use PSI-based folding or outline in Rider.** There is no PSI tree for `.feature`.
+1. **Keep the Rider tree-based folding in step with the server's ranges.** Both follow the same rules (the blocks listed
+   above); a block that folds in one IDE should fold in the others.
+2. **The Rider outline and folds must not need the server.** They are computed from the tree so they work before the
+   server has started.
 3. **Do not expect Visual Studio to request `documentSymbol`.** Use the custom request for the dropdown bar.
 4. **Keep the symbol model protocol-agnostic in Core.** Conversion to OmniSharp types belongs in the handler.
 
 ## 8. Known limitations
 
 - Visual Studio's Document Outline window is not populated; the navigation-bar dropdowns are.
-- Older Rider versions have no outline.
+- Rider's Structure view shows Feature, Background, Rule, Scenario, Step and Examples nodes without icons.
 
 ## 9. Testing
 

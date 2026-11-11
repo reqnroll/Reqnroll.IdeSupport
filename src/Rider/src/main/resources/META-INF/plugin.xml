@@ -76,6 +76,16 @@ for what is available in each IDE.</p>
         language="Gherkin"
         implementationClass="net.reqnroll.idesupport.rider.psi.ReqnrollFeatureCommenter" />
 
+    <!-- Folding and the Structure view come from the tree, so they are there as soon as the file opens and
+         need no language-server round trip. The Structure view is registered for Gherkin, which takes
+         precedence over the platform's generic language-server outline (registered for any language). -->
+    <lang.foldingBuilder
+        language="Gherkin"
+        implementationClass="net.reqnroll.idesupport.rider.psi.ReqnrollFeatureFoldingBuilder" />
+    <lang.psiStructureViewFactory
+        language="Gherkin"
+        implementationClass="net.reqnroll.idesupport.rider.psi.ReqnrollFeatureStructureViewFactory" />
+
     <!-- Only prose is spell-checked; keywords, tags, placeholders and data are skipped. -->
     <spellchecker.support
         language="Gherkin"
@@ -131,14 +141,8 @@ for what is available in each IDE.</p>
          language-scoped routing). Managed manually via Editor.inlayModel instead. -->
     <editorFactoryListener implementation="net.reqnroll.idesupport.rider.inlayhints.ReqnrollFeatureInlayHintsController" />
 
-    <!-- No generic-client rendering for textDocument/foldingRange either (confirmed via bytecode
-         inspection of LspServerDescriptor for issue #162: no lspFoldingRangeSupport opt-in and no
-         LspFoldingRangeSupport customization class exist at all, unlike lspGoToDefinitionSupport).
-         Same "manage it manually" approach as the inlay hints controller above. -->
-    <editorFactoryListener implementation="net.reqnroll.idesupport.rider.folding.ReqnrollFeatureFoldingController" />
-
     <!-- Rider's generic LSP client never requests textDocument/documentLink either (clickable tags, issue #755),
-         so the tag links are requested and rendered manually, same approach as folding above. -->
+         so the tag links are requested and rendered manually, same approach as the inlay hints above. -->
     <editorFactoryListener implementation="net.reqnroll.idesupport.rider.taglinks.ReqnrollFeatureTagLinkController" />
 
     <!-- Whole-document Reformat Code for .feature files. Replaces the platform LspFormattingService

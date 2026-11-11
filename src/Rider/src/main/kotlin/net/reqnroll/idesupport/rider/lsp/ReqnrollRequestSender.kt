@@ -31,8 +31,6 @@ import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.DocumentSymbolParams
 import org.eclipse.lsp4j.ExecuteCommandParams
-import org.eclipse.lsp4j.FoldingRange
-import org.eclipse.lsp4j.FoldingRangeRequestParams
 import org.eclipse.lsp4j.FormattingOptions
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintParams
@@ -66,7 +64,6 @@ object ReqnrollRequestSender {
     private const val CODE_LENS_TIMEOUT_MS = 10_000
     private const val INLAY_HINT_TIMEOUT_MS = 10_000
     private const val ON_TYPE_FORMATTING_TIMEOUT_MS = 10_000
-    private const val FOLDING_RANGE_TIMEOUT_MS = 10_000
     private const val DOCUMENT_LINK_TIMEOUT_MS = 10_000
     private const val FIND_HOOKS_TIMEOUT_MS = 10_000
     private const val FIND_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
@@ -183,28 +180,8 @@ object ReqnrollRequestSender {
     }
 
     /**
-     * Runs the *standard* `textDocument/foldingRange` request (Code Folding for `.feature`
-     * files — see FeatureFoldingRangeHandler.cs). Standard LSP method, so — like [codeLens] and
-     * [inlayHint] — no custom `@JsonRequest` method or cast to `ReqnrollLanguageServer` is needed.
-     */
-    fun foldingRange(project: Project, uri: String): List<FoldingRange>? {
-        val server = firstRunningServer(project) ?: return null
-        val params = FoldingRangeRequestParams(TextDocumentIdentifier(uri))
-        return try {
-            server.sendRequestSync(FOLDING_RANGE_TIMEOUT_MS) { languageServer ->
-                languageServer.textDocumentService.foldingRange(params)
-            }?.filterNotNull()
-        } catch (ex: ProcessCanceledException) {
-            throw ex
-        } catch (ex: Exception) {
-            ReqnrollDebugLogger.verbose("foldingRange: request failed", ex)
-            null
-        }
-    }
-
-    /**
      * Runs the *standard* `textDocument/documentLink` request (clickable tags for `.feature` files -
-     * see DocumentLinkHandler.cs). Standard LSP method, so - like [foldingRange] - no custom `@JsonRequest`
+     * see DocumentLinkHandler.cs). Standard LSP method, so - like [codeLens] - no custom `@JsonRequest`
      * method or cast to `ReqnrollLanguageServer` is needed. Rider's generic client never sends it itself.
      */
     fun documentLink(project: Project, uri: String): List<DocumentLink>? {
@@ -383,7 +360,7 @@ object ReqnrollRequestSender {
 
     /**
      * Runs the *standard* `textDocument/rename` request with [newName] at (uri, line, character).
-     * Standard LSP method, so — like [codeLens]/[foldingRange] — no custom `@JsonRequest` method
+     * Standard LSP method, so — like [codeLens] — no custom `@JsonRequest` method
      * or cast to `ReqnrollLanguageServer` is needed. Rider has no native rename bridge (confirmed
      * by decompiling `LspServerDescriptor` — no `lspRenameSupport`-style customization exists),
      * so callers must apply the returned `WorkspaceEdit` themselves; see `RenameWorkspaceEditApplier`.
@@ -484,7 +461,7 @@ object ReqnrollRequestSender {
     /**
      * Runs the *standard* `textDocument/documentSymbol` request (Feature/Rule/Scenario/Step)
      * outline for `.feature` files — see FeatureDocumentSymbolHandler.cs). Standard LSP method,
-     * so — like [codeLens]/[foldingRange] — no custom `@JsonRequest` method or cast to
+     * so — like [codeLens] — no custom `@JsonRequest` method or cast to
      * `ReqnrollLanguageServer` is needed. The server always sends the nested `DocumentSymbol`
      * shape (not flat `SymbolInformation`) to Rider, since Rider's generic LSP client declares
      * `hierarchicalDocumentSymbolSupport` by platform default (matching VS Code) — so only the

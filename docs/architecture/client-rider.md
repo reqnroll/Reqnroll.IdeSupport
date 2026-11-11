@@ -75,7 +75,8 @@ sequenceDiagram
 | `ReqnrollCodeLensRefreshInterceptor`, `ReqnrollInlayHintRefreshInterceptor` | Wrap the platform's notification handler so refresh requests also refresh CodeVision and inlay hints. |
 | `ReqnrollSemanticTokensSupport` | A `TextAttributesKey` per `reqnroll.*` legend name (the platform default maps only about 23 standard names). |
 | `StepUsagesCodeVisionProvider`, `HookCodeVisionProvider`, `StepHooksCodeVisionProvider`, `RunTestCodeVisionProvider` | The lenses; `HookLensSupport` holds shared logic. |
-| `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureFoldingController`, `ReqnrollFeatureTagLinkController` | `editorFactoryListener`s that call the standard requests directly and render with `Editor.inlayModel`, `foldingModel` and tag links. |
+| `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureTagLinkController` | `editorFactoryListener`s that call the standard requests directly and render with `Editor.inlayModel` and tag links. |
+| `ReqnrollFeatureFoldingBuilder`, `ReqnrollFeatureStructureViewFactory` | Folding and Structure view from the tree (`FoldingBuilder`, `PsiStructureViewFactory`); no server round trip. |
 | `ReqnrollFeatureOnTypeFormattingHandler`, `ReqnrollFeatureCompletionAutoPopupHandler` | `typedHandler`s: `\|`-triggered table realignment; auto-popup completion. |
 | `FindStepUsagesAction`, `FindUnusedStepDefinitionsAction`, `GoToHooksAction`, `ReqnrollResultPopup` | Tools-menu and editor-context actions with a shared chooser popup. |
 | `RenameFeatureStepAction`, `RenameCSharpStepAction`, `RenameStepRunner`, `RenameWorkspaceEditApplier` | Step rename (`.feature` bound to Shift+F6; `.cs` context-menu only). |
