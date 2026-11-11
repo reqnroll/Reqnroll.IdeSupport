@@ -56,6 +56,13 @@ dependencies {
         testFramework(TestFrameworkType.Platform)
     }
 
+    // The Cucumber Gherkin parser, which the feature-file lexer and tree parser walk (see
+    // src/main/java/io/cucumber/gherkin/GherkinSyntaxWalker.java). Keep this on the same version as the
+    // `Gherkin` NuGet package the language server uses (src/Core and src/LSP csproj files), so the editor and
+    // the server agree on the grammar and on every dialect's keywords. Its `messages` and `jspecify`
+    // dependencies come along transitively.
+    implementation("io.cucumber:gherkin:39.1.0")
+
     // Plain JUnit5 (kotlin.test assertions on the JUnit5 engine) for pure-logic unit tests that
     // don't need an IntelliJ Platform fixture — see src/test/kotlin.
     testImplementation(kotlin("test-junit5"))

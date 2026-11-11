@@ -204,9 +204,10 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
   split-package adapter and any `io.cucumber` classes already in the IDE need checking
   ([§9](#9-not-verified)).
 - **Testing in Rider.** Rider's `BasePlatformTestCase` fixtures fail with "solution can't be null"
-  (recorded from issue 566). Lexer and parser tests must therefore be plain unit tests or
-  `ParsingTestCase`-style tests with a mock application, and the earlier plan's `BasePlatformTestCase`
-  for the breakpoint policy registration should instead be a test that parses `plugin.xml`.
+  (recorded from issue 566). `ParsingTestCase`, which uses a mock project, **does work** in this build
+  *(verified: `ReqnrollFeatureParserTest` passes under `./gradlew test`)*, as do plain unit tests. The
+  earlier plan's `BasePlatformTestCase` for the breakpoint policy registration should instead be a test
+  that parses `plugin.xml`.
 
 ## 5. Dependency order
 
@@ -237,6 +238,7 @@ Sizes are rough estimates in working days and have not been validated.
 | **0** | Live check of the backend spike in `runIde` | Go/no-go for Phase 1 (checks in [§8](#8-verification)) | 1 |
 | **1** | Backend module, Gradle wiring, `TEXT` shim (**already built, uncommitted**), CI matrix per the earlier plan | Breakpoint binds and hits | per earlier plan |
 | **2a** | **Parser bridge**: Java source set, Gherkin 39.1.0 dependency, same-package adapter, `PsiBuilder` builder, restartable lexer; no registration yet | Shared corpus passes; invalid files yield a full tree; spike confirms classloading in Rider | 3–4 |
+|  | *Status: built and unit-tested (corpus, lexer, `PsiBuilder` replay via `ParsingTestCase`); `ReqnrollFeatureParserDefinition` exists but is deliberately not registered in `plugin.xml`. Classloading in a real Rider is the open item.* | | |
 | **2b** | **PSI foundation**: `ParserDefinition`, typed elements, per-file default language, `SpellcheckingStrategy`, no behavioural change otherwise | Every existing feature still works with the language now real; no double rendering | 2–3 |
 | **3** | **Highlighting and matchers**: `SyntaxHighlighter`, `BraceMatcher`, `QuoteHandler`, `Commenter`; retire the comment action override if parity holds | First paint coloured before the server starts; comment toggling matches the server's behaviour | 2–3 |
 | **4** | **Breakpoints on `Gherkin`**: switch the policy, drop `TEXT` | `.txt` gutter clicks no longer reach Gate 1 | 0.5 |
