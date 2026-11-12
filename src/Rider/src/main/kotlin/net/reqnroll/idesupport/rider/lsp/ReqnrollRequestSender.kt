@@ -24,6 +24,8 @@ import net.reqnroll.idesupport.rider.lsp.protocol.ResolveTestTargetsParams
 import net.reqnroll.idesupport.rider.lsp.protocol.ResolveTestTargetsResponse
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
+import org.eclipse.lsp4j.DefinitionParams
+import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.DocumentLink
 import org.eclipse.lsp4j.DocumentLinkParams
 import org.eclipse.lsp4j.DocumentFormattingParams
@@ -75,6 +77,7 @@ object ReqnrollRequestSender {
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
+    private const val DEFINITION_TIMEOUT_MS = 10_000
     private const val RESOLVE_TEST_TARGETS_TIMEOUT_MS = 10_000
     private const val RESOLVE_CONTAINER_TEST_TARGETS_TIMEOUT_MS = 10_000
     private const val REGISTER_TEST_RUN_TIMEOUT_MS = 10_000
@@ -502,6 +505,29 @@ object ReqnrollRequestSender {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.verbose("documentSymbol: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs the *standard* `textDocument/definition` request for a `.feature` step (see DefinitionHandler.cs): the
+     * step definition methods the step binds to, each pointing at the method's name. Empty for an undefined step
+     * or one whose binding has no source on this machine. Returns null if no Reqnroll LSP server is running, or on
+     * failure.
+     */
+    fun definition(project: Project, uri: String, line: Int, character: Int): List<Location>? {
+        val server = firstRunningServer(project) ?: return null
+        val params = DefinitionParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character))
+        return try {
+            val result = server.sendRequestSync(DEFINITION_TIMEOUT_MS) { languageServer ->
+                languageServer.textDocumentService.definition(params)
+            } ?: return emptyList()
+            if (result.isLeft) result.left.filterNotNull()
+            else result.right.filterNotNull().map { Location(it.targetUri, it.targetSelectionRange) }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("definition: request failed", ex)
             null
         }
     }

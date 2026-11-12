@@ -154,6 +154,29 @@ lenses) were deliberately built PSI-free around the current behaviour, and langu
 features (spell checking, To-do, declarative providers) would start dispatching to us. Use F2 only if
 F1's side effect proves visible.
 
+**Step Into Step Definition.** Rider's Step Into from a stopped `.feature` step does not reach the step
+definition (verified live on Rider 2026.2.3.1 with Reqnroll 3.0.0):
+
+- With "Enable external source debug" off, it steps over the whole step to the next one.
+- With it on, it steps into Reqnroll's `ExecutionEngine`.
+- The same happens from the generated `await testRunner.AndAsync(...)` line with `allowDebugGeneratedFiles` set,
+  so it is not caused by the `#line` mapping.
+
+Rider's Windows stepper does use the runtime's Just My Code stepper when external source debugging is off, and
+marks every module with loaded symbols as user code (decompiled `Mono.Debugging.Win32`: `CorStepper`,
+`CorRuntimeEventProcessor.OnModuleLoad`). That stepper follows one thread, so the likely cause is that Reqnroll's
+asynchronous path reaches the binding on another thread. Visual Studio's Just My Code stepping does land in the
+step definition.
+
+`StepIntoStepDefinitionAction` fills the gap:
+- It asks the server for the step's definition (`textDocument/definition`) and runs to the start of that method's
+  body with `XDebugSession.runToPosition`.
+- An undefined or ambiguous step, or a binding without source, falls back to the platform's Step Into with a
+  message in the debugger tool window.
+- It carries Step Into's shortcuts (F7 in `$default`, F11 in the Visual Studio keymaps).
+  `StepIntoStepDefinitionPromoter` makes it win them only while the debugger is stopped on a `.feature` line.
+- It needs no backend module, so it also works on the frontend-only leg.
+
 ## 5. Coexistence with the legacy plugin
 
 Open question **O9** is undecided. This feature makes it sharper: today the two plugins only overlap
@@ -339,7 +362,7 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 |---|---|
 | F9 and gutter click on a step line | Breakpoint created, survives IDE restart |
 | Debug a scenario | Stops on Background steps (once per scenario), plain steps, and Outline steps (once per row) |
-| Step Into from a stopped step | Lands in the step definition (VS Code needed Just My Code for this) |
+| Step Into from a stopped step | Lands on the first line of the step definition's body (`StepIntoStepDefinitionAction`, [§4](#4-frontend-changes)); an ambiguous step falls back to plain Step Into |
 | Breakpoint on Examples row, blank or comment line | Blank/comment refused by the filter; Examples row accepted but never hit |
 | Edit the `.feature` without rebuilding | Binds by the old line numbers (same as VS Code); document it |
 | Gutter click on a `.txt` file (F1 side effect) | Nothing happens, no error |
@@ -361,7 +384,10 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 These are assumptions until the spike runs:
 
 - That the debugger worker binds `.feature` line breakpoints through `#line` sequence points.
-- Step Into behaviour.
+- That `StepIntoStepDefinitionAction` wins Step Into's shortcut and runs to the step definition (unit-tested only;
+  the platform's own Step Into was verified not to get there).
+- Why Rider's Just My Code stepping misses the step definition (the other-thread explanation is not confirmed).
+- What hung the Debug runs seen during live checks (no `.feature` breakpoints were involved).
 - That a stub `LanguageService` and `IFile` are enough for `GetPrimaryPsiFile()`.
 - That Gate 2 quietly refuses plain-text files.
 - That `incompatible-with` works for a plugin ID.

@@ -106,6 +106,10 @@ for what is available in each IDE.</p>
          the frontend action directly for .feature files instead (issue #909). -->
     <actionPromoter implementation="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionPromoter" />
 
+    <!-- Rider's Step Into from a .feature step line skips the step definition; StepIntoStepDefinitionAction
+         takes Step Into's shortcuts only while the debugger is stopped on a .feature line. -->
+    <actionPromoter implementation="net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionPromoter" />
+
     <!-- Rider's generic LSP client has no rendering-side consumer for textDocument/codeLens or
          textDocument/inlayHint at all (confirmed by decompiling — only capability-name
          bookkeeping exists in com.intellij.platform.lsp.impl.LspDynamicCapabilities). Both
@@ -236,6 +240,17 @@ for what is available in each IDE.</p>
       <mouse-shortcut keymap="Visual Studio" keystroke="ctrl button1" />
       <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F12" />
       <mouse-shortcut keymap="Visual Studio 2022" keystroke="ctrl button1" />
+    </action>
+
+    <action id="Reqnroll.StepIntoStepDefinition"
+        class="net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionAction"
+        text="Step Into Step Definition"
+        description="Run to the step definition of the .feature step the debugger is stopped on">
+      <!-- Step Into's own bindings, copied explicitly for the same reason as Reqnroll.GoToDefinition's. -->
+      <keyboard-shortcut keymap="$default" first-keystroke="F7" />
+      <keyboard-shortcut keymap="Visual Studio" first-keystroke="F11" />
+      <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F11" />
+      <add-to-group group-id="XDebugger.ToolWindow.TopToolbar3.Extra" anchor="first" />
     </action>
 
     <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI

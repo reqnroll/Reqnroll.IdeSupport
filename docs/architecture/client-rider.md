@@ -82,6 +82,7 @@ sequenceDiagram
 | `ReqnrollCommentByLineCommentAction` | Overrides the platform's `CommentByLineComment` action by ID. |
 | `ReqnrollGoToDefinitionAction`, `ReqnrollGoToDefinitionPromoter` | Make F12 / Ctrl+B / Ctrl+click reach the server on Rider 2026.2+. |
 | `RunTestRunner`, `RunLensSupport`, `FailedStepGutterMarks` | Run lens and execution; see [../Test-Runner-Integration-Design.md](../Test-Runner-Integration-Design.md). |
+| `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionPromoter`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
 | `ReqnrollToggleFeatureInlayHintsAction` | "Show Feature Inlay Hints" toggle. |
 | `ReqnrollDebugLogger` | File logging gated on the dev-sandbox property. |
 
@@ -129,6 +130,9 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    `.projitems` directly and sends no delta for a file added to a shared project.
 7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc.
 8. **The plugin ID must not contain "rider".**
+9. **Rider's Step Into cannot reach a step definition** from a `.feature` step (it steps over the step, or into
+   Reqnroll's `ExecutionEngine` with external source debugging on). `StepIntoStepDefinitionAction` takes Step
+   Into's shortcuts while the debugger is stopped on a `.feature` line and runs to the definition's body instead.
 
 ## 8. Known limitations
 
