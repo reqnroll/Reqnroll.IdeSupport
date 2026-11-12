@@ -384,8 +384,8 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 These are assumptions until the spike runs:
 
 - That the debugger worker binds `.feature` line breakpoints through `#line` sequence points.
-- That `StepIntoStepDefinitionAction` wins Step Into's shortcut and runs to the step definition (unit-tested only;
-  the platform's own Step Into was verified not to get there).
+- `StepIntoStepDefinitionAction`'s fallback paths (undefined or ambiguous step, binding without source); the run-to
+  path was verified live on Rider 2026.2.3.1, landing on the `{` line of two different step definitions.
 - Why Rider's Just My Code stepping misses the step definition (the other-thread explanation is not confirmed).
 - What hung the Debug runs seen during live checks (no `.feature` breakpoints were involved).
 - That a stub `LanguageService` and `IFile` are enough for `GetPrimaryPsiFile()`.
