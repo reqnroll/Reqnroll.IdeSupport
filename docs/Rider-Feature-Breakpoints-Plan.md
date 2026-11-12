@@ -28,8 +28,8 @@ This is the **minimal** version:
   language-server-driven design.
 - No custom messages between Rider's frontend and backend (no `rdgen` model).
 
-Out of scope: refusing breakpoints on lines that can never bind (Examples rows, descriptions, tags),
-conditional/log breakpoints beyond what Rider gives any .NET line breakpoint, and Rider versions this
+Out of scope: refusing breakpoints on description lines and on the `Rule:`, `Background:` and `Examples:` header
+lines (that needs the Gherkin dialect's keywords), conditional/log breakpoints beyond what Rider gives any .NET line breakpoint, and Rider versions this
 plan chooses not to support (see [§7](#7-marketplace-publication)).
 
 ## 2. How Rider decides whether a breakpoint can be created
@@ -111,7 +111,7 @@ src/Rider/dotnet/
 | `FeatureLanguageService` | `LanguageService`, `[Language(typeof(FeatureLanguage))]` | **Stub**: a lexer that emits the whole buffer as one token and a parser that returns `FeatureFile` with one leaf. No caches, no type declarations, no formatter. |
 | `FeatureFile` | minimal `IFile` implementation | One node. Exists only so `GetPrimaryPsiFile()` is non-null and reports `FeatureLanguage`. |
 | `FeatureBreakpointVariantsProvider` | `IBreakpointVariantsProvider`, `[Language(typeof(FeatureLanguage))]` | Returns `[new LineBreakpoint()]` when `0 <= line < lineCount` and `BreakpointLineFilter` accepts the line; otherwise empty. `GetSupportedFileExtensions()` returns `.feature`. |
-| `BreakpointLineFilter` | static, no SDK types | Optional cheap filter that rejects blank lines and `#` comment lines from the line's text. No Gherkin parsing. Can grow later (e.g. `|` table rows) without touching the PSI. |
+| `BreakpointLineFilter` | static, no SDK types | Rejects lines that never have generated code: blank lines, `#` comments, `@` tag lines, `|` table rows (including Examples rows) and doc strings with their delimiters. Keyword-free, so no Gherkin dialect is needed. Needed because Rider binds a breakpoint on a line without code to the next line with code (verified live: a breakpoint on a tag line stopped on the `Scenario:` line below it, one on a table row bound too). |
 
 The backend never parses Gherkin. All structural knowledge stays in the language server.
 
@@ -363,7 +363,8 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 | F9 and gutter click on a step line | Breakpoint created, survives IDE restart |
 | Debug a scenario | Stops on Background steps (once per scenario), plain steps, and Outline steps (once per row) |
 | Step Into from a stopped step | Lands on the first line of the step definition's body (`StepIntoStepDefinitionAction`, [§4](#4-frontend-changes)); an ambiguous step falls back to plain Step Into |
-| Breakpoint on Examples row, blank or comment line | Blank/comment refused by the filter; Examples row accepted but never hit |
+| Breakpoint on a blank, comment, tag, table or Examples row, or doc string line | Refused by the filter |
+| Breakpoint on a description, `Rule:`, `Background:` or `Examples:` line | Accepted; binds to the next line with code (a known limitation) |
 | Edit the `.feature` without rebuilding | Binds by the old line numbers (same as VS Code); document it |
 | Gutter click on a `.txt` file (F1 side effect) | Nothing happens, no error |
 | Backend log and IDE (`idea.log`) | No errors from the stub language |

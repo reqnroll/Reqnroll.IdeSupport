@@ -11,9 +11,9 @@ using Reqnroll.IdeSupport.Rider.Backend.FeatureFiles;
 namespace Reqnroll.IdeSupport.Rider.Backend.Debugger;
 
 /// <summary>
-/// Offers a plain line breakpoint on <c>.feature</c> lines. Rider's debugger binds it through the
-/// <c>#line</c> directives Reqnroll writes into the generated test code, the same way it binds Razor
-/// and T4 breakpoints.
+/// Offers a plain line breakpoint on <c>.feature</c> lines that can have code (see <see cref="BreakpointLineFilter"/>).
+/// Rider's debugger binds it through the <c>#line</c> directives Reqnroll writes into the generated test code, the
+/// same way it binds Razor and T4 breakpoints.
 /// </summary>
 [Language(typeof(FeatureLanguage))]
 public class FeatureBreakpointVariantsProvider : IBreakpointVariantsProvider
@@ -32,12 +32,15 @@ public class FeatureBreakpointVariantsProvider : IBreakpointVariantsProvider
             if (line >= lineCount)
                 return None;
 
-            var docLine = (Int32<DocLine>)line;
-            var lineText = document.GetText(new TextRange(
-                document.GetLineStartOffset(docLine),
-                document.GetLineEndOffsetNoLineBreak(docLine)));
+            string GetLine(int index)
+            {
+                var docLine = (Int32<DocLine>)index;
+                return document.GetText(new TextRange(
+                    document.GetLineStartOffset(docLine),
+                    document.GetLineEndOffsetNoLineBreak(docLine)));
+            }
 
-            return BreakpointLineFilter.IsBreakpointCandidate(lineText)
+            return BreakpointLineFilter.IsBreakpointCandidate(GetLine, lineCount, line)
                 ? new IBreakpoint[] { new LineBreakpoint() }
                 : None;
         }
