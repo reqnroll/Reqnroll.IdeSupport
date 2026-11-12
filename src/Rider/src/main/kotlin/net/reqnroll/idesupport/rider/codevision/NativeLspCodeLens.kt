@@ -1,7 +1,6 @@
 package net.reqnroll.idesupport.rider.codevision
 
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.components.service
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 
@@ -30,19 +29,10 @@ internal object NativeLspCodeLens {
     }
 
     /**
-     * Asks CodeVision to recompute every Reqnroll lens in the project's open `.feature` and `.cs` editors, which on
-     * builds with native lenses includes the platform's provider (see [EditorLensRefresh.invalidate]). Safe to call
-     * from any thread.
+     * Makes the platform's native lenses ask the server again, through [NativeLensRefreshService]; a no-op where the
+     * plugin renders its own lenses. Safe to call from any thread.
      */
     fun requestRefresh(project: Project) {
-        ApplicationManager.getApplication().invokeLater(
-            {
-                if (!project.isDisposed) {
-                    HookCodeVisionProvider.refreshOpenFeatureEditors(project)
-                    StepUsagesCodeVisionProvider.refreshOpenCsEditors(project)
-                }
-            },
-            ModalityState.any(),
-        )
+        if (isRenderedByPlatform && !project.isDisposed) project.service<NativeLensRefreshService>().request()
     }
 }
