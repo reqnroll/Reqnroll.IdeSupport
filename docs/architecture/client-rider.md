@@ -129,6 +129,13 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    `.projitems` directly and sends no delta for a file added to a shared project.
 7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc.
 8. **The plugin ID must not contain "rider".**
+9. **Native lens clicks can carry stale positions (Rider 2026.2+).** The platform caches the server's lenses and
+   moves them with edits, but the command arguments keep the line numbers the server computed. When the cache is
+   not refreshed after an edit that adds or removes lines, a click lands on the wrong line (a step-hooks lens shows
+   the scenario's hooks). `ReqnrollLspCommandsSupport` therefore re-requests the file's lenses on each click and runs
+   the lens the clicked one now corresponds to (`StaleLensCommandResolver`), and `EditorLensRefresh` names the
+   platform's `LspCodeVisionProvider` in every invalidation it sends, since a CodeVision signal for this plugin's
+   providers alone can cancel the platform's recompute in progress.
 
 ## 8. Known limitations
 
