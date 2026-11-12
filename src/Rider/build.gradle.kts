@@ -26,7 +26,14 @@ group = providers.gradleProperty("pluginGroup").get()
 // verifyPlugin checks, so none of them can disagree with the SDK the backend was built against. The range is a
 // closed one-release range on purpose: an open upper bound would let Rider install the backend on a newer
 // release it was never built for.
-val withBackend = (findProperty("withBackend") as String? ?: "false").toBoolean()
+//
+// `runIdeWithBackend` launches a sandbox of that one release (the plain `runIde` sandbox runs `platformVersion`, the
+// oldest release in the frontend-only range, which a backend build refuses to load). Asking for that task turns
+// the backend on by itself, so `./gradlew runIdeWithBackend` needs no -PwithBackend=true.
+val runIdeWithBackendTaskName = "runIdeWithBackend"
+val requestedTaskNames: List<String> = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }
+val withBackend = (findProperty("withBackend") as String? ?: "false").toBoolean() ||
+    runIdeWithBackendTaskName in requestedTaskNames
 val riderSdkVersion: String = providers.gradleProperty("riderSdkVersion").get()
 
 /** The build-number prefix of a Rider release: 2026.2.3.1 -> 262 (two-digit year, then the release number). */
@@ -247,7 +254,7 @@ val connectorProject = File(repoRoot, "src/LSP/Reqnroll.IdeSupport.LSP.Connector
 // distribution and should keep bundling the Release server). Checked via the requested task
 // names rather than a project property so plain `./gradlew runIde` does the right thing with
 // no extra flags.
-val isRunIdeInvocation = gradle.startParameter.taskNames.any { it == "runIde" || it.endsWith(":runIde") }
+val isRunIdeInvocation = requestedTaskNames.any { it == "runIde" || it == runIdeWithBackendTaskName }
 val serverConfiguration = if (isRunIdeInvocation) "Debug" else "Release"
 
 // Directory containing one server-<rid>-shaped subdirectory per RID, pre-published
@@ -504,8 +511,30 @@ tasks {
 // JavaExec-derived task in the IntelliJ Platform Gradle Plugin, so `systemProperty` applies to
 // the JVM it launches (the sandboxed IDE itself, not our LSP server subprocess — the plugin
 // code reads it and passes the corresponding --log-level through when it spawns the server).
-tasks.matching { it.name == "runIde" }.configureEach {
+tasks.matching { it.name == "runIde" || it.name == runIdeWithBackendTaskName }.configureEach {
     (this as? JavaExec)?.systemProperty("reqnroll.devSandbox", "true")
+}
+
+// A backend build supports only the riderSdkVersion release (see the top of this file), so it needs a sandbox of
+// that release rather than the platformVersion one `runIde` starts. The plugin is still compiled against
+// platformVersion; only the IDE that runs it differs.
+intellijPlatformTesting {
+    runIde {
+        register(runIdeWithBackendTaskName) {
+            type = IntelliJPlatformType.Rider
+            version = riderSdkVersion
+        }
+    }
+}
+
+// Fail early instead of launching a sandbox that rejects the plugin as incompatible.
+tasks.named("runIde") {
+    doFirst {
+        check(!withBackend) {
+            "A -PwithBackend=true build only loads in Rider $riderSdkVersion (wave $riderWave), but runIde starts " +
+                "the platformVersion sandbox. Run ./gradlew $runIdeWithBackendTaskName instead."
+        }
+    }
 }
 
 // ── Built-in Application Insights resource (issue #1160) ──
