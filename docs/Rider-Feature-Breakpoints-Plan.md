@@ -360,13 +360,13 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 
 | Check | Expected |
 |---|---|
-| F9 and gutter click on a step line | Breakpoint created, survives IDE restart |
+| Gutter click (or the keymap's Toggle Line Breakpoint) on a step line | Breakpoint created, survives IDE restart (verified) |
 | Debug a scenario | Stops on plain steps, and on Outline steps once per row (verified). Stops on a Background step in **one** scenario only (verified; a known limitation, see [§12](#12-known-limitations)) |
 | Step Into from a stopped step | Lands on the first line of the step definition's body (`StepIntoStepDefinitionAction`, [§4](#4-frontend-changes)); an ambiguous step falls back to plain Step Into |
 | Breakpoint on a blank, comment, tag, table or Examples row, or doc string line | Refused by the filter (tag and table rows verified live; doc strings unit-tested only) |
 | Breakpoint on a description, `Rule:`, `Background:` or `Examples:` line | Accepted; binds to the next line with code (a known limitation) |
 | Edit the `.feature` without rebuilding | Binds by the old line numbers (same as VS Code); document it |
-| Gutter click on a `.txt` file (F1 side effect) | Nothing happens, no error |
+| Gutter click on a `.txt` file (F1 side effect) | Nothing happens, no error (verified) |
 | Backend log and IDE (`idea.log`) | No errors from the stub language |
 | Legacy plugin also installed | Behaves as decided for O9 |
 | Plugin on the oldest supported Rider (frontend-only leg) | Loads; `.feature` breakpoints refused, nothing else changes |
@@ -388,8 +388,6 @@ These are assumptions until the spike runs:
   path was verified live on Rider 2026.2.3.1, landing on the `{` line of two different step definitions.
 - Why Rider's Just My Code stepping misses the step definition (the other-thread explanation is not confirmed).
 - What hung the Debug runs seen during live checks (no `.feature` breakpoints were involved).
-- That a stub `LanguageService` and `IFile` are enough for `GetPrimaryPsiFile()`.
-- That Gate 2 quietly refuses plain-text files.
 - That `incompatible-with` works for a plugin ID.
 - That `dotnet build` of the `net472` backend succeeds on the Ubuntu CI runner.
 - How the Marketplace chooses between several uploads with non-overlapping ranges, and how the proposed version
