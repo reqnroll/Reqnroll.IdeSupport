@@ -43,12 +43,14 @@ import java.awt.event.InputEvent
 import java.awt.event.MouseEvent
 import org.eclipse.lsp4j.DocumentLink
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
+import net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionAction
 
 /**
  * Makes Gherkin tags that match a configured `Traceability.TagLinks` pattern clickable: the server
  * answers `textDocument/documentLink`, which Rider's generic LSP client did not request before 2025.1, so this
- * controller requests the links itself. Where the platform follows document links itself
- * ([NativeLspDocumentLinks]), the click is left to it and this controller only draws the links and their hover hint.
+ * controller requests the links itself. On Rider 2026.2+ Ctrl/Cmd+click and F12 reach [ReqnrollGoToDefinitionAction],
+ * which opens a link under the mouse or caret through [openTagLinkAt] instead of running Go to Declaration; where
+ * only the platform follows document links ([NativeLspDocumentLinks]), the click is left to it.
  *
  * Each link is shown **permanently** as a link: a range highlighter in the hyperlink colour with an
  * underline, which follows edits until the next debounced refresh replaces it, so it is visible which tags are
@@ -255,17 +257,39 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
 
         private fun followLink(editor: Editor, e: EditorMouseEvent) {
             if (e.mouseEvent.button != MouseEvent.BUTTON1 || !isLinkModifierDown(e.mouseEvent)) return
+            if (ReqnrollGoToDefinitionAction.handlesFeatureShortcuts) {
+                // Ctrl/Cmd+click reaches ReqnrollGoToDefinitionAction, which opens the link (see openTagLinkAt);
+                // opening it here too would open it twice.
+                return
+            }
             val offset = offsetAt(editor, e) ?: return
             val target = linkAt(editor, offset)?.target ?: return
             if (!TagLinkSupport.isOpenableUrl(target)) return
 
-            RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.COMMAND_TAG_LINK, emptyMap())
             if (NativeLspDocumentLinks.isFollowedByPlatform) {
                 // The platform's own document-link reference opens it; opening it here too opened it twice.
+                RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.COMMAND_TAG_LINK, emptyMap())
                 ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: tag link '$target' left to the platform")
                 return
             }
             e.consume()
+            open(target)
+        }
+
+        /**
+         * Opens the tag link at [offset] of [editor], if there is an openable one, and reports whether it did.
+         * Used by [ReqnrollGoToDefinitionAction], which receives Ctrl/Cmd+click and F12 on Rider 2026.2+: leaving the
+         * click to the platform's document-link reference failed until the platform had fetched the links itself.
+         */
+        fun openTagLinkAt(editor: Editor, offset: Int): Boolean {
+            val target = linkAt(editor, offset)?.target ?: return false
+            if (!TagLinkSupport.isOpenableUrl(target)) return false
+            open(target)
+            return true
+        }
+
+        private fun open(target: String) {
+            RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.COMMAND_TAG_LINK, emptyMap())
             ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: opening tag link '$target'")
             BrowserUtil.browse(target)
         }
