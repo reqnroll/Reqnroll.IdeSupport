@@ -7,6 +7,7 @@
 * In Rider, the bookkeeping that decides when `projectLoaded`/`projectUnloaded` and the project-files baseline are sent is now safe to use from the UI thread and the language-server callback thread at once, so a project is no longer sent twice or skipped when the two race (Rider) - see #988
 * VS Code no longer raises an unhandled error in the extension host when a log file cannot be written after it was opened (disk full, permission denied, file locked): the failure is reported once, file logging stops, and the extension keeps running (VS Code) - see #1011
 * In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
+* A project whose `.csproj` sets `AppConfig` to a file that does not exist no longer logs a configuration warning on every reload; the setting is ignored until the file exists (LSP server) - see #972
 
 # v2026.2 - 2026-10-25
 

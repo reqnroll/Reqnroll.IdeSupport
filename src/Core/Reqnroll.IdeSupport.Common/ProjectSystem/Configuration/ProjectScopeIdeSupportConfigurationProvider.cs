@@ -98,7 +98,10 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
             var fileSystem = _projectScope.IdeScope.FileSystem;
             var configFilePath = fileSystem.GetFilePathIfExists(Path.Combine(projectFolder, fileName));
 
-            if (fileName.Equals(SpecFlowAppConfigFileName)) configFilePath ??= GetAppConfigPathFromProject();
+            // The csproj AppConfig property may name a file that does not exist; registering it as a source
+            // would make it fail (with a warning) on every reload, so it is only used when the file is there.
+            if (fileName.Equals(SpecFlowAppConfigFileName))
+                configFilePath ??= fileSystem.GetFilePathIfExists(GetAppConfigPathFromProject());
             if (configFilePath == null)
                 return null;
 
