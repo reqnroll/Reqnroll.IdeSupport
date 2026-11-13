@@ -265,10 +265,10 @@ Sizes are rough estimates in working days and have not been validated.
 |  | *Status: a tree-based `FoldingBuilder` and Structure view were built and committed, then reverted in favour of server ranges everywhere. Done: `NativeLspFolding` (checks for the platform's `LspFoldingRangeSupport` class) switches the folding controller off on builds with native folding; docs corrected (the old claim that Rider's client has no folding consumer was true only for 2024.3). Left as it was: no outline before Rider 2025.3. **Verified live (2026.2.3.1):** `.feature` files fold natively with `Gherkin` as the PSI language; the server log shows the platform's `textDocument/foldingRange` requests and the plugin log has no `ReqnrollFeatureFoldingController` entries, so the controller is off. Not separately checked: whether the platform's folding refreshes while typing.* | | |
 | **6** | **Native-rendering audit** (replaces the declarative inlay provider, per the §3 note 5 principle): confirm on a new Rider that inlay hints, code lens and document links each render once | One hint, lens and link per source, no duplicates | 1 |
 |  | *Status: static audit done against the Rider 2026.2.3.1 binaries. Inlay hints: `NativeLspInlayHints` already switches the controller off where the platform's `LspInlayHintsProviderFactory` is registered. Code lens: `NativeLspCodeLens` does the same for `LspCodeVisionProvider`. **Document links: not gated.** 2026.2 has `LspDocumentLinkCache` (sends `textDocument/documentLink`) and `LspDocumentLinkReferenceProvider` (an implicit PSI reference, so Ctrl+click navigation), and `LspHighlightingPassFactory` is registered; whether it draws the underline for `.feature` files, and whether Ctrl+click then opens the browser twice next to `ReqnrollFeatureTagLinkController`, needs a live check. Gating the controller without that check could drop the permanent underline and hover hint. **Live check (2026.2.3.1): Ctrl+click opened the link twice**, once through the platform's reference (which works now that `.feature` has a PSI) and once through the controller. The platform's switch (`LspDocumentLinkDisabled`) is a descriptor customization the plugin cannot set while it compiles against 2024.3, so the controller now leaves the click to the platform wherever `LspDocumentLinkSupport` exists (`NativeLspDocumentLinks`). It keeps drawing the underline and the hover hint and still reports the click telemetry. **Second live check:** one tab, but the first few clicks after opening the solution failed with "cannot find declaration": on 2026.2 Ctrl+click runs `ReqnrollGoToDefinitionAction` (Go to Declaration), and the platform's reference exists only once its `LspDocumentLinkCache` has fetched the links, which it does lazily; the controller had them about 20 s before the first click. So the action now opens a tag link under the mouse or caret itself, through the controller's links (`openTagLinkAt`), and skips Go to Declaration; the controller's own click handling stands down wherever the action takes the shortcuts. This also restores the `TagLinkSupport.isOpenableUrl` scheme block list and makes F12 on a tag open it. Where the platform follows document links but the action is not enabled, the click is still left to the platform. **Verified live (2026.2.3.1): the first Ctrl+click after opening the solution opens one tab, with no error.*** | | |
-| **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release | Run works from the gutter; failed-step marks unaffected | 3 |
+| **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release. If Phase 10 option A lands, this is for the frontend-only build only | Run works from the gutter; failed-step marks unaffected | 3 |
 | **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
 | **9** | **Cleanup and docs**: remove dead workarounds, update `client-rider.md` §7 and §8, feature pages, CHANGELOG | Doc comments no longer say "no PSI" | 1–2 |
-| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track) — see [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests) | Run and Debug from the lens or gutter run the scenario's generated test in Rider's Unit Tests window; Debug stops on `.feature` breakpoints; the frontend-only build keeps `dotnet test` | 5–8 + spike |
+| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track). See [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests). Preferred: Rider's own test gutter marks on scenarios | Each scenario has Rider's native Run/Debug gutter mark with outcome icons. Runs show in the Unit Tests window. Debug stops on `.feature` breakpoints. The frontend-only build keeps `dotnet test` | 5–8 + spike |
 
 Phases 3 and 5–8 are independent of each other once Phase 2 is in, so they can be reviewed as
 separate PRs in any order. Phase 2 is the only large risk: it changes the language of every `.feature`
@@ -289,27 +289,68 @@ has one (`src/Rider/dotnet`, built with `-PwithBackend=true`).
 generates in `.feature.cs`, so they are in its element repository. The backend only has to find the existing
 elements for a scenario and launch them.
 
-**Shape, using API checked in the 2026.2.3.1 `JetBrains.ReSharper.UnitTestFramework.dll`:**
-1. **Frontend.** The lens or gutter `Run` / `Debug` actions resolve test targets as today
-   (`reqnroll/resolveTestTargets`: project plus fully qualified test names, rows for outlines). On a backend
-   build they send them to the backend instead of starting `dotnet test`.
-2. **Channel.** A small RD protocol model call, for example `runScenarioTests(projectPath, testNames, debug)`.
-   It is the module's first protocol model, which brings rd-gen into the build.
+**Preferred: Rider's own test gutter marks in the `.feature` file (option A).** Rider's C# Run/Debug gutter icons
+are not drawn by the frontend. They are backend daemon highlightings, and a plugin can add them to another file
+type. Checked in the 2026.2.3.1 `JetBrains.ReSharper.UnitTestFramework.dll`:
+- `UnitTestDaemonStage` runs `UnitTestFileExplorer.Explore` on every visible document whose source file
+  `ProvidesCodeModel`. It is not limited to C#; the JavaScript and C++ test providers use it too.
+- `Explore` calls every registered `IUnitTestExplorerFromFile` (`Provider`, plus
+  `ProcessFile(IFile, IUnitTestElementObserverOnFile, interrupted)`) on the file's dominant PSI.
+- Each `observer.OnUnitTestElementDisposition(element, navigationRange, containingRange)` becomes a
+  `UnitTestElementHighlighting` at that range. That is the standard test gutter mark: the Run/Debug/Profile/Cover
+  menu, the passed, failed and ignored icon from `IUnitTestResultManager`, and the Unit Tests window.
+
+So the backend module would register an `IUnitTestExplorerFromFile` for the `.feature` PSI. For each Scenario,
+Scenario Outline and Examples row, it finds the unit-test element Rider already discovered in the generated
+`.feature.cs`, and reports it at the scenario's range in the `.feature` file. Rider then does the rest:
+- Run and Debug from the gutter.
+- Outcome icons.
+- Run All for a Feature or Rule (as a container mark on that line).
+- Re-running from the Unit Tests window, and navigation from that window to the scenario.
+
+None of our runner, TRX parsing or lens glyph code is needed on a backend build.
+
+Mapping a scenario to its element:
+- The backend can read the generated file's `#line N` directive at the start of each test method, which is the
+  scenario's line in the `.feature` file. It can then look the method's element up in `IUnitTestElementRepository`
+  (by source file and range) or with `observer.GetElementById`.
+- This needs no server round trip and no name matching.
+- Outline rows are child elements (MSTest `DataRow`, NUnit `TestCase`, xUnit `InlineData`) and need their own
+  mapping to the Examples lines.
+
+Open risks for option A:
+- **Provider ownership.** Each `IUnitTestExplorerFromFile` names one `Provider`, and `Explore` opens a discovery
+  transaction per provider with the `.feature` file as the source. Reporting MSTest, NUnit or xUnit elements from a
+  second source file might move them, or make them flip between the `.cs` and `.feature` files. This is the first
+  thing the spike must check.
+- **Code model.** The backend `.feature` PSI is a stub tree (one file node). The daemon stage requires
+  `ProvidesCodeModel`, and the explorer needs scenario offsets, which can come from the document text.
+- **Duplicate marks.** On a backend build, Phase 7's frontend `RunLineMarkerContributor` and the inline Run lens
+  must stand down, or each scenario gets two Run icons.
+
+**Fallback: the lens drives Rider's runner (option B).** This keeps our own lens and gutter, and only replaces the
+launch:
+1. **Frontend.** The Run / Debug actions resolve test targets as today (`reqnroll/resolveTestTargets`: project
+   plus fully qualified test names, rows for outlines). They send them to the backend instead of starting
+   `dotnet test`.
+2. **Channel.** A small RD protocol model call, for example `runScenarioTests(projectPath, testNames, debug)`. It
+   would be the module's first protocol model, which brings rd-gen into the build.
 3. **Backend.**
-   - Look the elements up in `IUnitTestElementRepository`, matched by project and fully qualified name.
+   - Look the elements up in `IUnitTestElementRepository`.
    - Run them with `IUnitTestingFacade.Run(elements).Using(hostProvider).In.CurrentOrNewSession()`, passing
      `RunHostProvider` or `DebugHostProvider` (from `UnitTestingFacadeFluentExtensions`).
-   - Rider then builds, runs or debugs, and shows the session in the Unit Tests window.
-4. **Outcomes.** The lens glyph and the failed-step gutter mark read TRX files from our own run today. Under
-   Rider's runner they would come from `IUnitTestResultManager`, mapped back to the scenario and sent to the
-   frontend, or the lens could simply leave outcomes to the Unit Tests window. This is a decision, see §10.
-5. **Fallback.** The frontend-only build, and any target the backend cannot match (an element not yet
-   discovered, or a project Rider does not run), keep the existing `dotnet test` path.
+4. **Outcomes.** The lens glyph and the failed-step gutter mark would need Rider's results mapped back, or they
+   could be left to the Unit Tests window (§10).
+
+**In both options**, the frontend-only build, and any scenario the backend cannot match, keep the existing
+`dotnet test` lens.
 
 **Spike first, to settle:**
-- That the repository holds the generated elements under names that match `resolveTestTargets`.
-  This needs checking per framework, and for outline rows, where Rider names a row by a display string, not an
-  index (see that design's pitfall about rows).
+- Option A's provider ownership: whether reporting an MSTest, NUnit or xUnit element from a `.feature`
+  file disturbs its discovery from `.feature.cs`. If it does, use option B.
+- That the `.feature` source file passes the daemon stage's `ProvidesCodeModel` gate.
+- That `#line` directives map scenarios, and outline rows, to elements for MSTest, NUnit and xUnit. For outline
+  rows, Rider names a row by a display string, not an index (see that design's pitfall about rows).
 - That `DebugHostProvider` stops on `.feature` breakpoints set through the backend's breakpoint variants.
 - The cost of adding an RD model to the module's build and CI.
 
@@ -353,10 +394,11 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 - Whether `RunLineMarkerContributor` markers show the standard Debug entry for a non-C# language in
   Rider, rather than needing a custom action.
 - Phase 10:
-  - That Rider's unit-test element repository holds the generated scenario tests under names that
-    `reqnroll/resolveTestTargets` can match, including outline rows.
+  - That a plugin's `IUnitTestExplorerFromFile` can report another provider's elements from a `.feature`
+    file without disturbing their discovery from `.feature.cs`.
+  - That generated tests, including outline rows, can be mapped back to scenarios by `#line`.
   - That a `DebugHostProvider` launch stops on `.feature` breakpoints.
-  - The build and CI cost of the module's first RD protocol model.
+  - Option B only: the build and CI cost of the module's first RD protocol model.
 - Whether a `Commenter` reproduces the server's comment toggle for doc strings and tables.
 - That a class in package `io.cucumber.gherkin` inside our plugin jar can reach the package-private
   parser types in Rider's plugin classloader (the same runtime package), and that the IDE bundles no
@@ -375,5 +417,6 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
 4. Keep the inline Run lens as a setting for one release (proposed: yes).
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.
-6. Phase 10 outcomes: map Rider's unit-test results back to the lens glyph and the failed-step gutter mark,
-   or leave outcomes to the Unit Tests window on backend builds.
+6. Phase 10: option A (Rider's own gutter marks, preferred if the spike clears provider ownership) or
+   option B (our lens drives Rider's runner). For B, map Rider's results back to the lens glyph and the
+   failed-step mark, or leave outcomes to the Unit Tests window.
