@@ -257,7 +257,7 @@ Sizes are rough estimates in working days and have not been validated.
 | **2a** | **Parser bridge**: Java source set, Gherkin 39.1.0 dependency, same-package adapter, `PsiBuilder` builder, restartable lexer; no registration yet | Shared corpus passes; invalid files yield a full tree; spike confirms classloading in Rider | 3–4 |
 |  | *Status: built and unit-tested (corpus, lexer, `PsiBuilder` replay via `ParsingTestCase`); `ReqnrollFeatureParserDefinition` exists but is deliberately not registered in `plugin.xml`. Classloading in a real Rider is the open item.* | | |
 | **2b** | **PSI foundation**: `ParserDefinition`, typed elements, per-file default language, `SpellcheckingStrategy`, no behavioural change otherwise | Every existing feature still works with the language now real; no double rendering | 2–3 |
-|  | *Status: registered in `plugin.xml` (parser definition, spellchecking strategy), and the debugger policy moved from `TEXT` to `Gherkin` in the same change, since the PSI language changed (this also completes Phase 4). The default language is read from the project's `reqnroll.json` / `specflow.json` by `FeatureDefaultLanguages` (`App.config` not read). Typed elements are deferred to the first phase that needs them. Still open: re-parsing open files when the configuration changes (needed before Phase 3 makes the colours visible), and a live check that nothing double-renders.* | | |
+|  | *Status: registered in `plugin.xml` (parser definition, spellchecking strategy), and the debugger policy moved from `TEXT` to `Gherkin` in the same change, since the PSI language changed (this also completes Phase 4). The default language is read from the project's `reqnroll.json` / `specflow.json` by `FeatureDefaultLanguages` (`App.config` not read). Typed elements are deferred to the first phase that needs them. Re-parsing open files when the configuration changes was done in Phase 3 (`FeatureLanguageConfigListener`). Still open: a live check that nothing double-renders.* | | |
 | **3** | **Highlighting and matchers**: `SyntaxHighlighter`, `BraceMatcher`, `QuoteHandler`, `Commenter`; retire the comment action override if parity holds | First paint coloured before the server starts; comment toggling matches the server's behaviour | 2–3 |
 |  | *Status: built and unit-tested. Done: the lexer-based `SyntaxHighlighter` (sharing `ReqnrollFeatureTextAttributes` with the semantic tokens, with header and body table cells distinguished), the `Commenter`, and re-parsing open files when `reqnroll.json` / `specflow.json` changes (`FeatureLanguageConfigListener`). **Not done, deliberately:** `BraceMatcher` and `QuoteHandler` (the grammar has no bracket or quote tokens: a placeholder is one token and quotes are plain step text), and retiring the comment action override (it stays until a live check shows the platform action matches the server's toggle for doc strings and tables). Unverified: that `FileContentUtil.reparseFiles` also refreshes an open editor's highlighter, and that nothing flickers when semantic tokens arrive.* | | |
 | **4** | **Breakpoints on `Gherkin`**: switch the policy, drop `TEXT` | `.txt` gutter clicks no longer reach Gate 1 | 0.5 |
@@ -468,9 +468,14 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 
 ## 10. Decisions needed
 
-1. Commit to the PSI programme, or ship Phase 1 alone and stop.
-2. Phase 2 sequencing: before Phase 1 ships, or after. The proposal is **after** (Phase 1 is built and
-   independent).
+1. ~~Commit to the PSI programme, or ship Phase 1 alone and stop~~ — **decided 2026-11-13: commit.**
+   Phases 1–6 were built together in one change, and Phase 1 now depends on the PSI. The debugger policy is
+   registered for `Gherkin`, and Step Into, the breakpoint line filter and the tag-link fix assume the PSI.
+   Shipping Phase 1 alone would mean restoring the `TEXT` shim, which accepts breakpoints in every plain-text
+   file. What is left to choose is the order of Phases 7–10. Release infrastructure for the backend build gates
+   all of it reaching users.
+2. ~~Phase 2 sequencing: before Phase 1 ships, or after~~ — **superseded**: Phases 1 and 2 were built
+   together, so neither ships before the other.
 3. ~~Legacy plugin: declare it incompatible~~ — done; verify Rider enforces it.
 3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
 4. Keep the inline Run lens as a setting for one release (proposed: yes).
