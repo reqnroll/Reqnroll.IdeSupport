@@ -157,7 +157,10 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
     internal void OnDocumentRenamed(string? newFilePath)
     {
         if (newFilePath is null || TryCreateFileUri(newFilePath) is not { } newUri)
+        {
+            LogVerbose($"document renamed to '{newFilePath}', which is not a valid URI; keeping {_location.FileUri}");
             return;
+        }
 
         FileLocation old;
         IReadOnlyDictionary<int, LineCodeLensTag> dropped;
@@ -174,6 +177,8 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
         _registry.UnregisterTagger(this, old.FileUri);
         _registry.RegisterTagger(this, newUri);
 
+        LogVerbose($"document renamed; re-keyed from {old.FileUri} to {newUri}, dropped {dropped.Count} tag(s)");
+
         foreach (var tag in dropped.Values)
             tag.RaiseDisconnected();
 
@@ -182,6 +187,11 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
 
         RequestRefresh();
     }
+
+    private void LogVerbose(string message) =>
+        (Logger ?? ExtensionHostLogger.Instance).Log(new LogMessage(TraceLevel.Verbose,
+            $"LineKeyedCodeLensTagger<{typeof(TEntry).Name}>: {message}",
+            nameof(OnDocumentRenamed), null, nameof(LineKeyedCodeLensTagger<TEntry>)));
 
     /// <inheritdoc />
     public event EventHandler<SnapshotSpanEventArgs>? TagsChanged;

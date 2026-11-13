@@ -502,6 +502,23 @@ public class LineKeyedCodeLensTaggerTests
     }
 
     [Fact]
+    public void A_rename_is_logged_at_Verbose_with_the_old_and_new_uri()
+    {
+        var (buffer, document) = CreateBufferWithDocument(CreateSnapshot(lineCount: 5), OldPath);
+        var sut = GetOrCreateForBuffer(buffer, (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(new[] { new TestEntry(1, "a") }))!;
+        var logged = new List<LogMessage>();
+        var logger = Substitute.For<IIdeSupportLogger>();
+        logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(ci => logged.Add(ci.Arg<LogMessage>()));
+        sut.Logger = logger;
+
+        RaiseFileAction(document, NewPath, FileActionTypes.DocumentRenamed);
+
+        var message = logged.Should().ContainSingle().Subject;
+        message.Level.Should().Be(TraceLevel.Verbose);
+        message.Message.Should().Contain(OldUri).And.Contain(NewUri).And.Contain("1 tag(s)");
+    }
+
+    [Fact]
     public void A_plain_save_does_not_rekey_the_tagger()
     {
         var snapshot = CreateSnapshot(lineCount: 5);
