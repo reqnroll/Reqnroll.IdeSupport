@@ -55,6 +55,11 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "breakpoints": [
+      {
+        "language": "reqnroll"
+      }
+    ],
     "grammars": [
       {
         "language": "reqnroll",

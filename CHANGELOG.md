@@ -1,6 +1,7 @@
 # [vNext]
 
 ## Improvements:
+* VS Code now allows breakpoints on steps in `.feature` files. When a test is debugged with the C# debugger (for example C# Dev Kit's Debug Test), it stops at the step, and Step Into goes to the step definition, through the line mapping Reqnroll already generates. Breakpoints on `Examples:` rows are never hit, and the test project must be rebuilt after a `.feature` file changes so the line numbers match (VS Code) - see #453
 * VS Code now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user navigates from a step in a `.feature` file with F12 or Ctrl+click, as Visual Studio and Rider do. Previously only the explicit Go to Step Definition command was reported. A navigation is counted only once the editor arrives at one of the returned locations, so hovering with Ctrl held is not counted, and Peek Definition is not counted either (VS Code) - see #1266
 ## Bug fixes:
 * In Rider, the bookkeeping that decides when `projectLoaded`/`projectUnloaded` and the project-files baseline are sent is now safe to use from the UI thread and the language-server callback thread at once, so a project is no longer sent twice or skipped when the two race (Rider) - see #988
