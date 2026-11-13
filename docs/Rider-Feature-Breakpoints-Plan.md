@@ -363,7 +363,7 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 | F9 and gutter click on a step line | Breakpoint created, survives IDE restart |
 | Debug a scenario | Stops on plain steps, and on Outline steps once per row (verified). Stops on a Background step in **one** scenario only (verified; a known limitation, see [§12](#12-known-limitations)) |
 | Step Into from a stopped step | Lands on the first line of the step definition's body (`StepIntoStepDefinitionAction`, [§4](#4-frontend-changes)); an ambiguous step falls back to plain Step Into |
-| Breakpoint on a blank, comment, tag, table or Examples row, or doc string line | Refused by the filter |
+| Breakpoint on a blank, comment, tag, table or Examples row, or doc string line | Refused by the filter (tag and table rows verified live; doc strings unit-tested only) |
 | Breakpoint on a description, `Rule:`, `Background:` or `Examples:` line | Accepted; binds to the next line with code (a known limitation) |
 | Edit the `.feature` without rebuilding | Binds by the old line numbers (same as VS Code); document it |
 | Gutter click on a `.txt` file (F1 side effect) | Nothing happens, no error |
