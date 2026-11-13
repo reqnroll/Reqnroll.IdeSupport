@@ -1,8 +1,10 @@
 # Rider: a PSI for `.feature` files — implementation and rework plan
 
-Status: **in progress.** Phases 1 (backend module, Gradle wiring, closed one-release range), 2a, 2b and the
-Phase 4 policy switch are committed on `feature/453-rider-gherkin-psi`; none has been run in a live Rider, and
-the CI matrix, publishing automation and Phases 3 and 5–10 are not started. This supersedes the scope of
+Status: **in progress.** Phases 1–6 are committed on `feature/453-rider-gherkin-psi` and checked live in Rider
+2026.2.3.1 (see each phase's status). Phase 10 option A has a working spike on a local branch. Not started:
+Phases 8, 9 and 10's production code, and the release infrastructure for the backend build (CI, smoke test,
+publishing). Phase 7 is dropped under the release policy in [§4.1](#41-release-policy-newest-rider-only). This
+supersedes the scope of
 [Rider-Feature-Breakpoints-Plan.md](Rider-Feature-Breakpoints-Plan.md). That plan's backend module is
 kept unchanged as [Phase 1](#6-phases); its frontend half (§4, the `TEXT` registration) becomes a
 temporary shim that [Phase 4](#6-phases) removes.
@@ -153,10 +155,10 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
 | # | Area | Today | After the PSI | Removed / changed | Risk |
 |---|---|---|---|---|---|
 | 1 | **Instant syntax colour** | Semantic tokens only; nothing coloured until the server answers | `SyntaxHighlighter` from the lexer; semantic tokens overlay it | Nothing removed; adds `BraceMatcher`, `QuoteHandler` | Low |
-| 2 | **Run / Debug gutter** | `RunTestCodeVisionProvider` inline lens; no Debug | `RunLineMarkerContributor` gives a native gutter marker with the standard Run/Debug menu on `SCENARIO` / `SCENARIO_OUTLINE` | `RunTestCodeVisionProvider` (after a deprecation release behind a setting). `FailedStepGutterMarks` stays: it paints per-run state, not structure | Medium |
+| 2 | **Run / Debug gutter** | `RunTestCodeVisionProvider` inline lens; no Debug | ~~`RunLineMarkerContributor`~~ Rider's own unit-test gutter marks from the backend ([Phase 10](#phase-10-run-and-debug-through-riders-unit-tests); the frontend contributor of Phase 7 is dropped) | `RunTestCodeVisionProvider` stays as the fallback where no mark is added (decision 4). `FailedStepGutterMarks` stays: it paints per-run state, not structure | Medium |
 | 3 | **Breakpoints** | Spike registers the debugger policy for `TEXT`, so every plain-text file passes Gate 1 | Register the policy for `Gherkin` only | The `TEXT` line in `plugin.xml`. The backend stub stays | Low |
 | 4 | **Navigation and refactoring entry points** | Promoter and action for F12 / Ctrl+B / Ctrl+click; claimed Shift+F6; Comment action overridden by ID | `Commenter`; `renameHandler` extension point for Rename Step; navigation re-evaluated in [Phase 8](#6-phases) | `ReqnrollCommentByLineCommentAction` (if parity holds). Shift+F6 claim | **High** for navigation, Low for the rest |
-| 5 | **Hand-managed editor visuals** | `editorFactoryListener`s drive `foldingModel` and `inlayModel`; tag links by hand | **Prefer what Rider's generic LSP client now does itself** (see the principle below): native folding from 2025.2.2, native inlay hints from 2025.2.2, native outline from 2025.3, driven by the server's responses. Our controllers remain only for older builds and are switched off where the platform does the work | The folding controller, once `pluginSinceBuild` reaches 2025.2.2; the inlay-hint controller likewise, after checking for double rendering | Medium |
+| 5 | **Hand-managed editor visuals** | `editorFactoryListener`s drive `foldingModel` and `inlayModel`; tag links by hand | **Prefer what Rider's generic LSP client now does itself** (see the principle below): native folding from 2025.2.2, native inlay hints from 2025.2.2, native outline from 2025.3, driven by the server's responses. Our controllers remain only for older builds and are switched off where the platform does the work; under the release policy ([§4.1](#41-release-policy-newest-rider-only)) they are removed in Phase 9 | The folding controller, once `pluginSinceBuild` reaches 2025.2.2; the inlay-hint controller likewise, after checking for double rendering | Medium |
 | 6 | **Typing assists** | Two `typedHandler`s for `|` realignment and `@` / space popups | Same handlers, now language-scoped. Add `SpellcheckingStrategy`, `IndexPatternBuilder` (TODO), breadcrumbs | Nothing | Low |
 
 ### Notes per area
@@ -202,18 +204,8 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
   plugins present, two parsers fight over one extension. **Done:** `plugin.xml` declares
   `<incompatible-with>net.reqnroll</incompatible-with>` and its description no longer tells users they can run
   both. Still to verify: that Rider honours it for a plugin ID.
-- **What the PSI does and does not tie to Rider releases.** The PSI is Kotlin, compiled against 2024.3.5, and
-  stays one build for 243 – 262.\* (`verifyPlugin` checks it across the range). Only the backend module is tied
-  to one release, and only builds made with `-PwithBackend=true` carry it; see the closed-range rules in
-  [the breakpoints plan §6.2](Rider-Feature-Breakpoints-Plan.md#62-gradle).
 - **Formatting.** `ReqnrollFormattingService` is registered `order="first"` and keeps winning. No
   `FormattingModelBuilder` is added, so Reformat Code still goes through the server.
-- **Compatibility range.** The Kotlin jar is shared by all legs (243 – 262.*). Every extension point
-  used must exist in 2024.3. `verifyPlugin` checks binary compatibility of that Kotlin code across the
-  range, so the PSI work is partly self-checking, unlike the .NET backend.
-- **Marketplace.** No new legs. The frontend-only leg for older Rider gets the PSI features too
-  (highlighting, gutter run, folding, outline), since none of them need the backend. Only breakpoints
-  need the backend leg.
 - **Parity with the server.** See [§2.5](#25-reusing-the-gherkin-parser). Pin the Java jar to the
   server's Gherkin version and bump them together.
 - **Packaging and classloading.** The Gherkin and `messages` jars ship inside the plugin. The
@@ -225,6 +217,36 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
   earlier plan's `BasePlatformTestCase` for the breakpoint policy registration should instead be a test
   that parses `plugin.xml`.
 
+### 4.1 Release policy: newest Rider only
+
+**Decided 2026-11-13.** Each release of the plugin targets only the current Rider release, as the legacy
+`net.reqnroll` plugin does. There are no fixes or features for older Rider releases.
+- **One build per Rider release.** It always carries the backend module, is compiled against that release's
+  SDK (Kotlin and .NET alike), and has the closed `since`/`until` range from
+  [the breakpoints plan §6.2](Rider-Feature-Breakpoints-Plan.md#62-gradle).
+- **No frontend-only build.** The open-range, frontend-only leg and its `dotnet test`-only fallback go away.
+- **Users on an older Rider stay on the last upload whose range covers their build.** That includes the
+  language server bundled in it, so they stop receiving server fixes too. The first upload under this policy
+  ends updates for Rider 2024.3 – 2026.1, which the current Marketplace upload (243 – 262.\*) covers.
+- **A new Rider release without our upload means no plugin.** With a closed `until`, a user who upgrades Rider
+  before we publish for it loses the plugin until we do. EAP-SDK builds published ahead of each release
+  ([breakpoints plan §7.2](Rider-Feature-Breakpoints-Plan.md#72-automation-and-ownership)) and a named owner
+  ([§10](#10-decisions-needed) decision 3a) are therefore required, not optional.
+
+What the policy changes in this plan:
+- **Phase 7 is dropped.** Its frontend `RunLineMarkerContributor` was only for the frontend-only build once
+  Phase 10 option A landed.
+- **Version gates become dead code.** `NativeLspFolding`, `NativeLspInlayHints` and `NativeLspCodeLens` exist
+  only to switch our controllers off on newer Rider. The folding, inlay-hint and code-lens controllers they
+  gate, and the "no outline before 2025.3" caveat, are removed in Phase 9. The tag-link controller stays until a
+  live check shows the platform draws the underline and hover hint itself.
+- **No compatibility range to keep.** The rule that every extension point must exist in 2024.3 goes, and so
+  does `verifyPlugin` across 243 – 262.\*. Platform APIs can be called directly instead of being detected by
+  class name (for example `LspDocumentLinkDisabled`).
+- **New work: move the Kotlin build to the current SDK.** It compiles against 2024.3.5 today. Moving it costs a
+  one-time migration of deprecated or removed APIs, then a small amount each release. It is part of the
+  release infrastructure in Phase 1.
+
 ## 5. Dependency order
 
 ```mermaid
@@ -234,17 +256,18 @@ flowchart LR
     P2 --> P4["4 Breakpoints on Gherkin"]
     P2 --> P5["5 Folding + outline"]
     P2 --> P6["6 Inlay hints"]
-    P2 --> P7["7 Run gutter"]
     P2 --> P8["8 Rename + navigation"]
     P3 --> P9["9 Cleanup + docs"]
     P4 --> P9
     P5 --> P9
     P6 --> P9
-    P7 --> P9
     P8 --> P9
     P1 --> P10["10 Run/Debug through<br/>Rider Unit Tests (backend)"]
-    P7 -.-> P10
+    P10 --> P9
 ```
+
+Phase 7 (a frontend Run gutter) is dropped under the release policy in
+[§4.1](#41-release-policy-newest-rider-only).
 
 ## 6. Phases
 
@@ -253,7 +276,7 @@ Sizes are rough estimates in working days and have not been validated.
 | Phase | Deliverable | Exit criterion | Est. |
 |---|---|---|---|
 | **0** | Live check of the backend spike in `runIde` | Go/no-go for Phase 1 (checks in [§8](#8-verification)) | 1 |
-| **1** | Backend module and Gradle wiring (**built and committed**; the `TEXT` shim is gone). Build now derives a closed one-release range from `riderSdkVersion` and defaults to frontend-only. Still to do: CI matrix, per-release backend smoke test, publishing automation, changelog-rendered change notes (breakpoints plan §6–7) | Breakpoint binds and hits in a live Rider | per earlier plan |
+| **1** | Backend module and Gradle wiring (**built and committed**; the `TEXT` shim is gone). Build now derives a closed one-release range from `riderSdkVersion` and defaults to frontend-only. Still to do, under the release policy in [§4.1](#41-release-policy-newest-rider-only): compile the Kotlin side against the current SDK, make the backend build the only build, a CI job for it, the per-release backend smoke test (also covering Phase 10's gutter marks), publishing automation with EAP builds, changelog-rendered change notes (breakpoints plan §6–7) | Breakpoint binds and hits in a live Rider | per earlier plan |
 | **2a** | **Parser bridge**: Java source set, Gherkin 39.1.0 dependency, same-package adapter, `PsiBuilder` builder, restartable lexer; no registration yet | Shared corpus passes; invalid files yield a full tree; spike confirms classloading in Rider | 3–4 |
 |  | *Status: built and unit-tested (corpus, lexer, `PsiBuilder` replay via `ParsingTestCase`); `ReqnrollFeatureParserDefinition` exists but is deliberately not registered in `plugin.xml`. Classloading in a real Rider is the open item.* | | |
 | **2b** | **PSI foundation**: `ParserDefinition`, typed elements, per-file default language, `SpellcheckingStrategy`, no behavioural change otherwise | Every existing feature still works with the language now real; no double rendering | 2–3 |
@@ -265,12 +288,12 @@ Sizes are rough estimates in working days and have not been validated.
 |  | *Status: a tree-based `FoldingBuilder` and Structure view were built and committed, then reverted in favour of server ranges everywhere. Done: `NativeLspFolding` (checks for the platform's `LspFoldingRangeSupport` class) switches the folding controller off on builds with native folding; docs corrected (the old claim that Rider's client has no folding consumer was true only for 2024.3). Left as it was: no outline before Rider 2025.3. **Verified live (2026.2.3.1):** `.feature` files fold natively with `Gherkin` as the PSI language; the server log shows the platform's `textDocument/foldingRange` requests and the plugin log has no `ReqnrollFeatureFoldingController` entries, so the controller is off. Not separately checked: whether the platform's folding refreshes while typing.* | | |
 | **6** | **Native-rendering audit** (replaces the declarative inlay provider, per the §3 note 5 principle): confirm on a new Rider that inlay hints, code lens and document links each render once | One hint, lens and link per source, no duplicates | 1 |
 |  | *Status: static audit done against the Rider 2026.2.3.1 binaries. Inlay hints: `NativeLspInlayHints` already switches the controller off where the platform's `LspInlayHintsProviderFactory` is registered. Code lens: `NativeLspCodeLens` does the same for `LspCodeVisionProvider`. **Document links: not gated.** 2026.2 has `LspDocumentLinkCache` (sends `textDocument/documentLink`) and `LspDocumentLinkReferenceProvider` (an implicit PSI reference, so Ctrl+click navigation), and `LspHighlightingPassFactory` is registered; whether it draws the underline for `.feature` files, and whether Ctrl+click then opens the browser twice next to `ReqnrollFeatureTagLinkController`, needs a live check. Gating the controller without that check could drop the permanent underline and hover hint. **Live check (2026.2.3.1): Ctrl+click opened the link twice**, once through the platform's reference (which works now that `.feature` has a PSI) and once through the controller. The platform's switch (`LspDocumentLinkDisabled`) is a descriptor customization the plugin cannot set while it compiles against 2024.3, so the controller now leaves the click to the platform wherever `LspDocumentLinkSupport` exists (`NativeLspDocumentLinks`). It keeps drawing the underline and the hover hint and still reports the click telemetry. **Second live check:** one tab, but the first few clicks after opening the solution failed with "cannot find declaration": on 2026.2 Ctrl+click runs `ReqnrollGoToDefinitionAction` (Go to Declaration), and the platform's reference exists only once its `LspDocumentLinkCache` has fetched the links, which it does lazily; the controller had them about 20 s before the first click. So the action now opens a tag link under the mouse or caret itself, through the controller's links (`openTagLinkAt`), and skips Go to Declaration; the controller's own click handling stands down wherever the action takes the shortcuts. This also restores the `TagLinkSupport.isOpenableUrl` scheme block list and makes F12 on a tag open it. Where the platform follows document links but the action is not enabled, the click is still left to the platform. **Verified live (2026.2.3.1): the first Ctrl+click after opening the solution opens one tab, with no error.*** | | |
-| **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release. If Phase 10 option A lands, this is for the frontend-only build only | Run works from the gutter; failed-step marks unaffected | 3 |
+| ~~**7**~~ | ~~**Run gutter**: `RunLineMarkerContributor`~~ — **dropped**: it was only for the frontend-only build, which the release policy ([§4.1](#41-release-policy-newest-rider-only)) removes. Phase 10 gives the gutter marks | — | — |
 | **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
-| **9** | **Cleanup and docs**: remove dead workarounds, update `client-rider.md` §7 and §8, feature pages, CHANGELOG | Doc comments no longer say "no PSI" | 1–2 |
-| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track). See [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests). Decided: option A, a daemon stage that adds Rider's own test highlighting (by reflection) on scenarios | Each scenario has Rider's native Run/Debug gutter mark with outcome icons. Runs show in the Unit Tests window. Debug stops on `.feature` breakpoints. The frontend-only build keeps `dotnet test` | 5–8 + spike |
+| **9** | **Cleanup and docs**: remove dead workarounds, including the controllers behind the `NativeLsp*` version gates and the gates themselves ([§4.1](#41-release-policy-newest-rider-only)); update `client-rider.md` §7 and §8 (and its compatibility paragraph), `ide-clients.md`, `outline-and-folding.md`, Open Questions D3, feature pages, CHANGELOG | Doc comments no longer say "no PSI"; no code path or doc depends on a Rider older than the current release | 2–3 |
+| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track). See [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests). Decided: option A, a daemon stage that adds Rider's own test highlighting (by reflection) on scenarios | Each scenario has Rider's native Run/Debug gutter mark with outcome icons. Runs show in the Unit Tests window. Debug stops on `.feature` breakpoints. Scenarios the backend cannot map keep the inline `dotnet test` lens | 5–8 + spike |
 
-Phases 3 and 5–8 are independent of each other once Phase 2 is in, so they can be reviewed as
+Phases 3, 5, 6 and 8 are independent of each other once Phase 2 is in, so they can be reviewed as
 separate PRs in any order. Phase 2 is the only large risk: it changes the language of every `.feature`
 editor.
 
@@ -325,8 +348,8 @@ Open risks for option A:
   thing the spike must check.
 - **Code model.** The backend `.feature` PSI is a stub tree (one file node). The daemon stage requires
   `ProvidesCodeModel`, and the explorer needs scenario offsets, which can come from the document text.
-- **Duplicate marks.** On a backend build, Phase 7's frontend `RunLineMarkerContributor` and the inline Run lens
-  must stand down, or each scenario gets two Run icons.
+- **Duplicate marks.** The inline Run lens must stand down on scenarios that have a mark, or each scenario gets
+  two Run entries. (Phase 7's frontend `RunLineMarkerContributor`, the other source of duplicates, is dropped.)
 
 **Fallback: the lens drives Rider's runner (option B).** This keeps our own lens and gutter, and only replaces the
 launch:
@@ -342,8 +365,8 @@ launch:
 4. **Outcomes.** The lens glyph and the failed-step gutter mark would need Rider's results mapped back, or they
    could be left to the Unit Tests window (§10).
 
-**In both options**, the frontend-only build, and any scenario the backend cannot match, keep the existing
-`dotnet test` lens.
+**In both options**, any scenario the backend cannot match keeps the existing `dotnet test` lens. (There is no
+frontend-only build under the release policy in [§4.1](#41-release-policy-newest-rider-only).)
 
 **Spike first, to settle:**
 - Option A's provider ownership: whether reporting an MSTest, NUnit or xUnit element from a `.feature`
@@ -419,7 +442,8 @@ a `[DaemonStage]` of our own runs on `.feature` files and adds Rider's own `Unit
   platform features keep their old controllers, but only if the controllers of later phases are still
   present. That is why each migration removes its workaround in the same PR as it adds the replacement,
   and why Phase 2 must not remove anything.
-- The Run lens stays behind a setting for one release (Phase 7).
+- The inline Run lens stays as the fallback for scenarios Phase 10 cannot mark ([§10](#10-decisions-needed)
+  decision 4).
 
 ## 8. Verification
 
@@ -432,11 +456,11 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 | Project whose default language is not English, no header | PSI and server agree on keywords |
 | Invalid file (unterminated doc string, unknown language) | Whole text still in the tree; no exception in the log |
 | Large file (several thousand lines) | No typing lag; no EDT stalls in the log; measure the lexer rescan cost |
-| Fold / unfold, Structure view | Same folds as VS Code on the same file (Rider 2025.2.2+ natively, older through the controller, never both); outline from Rider 2025.3 |
-| Inlay hints, code lens, document links | Each rendered once on Rider 2025.2.2+, 2026.1+ and 2026.2; tag link Ctrl+click opens once |
-| Gutter marker | Run works; failed-step marks appear after a failed run |
+| Fold / unfold, Structure view | Same folds and outline as VS Code on the same file, rendered natively |
+| Inlay hints, code lens, document links | Each rendered once; tag link Ctrl+click opens once |
+| Gutter marker | Rider's Run/Debug marks on scenarios (Phase 10); failed-step marks appear after a failed run |
 | Breakpoints | As in the earlier plan's table; no response on a `.txt` gutter |
-| Comment, Rename Step, F12 | Unchanged behaviour on all supported Rider versions |
+| Comment, Rename Step, F12 | Unchanged behaviour on the current Rider release |
 | Spell check | No squiggles on keywords, tags, placeholders or parameters |
 | Legacy plugin also installed | Rider reports the incompatibility |
 
@@ -447,10 +471,8 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
   client's own `.feature` handling. The legacy plugin does it, which is the only evidence.
 - That Rider's frontend has no usable PSI for C# files, which decides whether Phase 8's navigation
   go/no-go can be a go.
-- Whether the semantic-token overlay and the lexer highlighter composite without flicker on every
-  supported Rider.
-- Whether `RunLineMarkerContributor` markers show the standard Debug entry for a non-C# language in
-  Rider, rather than needing a custom action.
+- Whether the semantic-token overlay and the lexer highlighter composite without flicker.
+- How much of the Kotlin code needs changing to compile against the current Rider SDK instead of 2024.3.5.
 - Phase 10:
   - That a plugin's `IUnitTestExplorerFromFile` can report another provider's elements from a `.feature`
     file without disturbing their discovery from `.feature.cs`.
@@ -472,16 +494,23 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
    Phases 1–6 were built together in one change, and Phase 1 now depends on the PSI. The debugger policy is
    registered for `Gherkin`, and Step Into, the breakpoint line filter and the tag-link fix assume the PSI.
    Shipping Phase 1 alone would mean restoring the `TEXT` shim, which accepts breakpoints in every plain-text
-   file. What is left to choose is the order of Phases 7–10. Release infrastructure for the backend build gates
+   file. What is left to choose is the order of Phases 8–10 (Phase 7 was later dropped, decision 7). Release infrastructure for the backend build gates
    all of it reaching users.
 2. ~~Phase 2 sequencing: before Phase 1 ships, or after~~ — **superseded**: Phases 1 and 2 were built
    together, so neither ships before the other.
 3. ~~Legacy plugin: declare it incompatible~~ — done; verify Rider enforces it.
-3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
-4. Keep the inline Run lens as a setting for one release (proposed: yes).
+3a. An owner and a response time for each new Rider release, including the EAP build ahead of it (see
+   breakpoints plan §7.2). The support window itself is decided by decision 7. Without an owner, users who
+   upgrade Rider lose the plugin until someone publishes for the new release.
+4. The inline Run lens: no longer a one-release transition setting (Phase 7 is dropped). It stays as the
+   fallback where Phase 10 adds no mark. Whether to remove it once Phase 10 covers Outline rows, Rule, NUnit and
+   xUnit is still open.
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.
 6. ~~Phase 10: option A or option B~~ — **decided 2026-11-13: option A** in its daemon-stage form. The
    reflective dependency on Rider's internal `UnitTestElementHighlighting` is accepted. Each backend build
    targets one Rider release, and the per-release smoke test must cover the gutter marks. If the type or its
    constructor is missing, the stage logs it and adds no marks, so the inline Run lens must stay available in
    that case.
+7. ~~Release policy~~ — **decided 2026-11-13: newest Rider only**, with no back-porting to older releases. See
+   [§4.1](#41-release-policy-newest-rider-only). Consequences: Phase 7 dropped, the version gates and their
+   controllers removed in Phase 9, and the Kotlin build moved to the current SDK.

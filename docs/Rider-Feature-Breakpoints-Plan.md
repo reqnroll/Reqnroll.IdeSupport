@@ -9,6 +9,11 @@ decision or an assumption that the spike in [§8](#8-work-breakdown) must confir
 
 > **Superseded in scope** by [Rider-Gherkin-PSI-Plan.md](Rider-Gherkin-PSI-Plan.md), which treats this
 > backend module as Phase 1 and replaces the frontend `TEXT` shim (§4) with a real frontend PSI.
+>
+> **Release policy (decided 2026-11-13): newest Rider only.** Each plugin release targets only the current
+> Rider release; there is no frontend-only leg for older Rider and no back-porting
+> ([PSI plan §4.1](Rider-Gherkin-PSI-Plan.md#41-release-policy-newest-rider-only)). §6, §7 and §10 below are
+> updated for it. Mentions of a frontend-only or older-Rider leg elsewhere in this plan are historical.
 
 Related: GitHub issue #453 (VS Code half shipped separately), open questions
 [O6 and O9](LSP-IDE-Support-Open-Questions.md), and the limitations list in
@@ -175,7 +180,7 @@ step definition.
   message in the debugger tool window.
 - It carries Step Into's shortcuts (F7 in `$default`, F11 in the Visual Studio keymaps).
   `StepIntoStepDefinitionPromoter` makes it win them only while the debugger is stopped on a `.feature` line.
-- It needs no backend module, so it also works on the frontend-only leg.
+- It needs no backend module.
 
 ## 5. Coexistence with the legacy plugin
 
@@ -223,42 +228,42 @@ side.
 - **The range is closed on purpose.** The build fails if `-PpluginSinceBuild` or `-PpluginUntilBuild` is combined
   with `withBackend=true`, and if `riderSdkVersion` is not a Rider release number. An open upper bound would let
   Rider install the backend on a newer release it was never built for.
-- **`withBackend` defaults to `false`** until the CI matrix lands, so CI as it stands still produces the
+- **`withBackend` defaults to `false`** until the CI job lands, so CI as it stands still produces the
   frontend-only plugin for the whole range and never runs `dotnet` in Gradle. A backend build is opt-in.
-- The frontend-only leg keeps `pluginSinceBuild` / `pluginUntilBuild` from `gradle.properties` (`243` /
-  `262.*` today). Once backend legs exist its `untilBuild` must stop just below the oldest backend wave.
+  Under the release policy the backend build becomes the only build: `withBackend` then defaults to `true`, or
+  is removed along with `pluginSinceBuild` / `pluginUntilBuild` in `gradle.properties`.
 - New `compileBackend` task (`dotnet build -c Release -p:RiderSdkVersion=…`) for local builds, plus an
   external `-PbackendBuildDir` override for CI, mirroring the existing `publishServer` /
   `lspServerBuildDir` pattern so Gradle still never runs `dotnet` in CI.
 - `prepareSandbox` copies `Reqnroll.IdeSupport.Rider.Backend.dll` (and `.pdb`) into
   `<plugin>/dotnet/` when `withBackend` is true; `buildPlugin` fails if it is missing.
-- The Kotlin jar is unchanged and still compiled against 2024.3.5 with Kotlin API level 2.0, so it is
-  identical across legs.
+- The Kotlin jar is still compiled against 2024.3.5 with Kotlin API level 2.0. Under the release policy it moves
+  to the same Rider release as the backend: `platformVersion` follows `riderSdkVersion`.
 
 ### 6.3 Workflow
 
 ```mermaid
 flowchart LR
-    lsp --> B["build-rider-backend<br/>matrix: wave"]
-    lsp --> R["build-rider-plugin<br/>matrix: leg"]
+    lsp --> B["build-rider-backend<br/>(current release)"]
+    lsp --> R["build-rider-plugin"]
     B --> R
-    T["test-rider-plugin<br/>+ backend unit tests"] --> P["publish-rider-plugin<br/>(all legs)"]
+    T["test-rider-plugin<br/>+ backend unit tests"] --> P["publish-rider-plugin"]
     R --> P
 ```
 
-- **New `build-rider-backend` job**, matrix over supported waves: `actions/setup-dotnet`,
-  `dotnet build` with that wave's SDK version, upload `rider-backend-<wave>`. Cache
-  `~/.nuget/packages`; the SDK packages are large.
-- **`build-rider-plugin` becomes a matrix** over legs: `frontend-only` plus one per supported wave.
-  Each leg downloads the server/test-logger artifacts as today plus its backend artifact, then runs
-  `buildPlugin` and `verifyPlugin`. `pluginVerification.ides` must be narrowed to the leg's range.
-- **The Plugin Verifier does not check .NET code.** Compiling the backend against each wave's SDK is
-  the only automated compatibility check; a live check per new wave stays manual.
-- **Version per leg**: every upload of one plugin ID needs a unique version. Proposed:
-  `<main>.<run_number>.<wave>` for backend legs and `<main>.<run_number>.0` for the frontend-only leg.
-  The "Verify plugin version" step reads the expected value from the matrix.
-- **Artifacts**: `Reqnroll.IdeSupport.Rider.<version>.zip` per leg; `publish-rider-plugin` collects all
-  of them.
+Under the release policy there is one leg, the current Rider release, so no matrix. A second, temporary leg
+against the EAP SDK runs only ahead of a Rider release ([§7.2](#72-automation-and-ownership)).
+
+- **New `build-rider-backend` job**: `actions/setup-dotnet`, `dotnet build` with the current release's SDK
+  version, upload `rider-backend`. Cache `~/.nuget/packages`; the SDK packages are large.
+- **`build-rider-plugin`** downloads the server/test-logger artifacts as today plus the backend artifact, then
+  runs `buildPlugin` and `verifyPlugin`. `pluginVerification.ides` narrows to the one release.
+- **The Plugin Verifier does not check .NET code.** Compiling the backend against the release's SDK is
+  the only automated compatibility check; a live check per new release stays manual.
+- **Version**: `<main>.<run_number>.<wave>`, as the Gradle build already derives it. The wave suffix keeps an EAP
+  upload and the release upload distinct. The "Verify plugin version" step reads the expected value from
+  `riderSdkVersion`.
+- **Artifacts**: one `Reqnroll.IdeSupport.Rider.<version>.zip`.
 - **Tests**: Kotlin tests plus a `plugin.xml` registration test (parsed as XML, not a fixture; see the PSI plan).
   Backend: an SDK-free xUnit project that links `BreakpointLineFilter.cs`.
 - **Per-release backend smoke test (added after review).** Compiling against each SDK version will not catch a
@@ -268,15 +273,16 @@ flowchart LR
   tests and closes the "exact zone requirements" gap in [§11](#11-not-verified).
 - **Check whether `dotnet build` of the `net472` backend works on the Ubuntu runner** (reference assemblies come
   from `Microsoft.NETFramework.ReferenceAssemblies`); otherwise the backend job needs `windows-latest`.
-- **Cost**: roughly one extra `dotnet build` per wave plus one extra Gradle run per leg. Paths-filter
+- **Cost**: one extra `dotnet build` per CI run. Paths-filter
   triggers need no change because everything lives under `src/Rider/**`.
 
 ## 7. Marketplace publication
 
 The plugin **is** on the Marketplace: `net.reqnroll.idesupport` is plugin 35337, and version `2026.2.1564`
 covers builds 243.0 – 262.\* *(from the review on the tracking issue, read from the Marketplace API)*. Uploaded
-manually. The version scheme below must be checked against that upload: each backend leg and the frontend-only
-leg need versions that sort sensibly after `2026.2.1564` and differ from each other.
+manually. The version scheme below must be checked against that upload: each new upload needs a version that
+sorts after `2026.2.1564`. That upload stays the newest version for Rider 2024.3 – 2026.1 users once the release
+policy starts.
 
 ### 7.1 What the legacy plugin teaches
 
@@ -292,7 +298,8 @@ scale, so its history is a guide to the cost:
   8 files of assembly API changes). Our backend is much smaller but uses the same ReSharper PSI and
   language-service base types (`FileElementBase`, `LanguageService`, `IBreakpointVariantsProvider`), so budget for
   per-release work.
-- **Only the newest release gets fixes**; some releases are in its CHANGELOG but were never uploaded.
+- **Only the newest release gets fixes**; some releases are in its CHANGELOG but were never uploaded. This plugin
+  adopts the same policy (decided 2026-11-13).
 - **Release process is manual**: CI runs no `verifyPlugin`, no Kotlin tests and no publish step.
 
 Worth keeping from it: change notes rendered from `CHANGELOG.md` with `org.jetbrains.changelog`, backend tests in
@@ -300,11 +307,12 @@ CI, and `<incompatible-with>`.
 
 ### 7.2 Automation and ownership
 
-- **Automate publishing before shipping more than one leg.** Several uploads per release, each with its own
-  version and range, are error-prone by hand. Use `publishPlugin` with a Marketplace token secret in a manual
-  release job that already sets `telemetryEnv=prod`.
-- **EAP builds ahead of each release.** Publish an EAP-SDK leg to a non-default Marketplace channel before each
-  Rider release.
+- **Automate publishing.** Every Rider release now needs an upload with its own version and closed range, plus an
+  EAP upload before it; that is error-prone by hand. Use `publishPlugin` with a Marketplace token secret in a
+  manual release job that already sets `telemetryEnv=prod`.
+- **EAP builds ahead of each release.** Publish an EAP-SDK build to a non-default Marketplace channel before each
+  Rider release. Under the release policy this is required: with a closed `untilBuild`, users who upgrade Rider
+  have no plugin until an upload covers the new release.
 - **A scheduled check** that flags or queues a build when a new Rider release (or EAP) is beyond the newest
   `pluginUntilBuild`. Today `JetBrains.Rider.SDK 2026.3.0` is already on nuget.org while the range stops at
   `262.*`.
@@ -314,23 +322,20 @@ CI, and `<incompatible-with>`.
   `pluginConfiguration.changeNotes` from `CHANGELOG.md`; the current `plugin.xml` has none, and every upload
   shares them.
 
-- **One plugin ID, several uploads.** Keep `net.reqnroll.idesupport`. Upload one zip per leg with
-  non-overlapping `since`/`until` ranges. Rider offers the newest upload whose range covers its build;
-  users never choose.
-- **Older Rider keeps getting updates.** The frontend-only leg covers `243` up to just below the
-  oldest backend wave. Those users get every release, just without `.feature` breakpoints. This avoids
-  the usual "per-version plugin drops old IDEs" cost.
-- **Supported window**: proposed as the two newest Rider releases with backend legs. That is the
-  policy decision behind the matrix size.
-- **Following Rider's releases.** Backend legs need a closed `untilBuild` (`<wave>.*`). Until a leg
-  for a new Rider release ships, users of that release get no update from us. To avoid that, add a
-  leg against the EAP SDK (the `-rc` / EAP packages on nuget.org) and publish it to a non-default
-  Marketplace channel before the release.
+- **One plugin ID, one upload per Rider release.** Keep `net.reqnroll.idesupport`. Each upload has a
+  closed `since`/`until` range for its release, so ranges never overlap. Rider offers the newest upload whose
+  range covers its build; users never choose.
+- **Older Rider is frozen, not updated.** Users on an older release keep the last upload whose range covers
+  their build, including the language server bundled in it. ~~A frontend-only leg for older Rider~~ was
+  considered and rejected by the release policy.
+- **Supported window: the current Rider release only** (decided 2026-11-13; earlier proposal: the two newest).
+- **Following Rider's releases.** Uploads need a closed `untilBuild` (`<wave>.*`). Until an upload for a new
+  Rider release ships, users of that release have no plugin. To avoid that, build against the EAP SDK (the
+  `-rc` / EAP packages on nuget.org) and publish to a non-default Marketplace channel before the release.
   - Note: today's plugin already stops at `262.*`, and `JetBrains.Rider.SDK 2026.3.0` is on nuget.org
     *(verified)*, so a range bump is already due independently of this plan.
-- **Upload mechanics**: `publishPlugin` (IntelliJ Platform Gradle Plugin) per leg with a Marketplace
-  token secret, run only from the release pipeline; or the Marketplace upload API with the same
-  zips. Change notes are identical across legs.
+- **Upload mechanics**: `publishPlugin` (IntelliJ Platform Gradle Plugin) with a Marketplace token secret, run
+  only from the release pipeline; or the Marketplace upload API with the same zip.
 - **Alternative packaging, not recommended for the minimal version**: a separate companion plugin
   that holds only the backend module and depends on the main plugin. It keeps the main plugin a single
   upload, but adds a second listing, a second install step, and its own version matrix anyway.
@@ -345,7 +350,8 @@ CI, and `<incompatible-with>`.
 1. **PR — backend module and Gradle wiring** for a single wave (the current Rider), local
    `compileBackend` path, `prepareSandbox` packaging, unit tests, `plugin.xml` registration and the O9
    coexistence decision.
-2. **PR — CI matrix and versioning** ([§6.3](#63-workflow)), including the frontend-only leg.
+2. **PR — CI job and versioning** ([§6.3](#63-workflow)): the backend build as the only build, with the Kotlin
+   side compiled against the same Rider release.
 3. **PR — docs**:
    - `feature-overview` row and footnote;
    - `running-scenarios` Rider tab;
@@ -369,12 +375,13 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 | Gutter click on a `.txt` file (F1 side effect) | Nothing happens, no error (verified) |
 | Backend log and IDE (`idea.log`) | No errors from the stub language |
 | Legacy plugin also installed | Behaves as decided for O9 |
-| Plugin on the oldest supported Rider (frontend-only leg) | Loads; `.feature` breakpoints refused, nothing else changes |
+| Plugin on a Rider outside the upload's range | Rider refuses to install it (closed range) |
 
 ## 10. Decisions needed
 
-1. Supported Rider window for backend legs (proposed: two newest releases), **and who updates the backend for
-   each new Rider release, and how quickly**.
+1. ~~Supported Rider window~~ — **decided 2026-11-13: the current Rider release only**, no back-porting
+   ([PSI plan §4.1](Rider-Gherkin-PSI-Plan.md#41-release-policy-newest-rider-only)). **Still open: who updates
+   the plugin for each new Rider release (EAP build first), and how quickly.**
 2. ~~O9: declare the legacy plugin incompatible~~ — done in `plugin.xml`; Rider enforcing it for a plugin ID is
    still to be verified.
 3. F1 (`TEXT` registration) vs F2 (stub frontend parser); proposed F1 unless the spike shows a
@@ -390,8 +397,8 @@ These are assumptions until the spike runs:
 - What hung the Debug runs seen during live checks (no `.feature` breakpoints were involved).
 - That `incompatible-with` works for a plugin ID.
 - That `dotnet build` of the `net472` backend succeeds on the Ubuntu CI runner.
-- How the Marketplace chooses between several uploads with non-overlapping ranges, and how the proposed version
-  scheme sorts against the existing `2026.2.1564` upload.
+- How the proposed version scheme sorts against the existing `2026.2.1564` upload, and that Rider 2024.3 – 2026.1
+  users keep being offered that upload once newer ones have closed ranges.
 - That `net472` is the right target framework for every targeted SDK.
 - Exact zone requirements.
 - The Marketplace's handling of the proposed version scheme.
