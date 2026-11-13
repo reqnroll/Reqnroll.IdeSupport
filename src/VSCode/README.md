@@ -23,6 +23,7 @@ Gherkin and [Reqnroll](https://reqnroll.net) support for VS Code: syntax highlig
 * Rename a step across feature files and step definitions
 * Code Lens with step usage counts and hook matches
 * Inlay hints showing the step definition a step is bound to
+* Breakpoints on steps in `.feature` files when you debug tests with the C# debugger
 
 See the [feature overview](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/site/ide-support/feature-overview.md) for what is available in each IDE.
 
