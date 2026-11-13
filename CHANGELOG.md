@@ -5,6 +5,7 @@
 ## Bug fixes:
 * In Rider, the bookkeeping that decides when `projectLoaded`/`projectUnloaded` and the project-files baseline are sent is now safe to use from the UI thread and the language-server callback thread at once, so a project is no longer sent twice or skipped when the two race (Rider) - see #988
 * VS Code no longer raises an unhandled error in the extension host when a log file cannot be written after it was opened (disk full, permission denied, file locked): the failure is reported once, file logging stops, and the extension keeps running (VS Code) - see #1011
+* In VS Code, the opt-in test-outcome pipeline (`reqnroll.testOutcomes.enabled`) now registers with the language server again each time the server restarts, so test runs keep reporting outcomes after a server crash instead of sending them to the old server's endpoint; turning the option off now also restores `dotnet.unitTests.runSettingsPath` when the server fails to start (VS Code) - see #1012
 * In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
 
 # v2026.2 - 2026-10-25

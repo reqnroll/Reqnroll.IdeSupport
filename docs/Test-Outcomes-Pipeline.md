@@ -94,7 +94,7 @@ sequenceDiagram
 
 Rider follows the same shape, with `RunTestRunner` adding `--test-adapter-path` and `--logger` to its own
 `dotnet test` command line in place of the runsettings hook, and polling `getOutcome` after the process exits.
-VS Code registers once per activation instead of per run (§6.2).
+VS Code registers once per server start (activation and each restart) instead of per run (§6.2).
 
 ### 3.2 An MTP run
 
@@ -253,8 +253,9 @@ reporter the test list up front), so MTP-sourced runs show final results but no 
   existing TRX logger. After the process exits it polls `getOutcome` per target method (bounded), because
   the final `runComplete` may not have been processed yet. If registration, bundling or polling fails it
   falls back to the TRX result.
-- **VS Code.** C# Dev Kit, not this extension, launches the tests. The extension registers once per
-  activation and points the shared setting `dotnet.unitTests.runSettingsPath` at a generated runsettings file
+- **VS Code.** C# Dev Kit, not this extension, launches the tests. The extension registers each time
+  the language server starts (at activation and again after every restart, since a restarted server has a new
+  endpoint and no record of the old run id) and points the shared setting `dotnet.unitTests.runSettingsPath` at a generated runsettings file
   that merges the logger into the user's own file. It is opt-in via `reqnroll.testOutcomes.enabled` because it
   changes a `dotnet.*` setting shared with C# Dev Kit and persisted in the workspace's `.vscode/settings.json`.
   The generated file is named per workspace, and turning the option off restores the setting's prior value.
