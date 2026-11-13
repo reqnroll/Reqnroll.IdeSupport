@@ -82,6 +82,7 @@ sequenceDiagram
 | `ReqnrollCommentByLineCommentAction` | Overrides the platform's `CommentByLineComment` action by ID. |
 | `ReqnrollGoToDefinitionAction`, `ReqnrollGoToDefinitionPromoter` | Make F12 / Ctrl+B / Ctrl+click reach the server on Rider 2026.2+. |
 | `RunTestRunner`, `RunLensSupport`, `FailedStepGutterMarks` | Run lens and execution; see [../Test-Runner-Integration-Design.md](../Test-Runner-Integration-Design.md). |
+| `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionPromoter`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
 | `ReqnrollToggleFeatureInlayHintsAction` | "Show Feature Inlay Hints" toggle. |
 | `ReqnrollDebugLogger` | File logging gated on the dev-sandbox property. |
 
@@ -140,13 +141,19 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    corresponds to (`StaleLensCommandResolver`), and `EditorLensRefresh` names the platform's
    `LspCodeVisionProvider` in every invalidation it sends, since a signal for this plugin's providers alone can
    cancel the platform's recompute in progress.
+10. **Rider's Step Into cannot reach a step definition** from a `.feature` step (it steps over the step, or into
+    Reqnroll's `ExecutionEngine` with external source debugging on). `StepIntoStepDefinitionAction` takes Step
+    Into's shortcuts while the debugger is stopped on a `.feature` line and runs to the definition's body instead.
 
 ## 8. Known limitations
 
 - No Debug action for scenarios; no native Unit Tests tool window presence.
-- Older Rider versions have no outline (the native Structure view renders the standard `documentSymbol` response on
-  current Rider).
+- Rider before 2025.3 has no outline (the native Structure view renders the standard `documentSymbol` response from
+  2025.3).
 - Lenses are inline, not gutter icons.
+- A `.feature` breakpoint on a Background step stops in one scenario only. Reqnroll 3 copies Background steps into
+  each scenario method, and Rider binds a line to a single method. Break in the step definition instead; see
+  [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §12.
 
 ## 9. Testing
 

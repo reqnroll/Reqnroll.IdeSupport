@@ -23,15 +23,14 @@ import org.eclipse.lsp4j.FoldingRange
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Renders Code Folding for `.feature` files directly against [Editor.getFoldingModel], bypassing
- * IntelliJ's PSI-based `com.intellij.lang.folding.FoldingBuilder` extension point entirely — same
- * reasoning as [net.reqnroll.idesupport.rider.inlayhints.ReqnrollFeatureInlayHintsController]'s doc
- * comment: `.feature` files have no [com.intellij.lang.ParserDefinition] registered, so a
- * language-scoped folding builder would never be invoked. Confirmed via bytecode inspection of
- * the pinned Rider 2024.3.5 `com.intellij.platform.lsp.api.LspServerDescriptor` that
- * there is also no generic-client `LspFoldingRangeSupport`-style opt-in for `textDocument/foldingRange`
- * — same class of gap as CodeLens/inlay hints/on-type formatting, all of which needed the same
- * kind of manual client-side glue.
+ * Renders Code Folding for `.feature` files from the server's `textDocument/foldingRange` response,
+ * directly against [Editor.getFoldingModel], on the Rider versions whose generic LSP client does not
+ * fold from that response itself. Confirmed via bytecode inspection of the pinned Rider 2024.3.5: it
+ * has no `LspFoldingRangeSupport` opt-in and no consumer for the request. Rider adds one in 2025.2.2
+ * (`LspFoldingBuilder`, enabled by default through `LspCustomization.foldingRangeCustomizer`), and then
+ * [NativeLspFolding.isAvailable] is true and this controller does nothing, so the same server ranges
+ * are rendered once, by the platform. This keeps folding driven by the server's one set of rules in
+ * every IDE. The controller can be deleted when the plugin's `pluginSinceBuild` reaches that Rider.
  *
  * [FoldRegion] (via [com.intellij.openapi.editor.RangeMarker]) is a [com.intellij.openapi.util.UserDataHolder],
  * so regions created here are tagged with [REQNROLL_REGION_KEY] to distinguish them from any
@@ -57,6 +56,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
     )
 
     override fun editorCreated(event: EditorFactoryEvent) {
+        if (NativeLspFolding.isAvailable) return
         val editor = event.editor
         val project = editor.project ?: return
         val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: return
@@ -95,6 +95,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
 
         /** Refreshes folding ranges for every currently open `.feature` editor belonging to [project]. */
         fun refreshOpenFeatureEditors(project: Project) {
+            if (NativeLspFolding.isAvailable) return
             for (editor in EditorFactory.getInstance().allEditors) {
                 if (editor.project != project) continue
                 val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: continue

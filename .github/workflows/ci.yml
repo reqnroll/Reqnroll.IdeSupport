@@ -669,7 +669,7 @@ jobs:
   # plugin.
   #
   # The Gradle wrapper (gradlew, gradle/wrapper/*) is committed, pinned to
-  # 8.10 — this job calls ./gradlew directly rather than bootstrapping from
+  # 9.8.2 — this job calls ./gradlew directly rather than bootstrapping from
   # the runner's system `gradle` (currently 9.6.1 on ubuntu-latest, which is
   # NOT what build.gradle.kts is written/tested against — see
   # src/Rider/CONTRIBUTING.md).

@@ -6,9 +6,13 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.editor.Editor
 import net.reqnroll.idesupport.rider.codevision.NativeLspCodeLens
 import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
+import net.reqnroll.idesupport.rider.taglinks.ReqnrollFeatureTagLinkController
+import java.awt.event.InputEvent
+import java.awt.event.MouseEvent
 
 /**
  * Makes F12 / Ctrl+B / Ctrl+click Go to Declaration reach the LSP server for `.feature` files on
@@ -22,6 +26,9 @@ import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
  * action. This action is bound to the same shortcuts (`use-shortcut-of`), wins them for `.feature`
  * files via [ReqnrollGoToDefinitionPromoter], and runs that wrapped frontend action directly.
  *
+ * On a tag link (`Traceability.TagLinks`) it opens the link instead, through
+ * [ReqnrollFeatureTagLinkController.openTagLinkAt].
+ *
  * Only enabled where the problem exists — [NativeLspCodeLens.isRenderedByPlatform] is the
  * "2026.2+ LSP client" signal — so older Riders keep their own, working, behaviour.
  */
@@ -33,10 +40,15 @@ class ReqnrollGoToDefinitionAction : AnAction() {
         e.presentation.isEnabledAndVisible =
             e.project != null && e.getData(CommonDataKeys.EDITOR) != null &&
                 file != null && isFeatureExtension(file.extension) &&
-                NativeLspCodeLens.isRenderedByPlatform
+                handlesFeatureShortcuts
     }
 
     override fun actionPerformed(e: AnActionEvent) {
+        val editor = e.getData(CommonDataKeys.EDITOR)
+        if (editor != null && ReqnrollFeatureTagLinkController.openTagLinkAt(editor, targetOffset(editor, e.inputEvent))) {
+            // A tag link: Go to Declaration would follow it only once the platform had fetched the document links.
+            return
+        }
         val registered = ActionManager.getInstance().getAction(GO_TO_DECLARATION_ID) ?: return
         val target = frontendActionOf(registered)
         ReqnrollDebugLogger.info(
@@ -47,6 +59,17 @@ class ReqnrollGoToDefinitionAction : AnAction() {
 
     companion object {
         internal const val GO_TO_DECLARATION_ID = "GotoDeclaration"
+
+        /** Whether this action takes Go to Declaration's shortcuts (and Ctrl/Cmd+click) for `.feature` files. */
+        val handlesFeatureShortcuts: Boolean get() = NativeLspCodeLens.isRenderedByPlatform
+
+        /** The offset under the mouse for a click on [editor], otherwise the caret offset. */
+        private fun targetOffset(editor: Editor, inputEvent: InputEvent?): Int =
+            if (inputEvent is MouseEvent && inputEvent.component === editor.contentComponent) {
+                editor.logicalPositionToOffset(editor.xyToLogicalPosition(inputEvent.point))
+            } else {
+                editor.caretModel.offset
+            }
 
         /**
          * The action Rider's `BackendDelegatingAction` wraps. Reflective: that class lives in
