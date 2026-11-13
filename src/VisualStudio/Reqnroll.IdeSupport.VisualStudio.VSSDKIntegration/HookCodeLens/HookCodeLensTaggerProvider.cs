@@ -35,24 +35,8 @@ internal sealed class HookCodeLensTaggerProvider : ITaggerProvider
         if (typeof(T) != typeof(ICodeLensTag))
             return null;
 
-        if (!buffer.Properties.TryGetProperty(typeof(ITextDocument), out ITextDocument doc))
-            return null;
-
-        string fileUri;
-        try
-        {
-            fileUri = new Uri(doc.FilePath).AbsoluteUri;
-        }
-        catch (UriFormatException)
-        {
-            return null;
-        }
-
-        return buffer.Properties.GetOrCreateSingletonProperty(
-            typeof(LineKeyedCodeLensTagger<HookFeatureLensEntry>),
-            () => new LineKeyedCodeLensTagger<HookFeatureLensEntry>(
-                buffer, doc.FilePath, fileUri,
-                FetchAsync, e => e.Line, EncodeElementDescription, HookCodeLensRedirect.TaggerRegistry)) as ITagger<T>;
+        return LineKeyedCodeLensTagger<HookFeatureLensEntry>.GetOrCreateForBuffer(
+            buffer, FetchAsync, e => e.Line, EncodeElementDescription, HookCodeLensRedirect.TaggerRegistry) as ITagger<T>;
     }
 
     private static async Task<IReadOnlyList<HookFeatureLensEntry>?> FetchAsync(string fileUri, CancellationToken ct)

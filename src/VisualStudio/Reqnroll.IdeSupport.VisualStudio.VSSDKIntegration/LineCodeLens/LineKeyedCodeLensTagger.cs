@@ -52,12 +52,16 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
 {
     private readonly ITextBuffer _buffer;
-    private readonly string _filePath;
-    private readonly string _fileUri;
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<TEntry>?>> _fetch;
     private readonly Func<TEntry, int> _lineSelector;
     private readonly Func<int, IEnumerable<TEntry>, string> _elementDescriptionEncoder;
+    private readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<TEntry>> _registry;
 
+    // Guards the swap of _location and _tagsByLine together, so a refresh that fetched for the old
+    // location can't publish its tags after a rename has replaced that location. Both fields are
+    // still read without it (volatile) on the GetTags / fetch paths.
+    private readonly object _gate = new();
+    private volatile FileLocation _location;
     private volatile IReadOnlyDictionary<int, LineCodeLensTag> _tagsByLine = EmptyTags;
     private int _refreshInFlight;
     private int _refreshPending;
@@ -76,12 +80,106 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
         WeakTaggerRegistry<LineKeyedCodeLensTagger<TEntry>> registry)
     {
         _buffer = buffer;
-        _filePath = filePath;
-        _fileUri = fileUri;
+        _location = new FileLocation(filePath, fileUri);
         _fetch = fetch;
         _lineSelector = lineSelector;
         _elementDescriptionEncoder = elementDescriptionEncoder;
+        _registry = registry;
         registry.RegisterTagger(this, fileUri);
+        RequestRefresh();
+    }
+
+    /// <summary>
+    /// Returns the buffer's shared tagger, creating it on first use. Returns <see langword="null"/>
+    /// when the buffer has no <see cref="ITextDocument"/> or its path can't be turned into a URI.
+    /// The new tagger follows the document's renames (including Save As) so it keeps fetching for,
+    /// and registering under, the file's current URI rather than the one it was created with.
+    /// </summary>
+    internal static LineKeyedCodeLensTagger<TEntry>? GetOrCreateForBuffer(
+        ITextBuffer buffer,
+        Func<string, CancellationToken, Task<IReadOnlyList<TEntry>?>> fetch,
+        Func<TEntry, int> lineSelector,
+        Func<int, IEnumerable<TEntry>, string> elementDescriptionEncoder,
+        WeakTaggerRegistry<LineKeyedCodeLensTagger<TEntry>> registry)
+    {
+        if (buffer.Properties.TryGetProperty(typeof(LineKeyedCodeLensTagger<TEntry>), out LineKeyedCodeLensTagger<TEntry> existing))
+            return existing;
+
+        if (!buffer.Properties.TryGetProperty(typeof(ITextDocument), out ITextDocument doc))
+            return null;
+
+        var filePath = doc.FilePath;
+        var fileUri = TryCreateFileUri(filePath);
+        if (fileUri is null)
+            return null;
+
+        return buffer.Properties.GetOrCreateSingletonProperty(
+            typeof(LineKeyedCodeLensTagger<TEntry>),
+            () =>
+            {
+                var tagger = new LineKeyedCodeLensTagger<TEntry>(
+                    buffer, filePath, fileUri, fetch, lineSelector, elementDescriptionEncoder, registry);
+                // The document lives exactly as long as the buffer that owns this tagger, so the
+                // subscription keeps nothing alive that wasn't already.
+                doc.FileActionOccurred += tagger.OnFileActionOccurred;
+                return tagger;
+            });
+    }
+
+    /// <summary>The URI this tagger currently fetches for and is registered under.</summary>
+    internal string FileUri => _location.FileUri;
+
+    private static string? TryCreateFileUri(string? filePath)
+    {
+        if (string.IsNullOrEmpty(filePath))
+            return null;
+        try
+        {
+            return new Uri(filePath).AbsoluteUri;
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+    }
+
+    private void OnFileActionOccurred(object? sender, TextDocumentFileActionEventArgs e)
+    {
+        if ((e.FileActionType & FileActionTypes.DocumentRenamed) != 0)
+            OnDocumentRenamed(e.FilePath);
+    }
+
+    /// <summary>
+    /// Re-keys the tagger to <paramref name="newFilePath"/>: moves its registry entry to the new
+    /// URI, drops every tag (their descriptors carry the old path), and re-fetches for the new URI.
+    /// A path that can't be turned into a URI leaves the tagger as it was.
+    /// </summary>
+    internal void OnDocumentRenamed(string? newFilePath)
+    {
+        if (newFilePath is null || TryCreateFileUri(newFilePath) is not { } newUri)
+            return;
+
+        FileLocation old;
+        IReadOnlyDictionary<int, LineCodeLensTag> dropped;
+        lock (_gate)
+        {
+            old = _location;
+            if (string.Equals(old.FilePath, newFilePath, StringComparison.Ordinal))
+                return;
+            _location = new FileLocation(newFilePath, newUri);
+            dropped = _tagsByLine;
+            _tagsByLine = EmptyTags;
+        }
+
+        _registry.UnregisterTagger(this, old.FileUri);
+        _registry.RegisterTagger(this, newUri);
+
+        foreach (var tag in dropped.Values)
+            tag.RaiseDisconnected();
+
+        var snapshot = _buffer.CurrentSnapshot;
+        TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(new SnapshotSpan(snapshot, 0, snapshot.Length)));
+
         RequestRefresh();
     }
 
@@ -160,48 +258,61 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
 
     private async Task RefreshAsync()
     {
+        var location = _location;
         try
         {
-            var entries = await _fetch(_fileUri, CancellationToken.None).ConfigureAwait(false);
+            var entries = await _fetch(location.FileUri, CancellationToken.None).ConfigureAwait(false);
             if (entries is null)
                 return;
 
             var snapshot = _buffer.CurrentSnapshot;
-            var previous = _tagsByLine;
-            var next = new Dictionary<int, LineCodeLensTag>();
-
-            foreach (var group in entries.GroupBy(_lineSelector))
+            var stale = new List<LineCodeLensTag>();
+            lock (_gate)
             {
-                var elementDescription = _elementDescriptionEncoder(group.Key, group);
+                // The document was renamed while this fetch ran: these entries belong to the old URI.
+                // The rename queued its own refresh, which the finally block below runs.
+                if (!ReferenceEquals(location, _location))
+                    return;
 
-                // Reuse the previous refresh's tag instance when this line's data hasn't actually
-                // changed, so an unrelated line's content changing doesn't churn every lens.
-                if (previous.TryGetValue(group.Key, out var existing)
-                    && existing.Descriptor.ElementDescription == elementDescription)
+                var previous = _tagsByLine;
+                var next = new Dictionary<int, LineCodeLensTag>();
+
+                foreach (var group in entries.GroupBy(_lineSelector))
                 {
-                    next[group.Key] = existing;
-                    continue;
+                    var elementDescription = _elementDescriptionEncoder(group.Key, group);
+
+                    // Reuse the previous refresh's tag instance when this line's data hasn't actually
+                    // changed, so an unrelated line's content changing doesn't churn every lens.
+                    if (previous.TryGetValue(group.Key, out var existing)
+                        && existing.Descriptor.ElementDescription == elementDescription)
+                    {
+                        next[group.Key] = existing;
+                        continue;
+                    }
+
+                    var line = group.Key >= 0 && group.Key < snapshot.LineCount
+                        ? snapshot.GetLineFromLineNumber(group.Key)
+                        : (ITextSnapshotLine?)null;
+                    var span = line is null
+                        ? new Span(0, 0)
+                        : new Span(line.Start, 0);
+
+                    var descriptor = new LineCodeLensDescriptor(location.FilePath, span, elementDescription);
+                    next[group.Key] = new LineCodeLensTag(descriptor);
                 }
 
-                var line = group.Key >= 0 && group.Key < snapshot.LineCount
-                    ? snapshot.GetLineFromLineNumber(group.Key)
-                    : (ITextSnapshotLine?)null;
-                var span = line is null
-                    ? new Span(0, 0)
-                    : new Span(line.Start, 0);
+                // Tags that are gone — the line has no entry any more, or its description changed and a
+                // new tag instance replaced it — get Disconnected so the host drops their data points
+                // instead of keeping a stale lens alongside the new one.
+                foreach (var kvp in previous)
+                    if (!next.TryGetValue(kvp.Key, out var replacement) || !ReferenceEquals(replacement, kvp.Value))
+                        stale.Add(kvp.Value);
 
-                var descriptor = new LineCodeLensDescriptor(_filePath, span, elementDescription);
-                next[group.Key] = new LineCodeLensTag(descriptor);
+                _tagsByLine = next;
             }
 
-            // Tags that are gone — the line has no entry any more, or its description changed and a
-            // new tag instance replaced it — get Disconnected so the host drops their data points
-            // instead of keeping a stale lens alongside the new one.
-            foreach (var kvp in previous)
-                if (!next.TryGetValue(kvp.Key, out var replacement) || !ReferenceEquals(replacement, kvp.Value))
-                    kvp.Value.RaiseDisconnected();
-
-            _tagsByLine = next;
+            foreach (var tag in stale)
+                tag.RaiseDisconnected();
 
             TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(new SnapshotSpan(snapshot, 0, snapshot.Length)));
         }
@@ -211,7 +322,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
             // empty) entry set in place until the next successful refresh. Info rather than Warning:
             // a Warning would bring the Output window to the front for a background lens refresh.
             (Logger ?? ExtensionHostLogger.Instance).Log(new LogMessage(TraceLevel.Info,
-                $"CodeLens refresh for {_fileUri} failed; keeping the previous lenses until the next refresh",
+                $"CodeLens refresh for {location.FileUri} failed; keeping the previous lenses until the next refresh",
                 nameof(RefreshAsync), ex, nameof(LineKeyedCodeLensTagger<TEntry>)));
         }
         finally
@@ -223,5 +334,17 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
             if (Interlocked.Exchange(ref _refreshPending, 0) == 1)
                 RequestRefresh();
         }
+    }
+
+    private sealed class FileLocation
+    {
+        public FileLocation(string filePath, string fileUri)
+        {
+            FilePath = filePath;
+            FileUri = fileUri;
+        }
+
+        public string FilePath { get; }
+        public string FileUri { get; }
     }
 }
