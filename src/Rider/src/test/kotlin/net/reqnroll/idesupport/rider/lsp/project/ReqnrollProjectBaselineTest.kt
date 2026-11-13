@@ -1,10 +1,13 @@
 package net.reqnroll.idesupport.rider.lsp.project
 
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.jetbrains.rider.model.RdTargetFrameworkId
 import com.jetbrains.rider.model.RdVersionInfo
 import java.io.File
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -60,5 +63,81 @@ class ReqnrollProjectBaselineTest {
         assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}Features${sep}bin${sep}A.feature", folder))
         assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}objects${sep}A.cs", folder))
         assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}Steps.cs", folder))
+    }
+
+    @Test
+    fun `isSkippedFolder matches node_modules and git folders case-insensitively`() {
+        assertTrue(ReqnrollProjectBaseline.isSkippedFolder("node_modules"))
+        assertTrue(ReqnrollProjectBaseline.isSkippedFolder("Node_Modules"))
+        assertTrue(ReqnrollProjectBaseline.isSkippedFolder(".git"))
+        assertFalse(ReqnrollProjectBaseline.isSkippedFolder("Features"))
+        assertFalse(ReqnrollProjectBaseline.isSkippedFolder("git"))
+        assertFalse(ReqnrollProjectBaseline.isSkippedFolder("node_modules_backup"))
+    }
+
+    @Test
+    fun `buildProjectFileEntries does not descend into node_modules or git folders at any depth`() {
+        val root = Files.createTempDirectory("reqnroll-993-").toFile()
+        try {
+            fun write(relative: String) = File(root, relative).apply { parentFile.mkdirs(); writeText("") }
+            val projectFile = write("App.csproj").path
+            val kept = listOf(write("Steps.cs"), write("Features${sep}A.feature"))
+            write("node_modules${sep}pkg${sep}Index.cs")
+            write(".git${sep}hooks${sep}Hook.cs")
+            write("Features${sep}node_modules${sep}B.feature")
+
+            val entries = ReqnrollProjectBaseline.buildProjectFileEntries(projectFile)!!
+
+            assertEquals(kept.map { it.path }.sorted(), entries.map { it.path }.sorted())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `sendEachIsolated keeps sending the remaining items after one throws`() {
+        val sent = mutableListOf<String>()
+
+        ReqnrollProjectBaseline.sendEachIsolated(
+            listOf("A", "B", "C"),
+            isCancelled = { false },
+            describe = { it },
+        ) { item ->
+            if (item == "B") throw java.io.UncheckedIOException(java.io.IOException("unreadable"))
+            sent += item
+        }
+
+        assertEquals(listOf("A", "C"), sent)
+    }
+
+    @Test
+    fun `sendEachIsolated stops once cancelled`() {
+        val sent = mutableListOf<String>()
+
+        ReqnrollProjectBaseline.sendEachIsolated(
+            listOf("A", "B", "C"),
+            isCancelled = { sent.size >= 1 },
+            describe = { it },
+        ) { sent += it }
+
+        assertEquals(listOf("A"), sent)
+    }
+
+    @Test
+    fun `sendEachIsolated rethrows platform cancellation instead of continuing`() {
+        val sent = mutableListOf<String>()
+
+        assertFailsWith<ProcessCanceledException> {
+            ReqnrollProjectBaseline.sendEachIsolated(
+                listOf("A", "B"),
+                isCancelled = { false },
+                describe = { it },
+            ) { item ->
+                if (item == "A") throw ProcessCanceledException()
+                sent += item
+            }
+        }
+
+        assertEquals(emptyList(), sent)
     }
 }
