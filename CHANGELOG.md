@@ -6,6 +6,7 @@
 * In Rider, the bookkeeping that decides when `projectLoaded`/`projectUnloaded` and the project-files baseline are sent is now safe to use from the UI thread and the language-server callback thread at once, so a project is no longer sent twice or skipped when the two race (Rider) - see #988
 * VS Code no longer raises an unhandled error in the extension host when a log file cannot be written after it was opened (disk full, permission denied, file locked): the failure is reported once, file logging stops, and the extension keeps running (VS Code) - see #1011
 * In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
+* In Visual Studio, the Run and hook-count CodeLens on a `.feature` file now follow the file when it is renamed or saved under a new name with Save As; previously they kept asking the language server about the old file name until the file was closed and reopened (VS) - see #1033
 
 # v2026.2 - 2026-10-25
 
