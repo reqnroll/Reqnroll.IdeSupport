@@ -46,8 +46,9 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
  * Makes Gherkin tags that match a configured `Traceability.TagLinks` pattern clickable: the server
- * answers `textDocument/documentLink`, but Rider's generic LSP client never requests it (the same class of gap as
- * folding, CodeLens and inlay hints), so this controller requests the links itself.
+ * answers `textDocument/documentLink`, which Rider's generic LSP client did not request before 2025.1, so this
+ * controller requests the links itself. Where the platform follows document links itself
+ * ([NativeLspDocumentLinks]), the click is left to it and this controller only draws the links and their hover hint.
  *
  * Each link is shown **permanently** as a link: a range highlighter in the hyperlink colour with an
  * underline, which follows edits until the next debounced refresh replaces it, so it is visible which tags are
@@ -258,8 +259,13 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
             val target = linkAt(editor, offset)?.target ?: return
             if (!TagLinkSupport.isOpenableUrl(target)) return
 
-            e.consume()
             RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.COMMAND_TAG_LINK, emptyMap())
+            if (NativeLspDocumentLinks.isFollowedByPlatform) {
+                // The platform's own document-link reference opens it; opening it here too opened it twice.
+                ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: tag link '$target' left to the platform")
+                return
+            }
+            e.consume()
             ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: opening tag link '$target'")
             BrowserUtil.browse(target)
         }
