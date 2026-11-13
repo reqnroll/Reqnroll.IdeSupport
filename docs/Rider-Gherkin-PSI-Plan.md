@@ -268,7 +268,7 @@ Sizes are rough estimates in working days and have not been validated.
 | **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release. If Phase 10 option A lands, this is for the frontend-only build only | Run works from the gutter; failed-step marks unaffected | 3 |
 | **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
 | **9** | **Cleanup and docs**: remove dead workarounds, update `client-rider.md` §7 and §8, feature pages, CHANGELOG | Doc comments no longer say "no PSI" | 1–2 |
-| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track). See [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests). Preferred: Rider's own test gutter marks on scenarios | Each scenario has Rider's native Run/Debug gutter mark with outcome icons. Runs show in the Unit Tests window. Debug stops on `.feature` breakpoints. The frontend-only build keeps `dotnet test` | 5–8 + spike |
+| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track). See [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests). Decided: option A, a daemon stage that adds Rider's own test highlighting (by reflection) on scenarios | Each scenario has Rider's native Run/Debug gutter mark with outcome icons. Runs show in the Unit Tests window. Debug stops on `.feature` breakpoints. The frontend-only build keeps `dotnet test` | 5–8 + spike |
 
 Phases 3 and 5–8 are independent of each other once Phase 2 is in, so they can be reviewed as
 separate PRs in any order. Phase 2 is the only large risk: it changes the language of every `.feature`
@@ -475,6 +475,8 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
 4. Keep the inline Run lens as a setting for one release (proposed: yes).
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.
-6. Phase 10: the spike supports option A in its daemon-stage form (Rider's own highlighting created by
-   reflection). The decision left is accepting a reflective dependency on one internal Rider class per release,
-   or falling back to option B (our lens drives Rider's runner).
+6. ~~Phase 10: option A or option B~~ — **decided 2026-11-13: option A** in its daemon-stage form. The
+   reflective dependency on Rider's internal `UnitTestElementHighlighting` is accepted. Each backend build
+   targets one Rider release, and the per-release smoke test must cover the gutter marks. If the type or its
+   constructor is missing, the stage logs it and adds no marks, so the inline Run lens must stay available in
+   that case.
