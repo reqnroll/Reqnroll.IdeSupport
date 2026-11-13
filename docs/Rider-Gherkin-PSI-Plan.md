@@ -354,6 +354,41 @@ launch:
 - That `DebugHostProvider` stops on `.feature` breakpoints set through the backend's breakpoint variants.
 - The cost of adding an RD model to the module's build and CI.
 
+**Spike result (2026-11-12, Rider 2026.2.3.1, MSTest sample; code on the local branch
+`spike/rider-feature-test-gutter`).** Option A works, with two changes to the shape above:
+
+1. **The backend never analysed `.feature` files at first.** With a frontend PSI language, Rider kept the
+   editor frontend-only, so `UnitTestDaemonStage` never ran on the file. Two `plugin.xml` lines fix it, the same
+   ones Razor uses:
+   - `<rd.languageAssociation backendLanguage="REQNROLL_FEATURE" frontendLanguage="Gherkin"/>`
+   - `<backend.markup.adapterFactory language="Gherkin" implementationClass="com.jetbrains.rdclient.daemon.FrontendMarkupAdapterFactory"/>`
+
+   After that, the stage ran with `ProvidesCodeModel=True` on the stub backend PSI. The live check showed no
+   visible change to highlighting or typing.
+2. **Reporting the real elements breaks them (the ownership risk was real).** The first Debug from the
+   `.feature` gutter worked. After that, the test disappeared from the Unit Tests window and the mark stopped
+   launching. Rider's `FakeUnitTestElement` avoids this: it is a gutter-only stand-in that "can appear in UI, like
+   in gutter menus", and its menu (`UnitTestBulbItemsCollector`) lists `GetRelatedUnitTestElements()`, each with
+   Run/Debug. Reporting one stand-in per scenario that points at the real element kept the tests correctly placed
+   in the Unit Tests window, and Run/Debug from the gutter worked.
+
+What the spike showed live:
+- Marks appear on the Feature line and on every Scenario line.
+- The `#line` mapping (the first `#line N` inside each element's range in `.feature.cs`) finds every scenario.
+- Run and Debug from the marks start Rider's session.
+- No elements were lost from the Unit Tests window with stand-ins.
+
+Not working, or not checked:
+- **No outcome icon.** `UnitTestElementHighlighting.AttributeId` always gives a stand-in the neutral container
+  style, so the mark never turns green or red. Getting the status would need our own gutter highlighting that
+  reads `IUnitTestResultManager` and launches through `IUnitTestingFacade`, since Rider's highlighting classes
+  are internal.
+- **Marks did not respond at first** after the solution opened, and worked later. The cause is not known; most
+  likely the clicks came before discovery of `.feature.cs` had finished.
+- The menu has one more level than in C# (the related test, then Run/Debug).
+- Not covered: outline rows, Rule containers, NUnit and xUnit (the explorer names one `Provider`, so one per
+  framework), whether Debug stops on a `.feature` breakpoint, and the inline Run lens standing down (both showed).
+
 ## 7. Rollback
 
 - Phases 2–8 each ship as one PR with a revert path. Phase 2's `ParserDefinition` registration is a
