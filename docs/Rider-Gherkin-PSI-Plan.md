@@ -378,16 +378,39 @@ What the spike showed live:
 - Run and Debug from the marks start Rider's session.
 - No elements were lost from the Unit Tests window with stand-ins.
 
-Not working, or not checked:
+Not working, or not checked, with stand-ins:
 - **No outcome icon.** `UnitTestElementHighlighting.AttributeId` always gives a stand-in the neutral container
-  style, so the mark never turns green or red. Getting the status would need our own gutter highlighting that
-  reads `IUnitTestResultManager` and launches through `IUnitTestingFacade`, since Rider's highlighting classes
-  are internal.
+  style, so the mark never turns green or red.
 - **Marks did not respond at first** after the solution opened, and worked later. The cause is not known; most
   likely the clicks came before discovery of `.feature.cs` had finished.
 - The menu has one more level than in C# (the related test, then Run/Debug).
-- Not covered: outline rows, Rule containers, NUnit and xUnit (the explorer names one `Provider`, so one per
-  framework), whether Debug stops on a `.feature` breakpoint, and the inline Run lens standing down (both showed).
+
+**Second iteration (2026-11-13): status-aware, and the recommended shape.** No discovery participation at all:
+a `[DaemonStage]` of our own runs on `.feature` files and adds Rider's own `UnitTestElementHighlighting` for the
+**real** element, with a `UnitTestElementDisposition` pointing at the scenario line in the `.feature` file.
+- The highlighting class is internal, so it is created by reflection. Its constructor
+  `(IUnitTestLikeElementDisposition, DocumentRange)` is public. The backend module is built for one Rider release,
+  so a per-release smoke test catches a change to it.
+- Because it is Rider's own highlighting:
+  - `AttributeId` reads the real element's result from `IUnitTestResultManager`, so the mark shows pass/fail.
+  - The gutter menu (`UnitTestElementGutterMarkBase` with `UnitTestBulbItemsCollector`) is the native C# one.
+  - `UnitTestingBetterGutterMarkIconsUpdater` tracks every highlighter implementing `IUnitTestElementHighlighting`
+    with a real disposition in any document, so the icon refreshes after a run without code of ours.
+- The stage isn't tied to one provider, so the same code should serve MSTest, NUnit and xUnit (only MSTest was
+  run).
+- **Verified live (Rider 2026.2.3.1, MSTest):**
+  - Marks appear on the Feature and Scenario lines.
+  - Debug and Run from them start Rider's sessions.
+  - The marks turn green/red with the result.
+  - The tests stay in the Unit Tests window across runs (no explorer or session-tree warnings in the backend log).
+- **Still not covered:**
+  - Outline rows (child elements are skipped) and Rule containers.
+  - NUnit and xUnit.
+  - Whether Debug stops on a `.feature` breakpoint.
+  - The inline Run lens standing down on backend builds (both show).
+  - A dialect-aware Feature line.
+  - Element lookup under the unit-testing read lock.
+  - Whether the early unresponsiveness recurs.
 
 ## 7. Rollback
 
@@ -452,6 +475,6 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
 4. Keep the inline Run lens as a setting for one release (proposed: yes).
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.
-6. Phase 10: option A (Rider's own gutter marks, preferred if the spike clears provider ownership) or
-   option B (our lens drives Rider's runner). For B, map Rider's results back to the lens glyph and the
-   failed-step mark, or leave outcomes to the Unit Tests window.
+6. Phase 10: the spike supports option A in its daemon-stage form (Rider's own highlighting created by
+   reflection). The decision left is accepting a reflective dependency on one internal Rider class per release,
+   or falling back to option B (our lens drives Rider's runner).
