@@ -164,9 +164,10 @@ Ranked by user impact, as agreed. Each row names the code that goes away.
 1. **Highlighting.** Platform brace matching and quote handling arrive with the language. Check that
    the semantic-token overlay does not flicker against the lexer colours when a file is first opened.
 2. **Run gutter.** The marker's actions call the existing `RunTestRunner`, so execution is unchanged.
-   The **Debug** entry has to start `dotnet test` with the VSTest host-debug handshake and attach the
-   .NET debugger. That is separate work ([Phase 10](#6-phases)): the PSI supplies the entry point but
-   not the launch. Keep the inline lens for one release so users who like it can switch back.
+   The **Debug** entry is [Phase 10](#6-phases): rather than starting `dotnet test` with the VSTest
+   host-debug handshake and attaching the debugger by hand, the backend module hands the scenario's
+   generated test to Rider's own unit-test runner, which gives Debug and the Unit Tests window together.
+   Keep the inline lens for one release so users who like it can switch back.
 3. **Breakpoints.** Gate 1 keys on `psiFile.language`, which becomes `Gherkin`. Do this as soon as
    Phase 2 lands rather than leaving the `TEXT` shim in place.
 4. **Navigation.** Go to Definition works today through the generic LSP client plus the 2026.2
@@ -241,7 +242,8 @@ flowchart LR
     P6 --> P9
     P7 --> P9
     P8 --> P9
-    P7 -.-> P10["10 Debug launch"]
+    P1 --> P10["10 Run/Debug through<br/>Rider Unit Tests (backend)"]
+    P7 -.-> P10
 ```
 
 ## 6. Phases
@@ -266,11 +268,50 @@ Sizes are rough estimates in working days and have not been validated.
 | **7** | **Run gutter**: `RunLineMarkerContributor`; keep the lens behind a setting for one release | Run works from the gutter; failed-step marks unaffected | 3 |
 | **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
 | **9** | **Cleanup and docs**: remove dead workarounds, update `client-rider.md` §7 and §8, feature pages, CHANGELOG | Doc comments no longer say "no PSI" | 1–2 |
-| **10** | **Debug launch** for scenarios (separate track) | F5-style Debug from the gutter attaches and hits `.feature` breakpoints | tbd |
+| **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track) — see [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests) | Run and Debug from the lens or gutter run the scenario's generated test in Rider's Unit Tests window; Debug stops on `.feature` breakpoints; the frontend-only build keeps `dotnet test` | 5–8 + spike |
 
 Phases 3 and 5–8 are independent of each other once Phase 2 is in, so they can be reviewed as
 separate PRs in any order. Phase 2 is the only large risk: it changes the language of every `.feature`
 editor.
+
+
+### Phase 10: Run and Debug through Rider's Unit Tests
+
+**Problem (reported 2026-11-12).** The Run lens calls `dotnet test` itself (`RunTestRunner`). A run never appears
+in Rider's Unit Tests window, and there is no way to start a Debug run from the lens.
+
+**Why it was out of reach, and why it no longer is.** Rider's .NET unit testing lives in the ReSharper backend,
+and the JVM frontend can only signal sessions the backend creates (pitfall 7 of
+`docs/Test-Runner-Integration-Design.md`). The plan was blocked on needing a C# backend plugin. This branch now
+has one (`src/Rider/dotnet`, built with `-PwithBackend=true`).
+
+**No test elements need to be created.** Rider already discovers the MSTest, NUnit and xUnit methods Reqnroll
+generates in `.feature.cs`, so they are in its element repository. The backend only has to find the existing
+elements for a scenario and launch them.
+
+**Shape, using API checked in the 2026.2.3.1 `JetBrains.ReSharper.UnitTestFramework.dll`:**
+1. **Frontend.** The lens or gutter `Run` / `Debug` actions resolve test targets as today
+   (`reqnroll/resolveTestTargets`: project plus fully qualified test names, rows for outlines). On a backend
+   build they send them to the backend instead of starting `dotnet test`.
+2. **Channel.** A small RD protocol model call, for example `runScenarioTests(projectPath, testNames, debug)`.
+   It is the module's first protocol model, which brings rd-gen into the build.
+3. **Backend.**
+   - Look the elements up in `IUnitTestElementRepository`, matched by project and fully qualified name.
+   - Run them with `IUnitTestingFacade.Run(elements).Using(hostProvider).In.CurrentOrNewSession()`, passing
+     `RunHostProvider` or `DebugHostProvider` (from `UnitTestingFacadeFluentExtensions`).
+   - Rider then builds, runs or debugs, and shows the session in the Unit Tests window.
+4. **Outcomes.** The lens glyph and the failed-step gutter mark read TRX files from our own run today. Under
+   Rider's runner they would come from `IUnitTestResultManager`, mapped back to the scenario and sent to the
+   frontend, or the lens could simply leave outcomes to the Unit Tests window. This is a decision, see §10.
+5. **Fallback.** The frontend-only build, and any target the backend cannot match (an element not yet
+   discovered, or a project Rider does not run), keep the existing `dotnet test` path.
+
+**Spike first, to settle:**
+- That the repository holds the generated elements under names that match `resolveTestTargets`.
+  This needs checking per framework, and for outline rows, where Rider names a row by a display string, not an
+  index (see that design's pitfall about rows).
+- That `DebugHostProvider` stops on `.feature` breakpoints set through the backend's breakpoint variants.
+- The cost of adding an RD model to the module's build and CI.
 
 ## 7. Rollback
 
@@ -311,6 +352,11 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
   supported Rider.
 - Whether `RunLineMarkerContributor` markers show the standard Debug entry for a non-C# language in
   Rider, rather than needing a custom action.
+- Phase 10:
+  - That Rider's unit-test element repository holds the generated scenario tests under names that
+    `reqnroll/resolveTestTargets` can match, including outline rows.
+  - That a `DebugHostProvider` launch stops on `.feature` breakpoints.
+  - The build and CI cost of the module's first RD protocol model.
 - Whether a `Commenter` reproduces the server's comment toggle for doc strings and tables.
 - That a class in package `io.cucumber.gherkin` inside our plugin jar can reach the package-private
   parser types in Rider's plugin classloader (the same runtime package), and that the IDE bundles no
@@ -329,3 +375,5 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 3a. Backend support window and an owner and response time for each new Rider release (see breakpoints plan §7.2).
 4. Keep the inline Run lens as a setting for one release (proposed: yes).
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.
+6. Phase 10 outcomes: map Rider's unit-test results back to the lens glyph and the failed-step gutter mark,
+   or leave outcomes to the Unit Tests window on backend builds.
