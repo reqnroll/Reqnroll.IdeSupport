@@ -1,9 +1,12 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { State } from 'vscode-languageclient';
+import { LanguageClient, StateChangeEvent } from 'vscode-languageclient/node';
 import {
   cleanupRunSettingsOnOptOut,
   generatedFileName,
   recordPriorSettingIfNeeded,
+  registerTestOutcomes,
   resolveGeneratedRunSettingsPath,
   RunSettingsConfigAccessor,
 } from '../../testOutcomes/testOutcomesService';
@@ -199,6 +202,147 @@ suite('testOutcomesService', () => {
       await cleanupRunSettingsOnOptOut(state, config);
 
       assert.strictEqual(config.get(), undefined);
+    });
+  });
+
+  /**
+   * A restarted server listens on a new endpoint and has never seen the old run id, so the
+   * registration must be redone on every server start, not once per activation; and the opt-out
+   * cleanup must not wait for the server to start at all.
+   */
+  suite('registerTestOutcomes', () => {
+    function fakeClient(initial: State): {
+      client: LanguageClient;
+      move: (to: State) => void;
+      dispose: () => void;
+    } {
+      let state = initial;
+      let listener: ((e: StateChangeEvent) => void) | undefined;
+      const client = {
+        get state() {
+          return state;
+        },
+        onDidChangeState: (l: (e: StateChangeEvent) => void) => {
+          listener = l;
+          return { dispose: () => (listener = undefined) };
+        },
+      } as unknown as LanguageClient;
+      return {
+        client,
+        move: (to: State) => {
+          const oldState = state;
+          state = to;
+          listener?.({ oldState, newState: to });
+        },
+        dispose: () => (listener = undefined),
+      };
+    }
+
+    const context = {} as Parameters<typeof registerTestOutcomes>[0];
+
+    /** Lets the promise chain inside registerTestOutcomes drain. */
+    const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+    test('registers on the first start and again on each restart', async () => {
+      const { client, move } = fakeClient(State.Stopped);
+      let calls = 0;
+      registerTestOutcomes(
+        context,
+        client,
+        () => Promise.resolve(void (calls += 1)),
+        () => true,
+      );
+
+      await settle();
+      assert.strictEqual(calls, 0, 'nothing to register with before the server is running');
+
+      move(State.Starting);
+      move(State.Running);
+      await settle();
+      assert.strictEqual(calls, 1);
+
+      move(State.Stopped);
+      move(State.Starting);
+      move(State.Running);
+      await settle();
+      assert.strictEqual(calls, 2, 'a restart must re-register with the new server');
+    });
+
+    test('registers at once when the client is already running', async () => {
+      const { client } = fakeClient(State.Running);
+      let calls = 0;
+      registerTestOutcomes(
+        context,
+        client,
+        () => Promise.resolve(void (calls += 1)),
+        () => true,
+      );
+
+      await settle();
+      assert.strictEqual(calls, 1);
+    });
+
+    test('runs the opt-out cleanup without waiting for the server to start', async () => {
+      const { client } = fakeClient(State.Stopped);
+      let calls = 0;
+      registerTestOutcomes(
+        context,
+        client,
+        () => Promise.resolve(void (calls += 1)),
+        () => false,
+      );
+
+      await settle();
+      assert.strictEqual(calls, 1);
+    });
+
+    test('a restart waits for an in-flight registration instead of overlapping it', async () => {
+      const { client, move } = fakeClient(State.Running);
+      let active = 0;
+      let maxActive = 0;
+      let release: () => void = () => undefined;
+      const firstDone = new Promise<void>((resolve) => (release = resolve));
+      let calls = 0;
+      registerTestOutcomes(
+        context,
+        client,
+        async () => {
+          calls += 1;
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          if (calls === 1) await firstDone;
+          active -= 1;
+        },
+        () => true,
+      );
+
+      move(State.Stopped);
+      move(State.Running);
+      await settle();
+      assert.strictEqual(calls, 1, 'the second run must wait for the first');
+
+      release();
+      await settle();
+      assert.strictEqual(calls, 2);
+      assert.strictEqual(maxActive, 1);
+    });
+
+    test('stops reacting to state changes once disposed', async () => {
+      const { client, move } = fakeClient(State.Running);
+      let calls = 0;
+      const disposable = registerTestOutcomes(
+        context,
+        client,
+        () => Promise.resolve(void (calls += 1)),
+        () => true,
+      );
+      await settle();
+      disposable.dispose();
+
+      move(State.Stopped);
+      move(State.Running);
+      await settle();
+      assert.strictEqual(calls, 1);
     });
   });
 });
