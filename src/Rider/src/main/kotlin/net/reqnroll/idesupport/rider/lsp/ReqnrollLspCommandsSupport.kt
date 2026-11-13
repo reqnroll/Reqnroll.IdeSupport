@@ -1,6 +1,7 @@
 package net.reqnroll.idesupport.rider.lsp
 
 import com.google.gson.JsonPrimitive
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServer
@@ -8,7 +9,9 @@ import com.intellij.platform.lsp.api.customization.LspCommandsSupport
 import net.reqnroll.idesupport.rider.actions.FindStepUsagesRunner
 import net.reqnroll.idesupport.rider.actions.GoToHooksRunner
 import net.reqnroll.idesupport.rider.actions.GoToMatchingScenariosRunner
+import net.reqnroll.idesupport.rider.actions.ReqnrollNotify
 import net.reqnroll.idesupport.rider.codevision.HookLensSupport
+import net.reqnroll.idesupport.rider.codevision.NativeLspCodeLens
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
 import org.eclipse.lsp4j.Command
@@ -27,6 +30,11 @@ import org.eclipse.lsp4j.Command
  *
  * `LspCommandsSupport.executeCommand(LspServer, VirtualFile, Command)` is the one overload present
  * on both the 2024.3 and 2026.2 platforms (2026.2's `LspClient` overload delegates to it).
+ *
+ * The platform caches the lenses and moves them with edits, but not their arguments, so a click can carry line
+ * numbers from before the last edit. Before running a positional command this asks the server for the file's
+ * current lenses and runs the one the clicked lens now corresponds to (see [StaleLensCommandResolver]); when the
+ * clicked lens was stale it also asks the platform to recompute its lenses.
  */
 class ReqnrollLspCommandsSupport : LspCommandsSupport() {
     override fun executeCommand(server: LspServer, contextFile: VirtualFile, command: Command) {
@@ -36,7 +44,43 @@ class ReqnrollLspCommandsSupport : LspCommandsSupport() {
             return
         }
         ReqnrollDebugLogger.info("ReqnrollLspCommandsSupport: lens command ${command.command} -> $action")
-        run(server.project, action)
+        val project = server.project
+        val uri = action.uri
+        if (uri == null) {
+            run(project, action)
+            return
+        }
+        // The fresh codeLens request is synchronous, so it must not run on the EDT the click arrives on.
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val current = currentAction(project, uri, command, action)
+            ApplicationManager.getApplication().invokeLater {
+                if (project.isDisposed) return@invokeLater
+                if (current != null) {
+                    run(project, current)
+                } else {
+                    ReqnrollNotify.info(project, "This lens was out of date and has been refreshed.", "Reqnroll")
+                }
+            }
+        }
+    }
+
+    /** The action to run for a click on [command]: itself, the fresh lens it now corresponds to, or null if it is gone. */
+    private fun currentAction(project: Project, uri: String, command: Command, action: LensCommand): LensCommand? {
+        val fresh = ReqnrollRequestSender.codeLens(project, uri) ?: return action // No answer: keep the click as it was.
+        return when (val resolution = StaleLensCommandResolver.resolve(command, fresh)) {
+            StaleLensCommandResolver.Resolution.Current -> action
+            is StaleLensCommandResolver.Resolution.Rebased -> {
+                val rebased = parseLensCommand(resolution.command)
+                ReqnrollDebugLogger.info("ReqnrollLspCommandsSupport: stale lens command $action rebased to $rebased")
+                NativeLspCodeLens.requestRefresh(project)
+                rebased
+            }
+            StaleLensCommandResolver.Resolution.Gone -> {
+                ReqnrollDebugLogger.info("ReqnrollLspCommandsSupport: stale lens command $action has no current lens")
+                NativeLspCodeLens.requestRefresh(project)
+                null
+            }
+        }
     }
 
     private fun run(project: Project, action: LensCommand) {
@@ -76,8 +120,13 @@ class ReqnrollLspCommandsSupport : LspCommandsSupport() {
 
 /** A server CodeLens command the client executes itself. */
 internal sealed interface LensCommand {
-    data class FindStepUsages(val uri: String, val line: Int, val character: Int) : LensCommand
-    data object NoStepUsages : LensCommand
-    data class GoToMatchingScenarios(val uri: String, val line: Int, val character: Int) : LensCommand
-    data class GoToHooks(val uri: String, val line: Int, val character: Int, val ownLevelOnly: Boolean) : LensCommand
+    /** The document the command navigates from, or null for a command without a position. */
+    val uri: String?
+
+    data class FindStepUsages(override val uri: String, val line: Int, val character: Int) : LensCommand
+    data object NoStepUsages : LensCommand {
+        override val uri: String? = null
+    }
+    data class GoToMatchingScenarios(override val uri: String, val line: Int, val character: Int) : LensCommand
+    data class GoToHooks(override val uri: String, val line: Int, val character: Int, val ownLevelOnly: Boolean) : LensCommand
 }

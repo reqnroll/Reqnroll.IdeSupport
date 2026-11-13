@@ -16,7 +16,7 @@ scenario (or Scenario Outline example row) correspond to?* This document covers:
 
 LSP has no run/debug/test-result vocabulary, so only the mapping layer is an LSP feature; everything else is IDE glue.
 
-Out of scope: breakpoints in `.feature` files (a separate, unbuilt feature); a native Test Explorer tree
+Out of scope: breakpoints in `.feature` files (a separate feature; see the limitations in §12); a native Test Explorer tree
 entry for scenarios in VS Code or Rider (see pitfalls 6 and 7).
 
 | IDE | Run | Debug | Pass/fail on the line |
@@ -410,9 +410,13 @@ has from its Gherkin parse.
   on the expectation that Test Explorer runs every element. It has been exercised for containers; if it ever
   honoured only the first element, the fallback is one command per method.
 - Rider has no Debug action and no native tool-window presence.
-- Breakpoints in `.feature` files are not supported. The generated `#line` pragmas mean the test assembly's PDB
-  already carries `.feature`-relative sequence points, so this may be a narrow "register `.feature` as a
-  breakpoint source" problem per IDE rather than a from-scratch debug adapter.
+- Breakpoints in `.feature` files need no debug adapter of our own. The generated `#line` pragmas put each
+  `.feature` file in the test assembly's PDB under its absolute path, with a SHA-256 checksum of the file,
+  so the IDE's own .NET debugger binds a breakpoint on a step line directly. Visual Studio does this with no
+  extension code. VS Code shows the breakpoint gutter only for languages contributed under
+  `contributes.breakpoints`; the extension contributes `reqnroll` unconditionally,
+  and VS Code sends the breakpoints to every debug session, including the C# extension's `coreclr`
+  session. Rider does not allow breakpoints in `.feature` files yet.
 
 ## 13. Testing
 

@@ -403,4 +403,179 @@ public class LineKeyedCodeLensTaggerTests
 
         sut.Should().NotBeAssignableTo<IDisposable>();
     }
+
+    // ── Rename / Save As ─────────────────────────────────────────────────────────
+
+    private const string OldPath = @"C:\old.feature";
+    private const string NewPath = @"C:\new.feature";
+    private static readonly string OldUri = new Uri(OldPath).AbsoluteUri;
+    private static readonly string NewUri = new Uri(NewPath).AbsoluteUri;
+
+    private static (ITextBuffer Buffer, ITextDocument Document) CreateBufferWithDocument(ITextSnapshot snapshot, string? filePath)
+    {
+        var buffer = CreateBuffer(snapshot);
+        buffer.Properties.Returns(new PropertyCollection());
+        var document = Substitute.For<ITextDocument>();
+        document.FilePath.Returns(filePath);
+        buffer.Properties.AddProperty(typeof(ITextDocument), document);
+        return (buffer, document);
+    }
+
+    private static LineKeyedCodeLensTagger<TestEntry>? GetOrCreateForBuffer(
+        ITextBuffer buffer,
+        Func<string, CancellationToken, Task<IReadOnlyList<TestEntry>?>> fetch,
+        WeakTaggerRegistry<LineKeyedCodeLensTagger<TestEntry>>? registry = null) =>
+        LineKeyedCodeLensTagger<TestEntry>.GetOrCreateForBuffer(buffer, fetch, e => e.Line, Encode, registry ?? CreateRegistry());
+
+    private static void RaiseFileAction(ITextDocument document, string filePath, FileActionTypes action) =>
+        document.FileActionOccurred += NSubstitute.Raise.EventWith(document,
+            new TextDocumentFileActionEventArgs(filePath, DateTime.UtcNow, action));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void GetOrCreateForBuffer_returns_null_without_throwing_when_the_document_has_no_path(string? filePath)
+    {
+        var (buffer, _) = CreateBufferWithDocument(CreateSnapshot(lineCount: 5), filePath);
+
+        var create = () => GetOrCreateForBuffer(buffer, (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(null));
+
+        create.Should().NotThrow().Subject.Should().BeNull();
+    }
+
+    [Fact]
+    public void GetOrCreateForBuffer_returns_the_same_instance_for_every_consumer_of_the_buffer()
+    {
+        var (buffer, _) = CreateBufferWithDocument(CreateSnapshot(lineCount: 5), OldPath);
+        Func<string, CancellationToken, Task<IReadOnlyList<TestEntry>?>> fetch =
+            (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(Array.Empty<TestEntry>());
+
+        GetOrCreateForBuffer(buffer, fetch).Should().BeSameAs(GetOrCreateForBuffer(buffer, fetch));
+    }
+
+    [Fact]
+    public void A_rename_moves_fetching_and_registration_to_the_new_uri()
+    {
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var (buffer, document) = CreateBufferWithDocument(snapshot, OldPath);
+        var registry = CreateRegistry();
+        var fetchedUris = new List<string>();
+        var sut = GetOrCreateForBuffer(buffer, (uri, _) =>
+        {
+            fetchedUris.Add(uri);
+            return Task.FromResult<IReadOnlyList<TestEntry>?>(Array.Empty<TestEntry>());
+        }, registry)!;
+        fetchedUris.Should().Equal(OldUri);
+
+        RaiseFileAction(document, NewPath, FileActionTypes.DocumentRenamed);
+
+        sut.FileUri.Should().Be(NewUri);
+        fetchedUris.Should().Equal(OldUri, NewUri);
+        registry.HeldReferenceCount(OldUri).Should().Be(0);
+
+        registry.InvalidateFile(OldUri);
+        fetchedUris.Should().HaveCount(2, "the old URI no longer reaches the tagger");
+        registry.InvalidateFile(NewUri);
+        fetchedUris.Should().Equal(OldUri, NewUri, NewUri);
+
+        GC.KeepAlive(sut);
+    }
+
+    [Fact]
+    public void A_rename_replaces_every_tag_with_one_carrying_the_new_path()
+    {
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var (buffer, document) = CreateBufferWithDocument(snapshot, OldPath);
+        IReadOnlyList<TestEntry> entries = new[] { new TestEntry(1, "a") };
+        var sut = GetOrCreateForBuffer(buffer, (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(entries))!;
+        var oldTag = sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle().Subject.Tag;
+        oldTag.Descriptor.FilePath.Should().Be(OldPath);
+        var disconnected = false;
+        oldTag.Disconnected += (_, _) => disconnected = true;
+
+        RaiseFileAction(document, NewPath, FileActionTypes.DocumentRenamed);
+
+        disconnected.Should().BeTrue("the old tag's descriptor still names the old path");
+        var newTag = sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle().Subject.Tag;
+        newTag.Should().NotBeSameAs(oldTag, "an unchanged ElementDescription must not resurrect the old-path tag");
+        newTag.Descriptor.FilePath.Should().Be(NewPath);
+    }
+
+    [Fact]
+    public void A_rename_is_logged_at_Verbose_with_the_old_and_new_uri()
+    {
+        var (buffer, document) = CreateBufferWithDocument(CreateSnapshot(lineCount: 5), OldPath);
+        var sut = GetOrCreateForBuffer(buffer, (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(new[] { new TestEntry(1, "a") }))!;
+        var logged = new List<LogMessage>();
+        var logger = Substitute.For<IIdeSupportLogger>();
+        logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(ci => logged.Add(ci.Arg<LogMessage>()));
+        sut.Logger = logger;
+
+        RaiseFileAction(document, NewPath, FileActionTypes.DocumentRenamed);
+
+        var message = logged.Should().ContainSingle().Subject;
+        message.Level.Should().Be(TraceLevel.Verbose);
+        message.Message.Should().Contain(OldUri).And.Contain(NewUri).And.Contain("1 tag(s)");
+    }
+
+    [Fact]
+    public void A_plain_save_does_not_rekey_the_tagger()
+    {
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var (buffer, document) = CreateBufferWithDocument(snapshot, OldPath);
+        var fetchCount = 0;
+        var sut = GetOrCreateForBuffer(buffer, (_, _) =>
+        {
+            fetchCount++;
+            return Task.FromResult<IReadOnlyList<TestEntry>?>(new[] { new TestEntry(1, "a") });
+        })!;
+        var tag = sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle().Subject.Tag;
+
+        RaiseFileAction(document, OldPath, FileActionTypes.ContentSavedToDisk);
+
+        sut.FileUri.Should().Be(OldUri);
+        fetchCount.Should().Be(1);
+        sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle().Which.Tag.Should().BeSameAs(tag);
+    }
+
+    [Fact]
+    public void A_rename_to_a_path_that_is_not_a_valid_uri_leaves_the_tagger_as_it_was()
+    {
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var (buffer, _) = CreateBufferWithDocument(snapshot, OldPath);
+        var sut = GetOrCreateForBuffer(buffer, (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(new[] { new TestEntry(1, "a") }))!;
+
+        var rename = () => sut.OnDocumentRenamed("relative.feature");
+
+        rename.Should().NotThrow();
+        sut.FileUri.Should().Be(OldUri);
+        sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public Task A_refresh_in_flight_across_a_rename_does_not_publish_tags_for_the_old_path() =>
+        // Pool thread, so completing `gate` runs the pending refresh's continuation inline (see
+        // RequestRefresh_is_not_lost_when_the_in_flight_refresh_finishes_between_its_in_flight_check_and_its_return).
+        Task.Run(() =>
+    {
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var (buffer, document) = CreateBufferWithDocument(snapshot, OldPath);
+        var gate = new TaskCompletionSource<IReadOnlyList<TestEntry>?>();
+        var fetchedUris = new List<string>();
+        var sut = GetOrCreateForBuffer(buffer, (uri, _) =>
+        {
+            fetchedUris.Add(uri);
+            return fetchedUris.Count == 1
+                ? gate.Task
+                : Task.FromResult<IReadOnlyList<TestEntry>?>(new[] { new TestEntry(2, "new") });
+        })!;
+
+        RaiseFileAction(document, NewPath, FileActionTypes.DocumentRenamed); // the initial old-URI fetch is still pending
+        gate.SetResult(new[] { new TestEntry(1, "old") });
+
+        fetchedUris.Should().Equal(OldUri, NewUri);
+        var tag = sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle().Subject;
+        tag.Span.Start.Position.Should().Be(20, "only the new URI's entry (line 2) is shown");
+        tag.Tag.Descriptor.FilePath.Should().Be(NewPath);
+    });
 }

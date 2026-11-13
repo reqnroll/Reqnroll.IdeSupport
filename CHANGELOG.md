@@ -1,11 +1,16 @@
 # [vNext]
 
 ## Improvements:
+* VS Code now allows breakpoints on steps in `.feature` files. When a test is debugged with the C# debugger (for example C# Dev Kit's Debug Test), it stops at the step, and Step Into goes to the step definition, through the line mapping Reqnroll already generates. Breakpoints on `Examples:` rows are never hit, and the test project must be rebuilt after a `.feature` file changes so the line numbers match (VS Code) - see #453
 * VS Code now reports `Command.GoToStepDefinition` (with `LocationCount`) when the user navigates from a step in a `.feature` file with F12 or Ctrl+click, as Visual Studio and Rider do. Previously only the explicit Go to Step Definition command was reported. A navigation is counted only once the editor arrives at one of the returned locations, so hovering with Ctrl held is not counted, and Peek Definition is not counted either (VS Code) - see #1266
 ## Bug fixes:
+* In Rider 2026.2, hook lenses now appear on the first `.feature` file opened instead of only after typing, and clicking a lens after adding or removing lines above it navigates from the right place (a step-hooks lens no longer shows the scenario's hooks). Rider's own lens cache ignored the server's refresh requests; the plugin now makes it re-request, and checks each click against the current lenses (Rider) - see #1334
 * In Rider, the bookkeeping that decides when `projectLoaded`/`projectUnloaded` and the project-files baseline are sent is now safe to use from the UI thread and the language-server callback thread at once, so a project is no longer sent twice or skipped when the two race (Rider) - see #988
 * VS Code no longer raises an unhandled error in the extension host when a log file cannot be written after it was opened (disk full, permission denied, file locked): the failure is reported once, file logging stops, and the extension keeps running (VS Code) - see #1011
+* In VS Code, the opt-in test-outcome pipeline (`reqnroll.testOutcomes.enabled`) now registers with the language server again each time the server restarts, so test runs keep reporting outcomes after a server crash instead of sending them to the old server's endpoint; turning the option off now also restores `dotnet.unitTests.runSettingsPath` when the server fails to start (VS Code) - see #1012
 * In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
+* In Visual Studio, the Run and hook-count CodeLens on a `.feature` file now follow the file when it is renamed or saved under a new name with Save As; previously they kept asking the language server about the old file name until the file was closed and reopened (VS) - see #1033
+* A project whose `.csproj` sets `AppConfig` to a file that does not exist no longer logs a configuration warning on every reload; the setting is ignored until the file exists (LSP server) - see #972
 
 # v2026.2 - 2026-10-25
 

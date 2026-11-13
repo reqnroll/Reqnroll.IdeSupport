@@ -21,7 +21,9 @@ public class ProjectScopeIdeSupportConfigurationProviderTests
     private void AddFile(string name, string content) =>
         _fileSystem.AddFile(Path.Combine(ProjectFolder, name), new MockFileData(content));
 
-    private IdeSupportConfiguration Load()
+    private IdeSupportConfiguration Load() => CreateProvider().GetConfiguration();
+
+    private ProjectScopeIdeSupportConfigurationProvider CreateProvider()
     {
         var ideScope = Substitute.For<IIdeScope>();
         ideScope.FileSystem.Returns(_fileSystem);
@@ -30,7 +32,40 @@ public class ProjectScopeIdeSupportConfigurationProviderTests
         projectScope.IdeScope.Returns(ideScope);
         projectScope.ProjectFolder.Returns(ProjectFolder);
         projectScope.ProjectFullName.Returns(Path.Combine(ProjectFolder, "proj.csproj"));
-        return new ProjectScopeIdeSupportConfigurationProvider(projectScope).GetConfiguration();
+        return new ProjectScopeIdeSupportConfigurationProvider(projectScope);
+    }
+
+    private void AddProjectWithAppConfig(string appConfigPath) =>
+        AddFile("proj.csproj", $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <AppConfig>{appConfigPath}</AppConfig>
+              </PropertyGroup>
+            </Project>
+            """);
+
+    [Fact]
+    public void A_csproj_AppConfig_pointing_to_a_missing_file_is_not_registered_as_a_source()
+    {
+        AddProjectWithAppConfig(@"Settings\App.config");
+
+        var provider = CreateProvider();
+
+        provider.ToString().Should().NotContain("App.config");
+        provider.GetConfiguration().ConfigurationChangeTime.Should().Be(DateTimeOffset.MinValue);
+        _logger.DidNotReceive().Log(Arg.Is<LogMessage>(m => m.Level == TraceLevel.Warning));
+    }
+
+    [Fact]
+    public void A_csproj_AppConfig_pointing_to_an_existing_file_is_registered_as_a_source()
+    {
+        AddProjectWithAppConfig(@"Settings\App.config");
+        AddFile(@"Settings\App.config", "<configuration />");
+
+        var provider = CreateProvider();
+
+        provider.ToString().Should().Contain(Path.Combine(ProjectFolder, @"Settings\App.config"));
+        _logger.DidNotReceive().Log(Arg.Is<LogMessage>(m => m.Level == TraceLevel.Warning));
     }
 
     [Fact]

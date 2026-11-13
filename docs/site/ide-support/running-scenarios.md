@@ -89,6 +89,24 @@ pass/fail tracking. It was removed after live use showed it added nothing C# Dev
 discovery and Test Explorer integration didn't already cover, and having two separate run
 mechanisms was more confusing than helpful.
 
+### Breakpoints in `.feature` files
+
+You can set a breakpoint on a step in a `.feature` file (click in the gutter, or press F9) and
+debug the scenario with C# Dev Kit's **Debug Test**. The debugger stops at that step, and
+**Step Into** (F11) takes you to the step definition. This works because Reqnroll's generated test
+code maps each step back to its line in the `.feature` file, so the C# debugger treats the
+`.feature` file as source.
+
+- A breakpoint on a `Background:` step stops once for every scenario in the feature. A breakpoint on
+  a `Scenario Outline:` step stops once for every `Examples:` row.
+- Breakpoints on `Examples:` rows are never hit: a row is test data, not a step that runs.
+- **Rebuild after editing the `.feature` file.** Until you rebuild, the debugger uses the line
+  numbers from the last build, so an edit that moves steps up or down makes it stop at the wrong
+  line.
+- **Step Into** needs the C# extension's **Just My Code** option, which is on by default
+  (`csharp.debug.justMyCode`). With it off, F11 does not reach the step definition; set a breakpoint
+  in the step definition instead.
+
 ### Optional: read-only pass/fail CodeLens
 
 Independently of the above, this extension can show a **read-only** `✓`/`✗` CodeLens above each

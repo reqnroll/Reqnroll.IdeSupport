@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import net.reqnroll.idesupport.rider.codevision.HookCodeVisionProvider
+import net.reqnroll.idesupport.rider.codevision.NativeLspCodeLens
 import net.reqnroll.idesupport.rider.codevision.StepUsagesCodeVisionProvider
 import net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider
 import net.reqnroll.idesupport.rider.testrunner.RunTestTargetCache
@@ -55,6 +56,8 @@ class ReqnrollCodeLensRefreshInterceptor(
             },
             ModalityState.any(),
         )
+        // Rider 2026.2's own handling of the refresh leaves its lens cache untouched; see NativeLensRefreshService.
+        NativeLspCodeLens.requestRefresh(project)
         return handler.refreshCodeLenses()
     }
 }

@@ -68,7 +68,7 @@ import {
 } from './clientExceptionTelemetry';
 import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_ARGUMENT } from './clientSession';
 import { TableHighlightService } from './tableHighlightService';
-import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
+import { registerTestOutcomes } from './testOutcomes/testOutcomesService';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
 import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
 import { showWalkthroughOnFirstActivation } from './walkthrough';
@@ -215,7 +215,7 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // Project-local MTP reporter stubs: obj/<Project>.csproj.reqnroll-ide.targets for each
   // MTP-capable Reqnroll project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
   // compiles the reporter in. Runs early, before any test run could plausibly start, and independent
-  // of the LSP client, unlike `activateTestOutcomes` below. Not awaited: its workspace walk and its
+  // of the LSP client, unlike `registerTestOutcomes` below. Not awaited: its workspace walk and its
   // MTP-capability scan (which can shell out to `dotnet msbuild`) must not hold up command
   // registration or the client start.
   void activateMtpProjectStubs(context).catch((err) =>
@@ -511,6 +511,14 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // depend on the LSP client, so it starts decorating already-open editors immediately.
   context.subscriptions.push(new TableHighlightService());
 
+  // LSP-server outcome pipeline, opt-in via reqnroll.testOutcomes.enabled — registers with the
+  // server and merges the bundled VSTest logger into whatever dotnet.unitTests.runSettingsPath
+  // already resolves to, so C# Dev Kit's own test runs report per-row/Scenario-Outline outcomes to
+  // the server. Subscribed before start() so it re-registers on every server (re)start and its
+  // opt-out cleanup does not wait for a successful start. Never blocks activation, and every
+  // failure degrades silently (see the module's own doc comment).
+  context.subscriptions.push(registerTestOutcomes(context, client));
+
   client
     .start()
     .then(
@@ -533,12 +541,6 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
         context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
         // Forward server-emitted telemetry/event notifications to Application Insights.
         registerTelemetry(client!, context);
-        // LSP-server outcome pipeline, opt-in via reqnroll.testOutcomes.enabled —
-        // registers this session with the server and merges the bundled VSTest logger into
-        // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
-        // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
-        // blocks activation, and every failure degrades silently (see the module's own doc comment).
-        void activateTestOutcomes(context, client!);
         // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
         // doc comment for why it carries no real Run/Debug action.
         registerTestOutcomeCodeLens(client!, projectManager, context);
