@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { State } from 'vscode-languageclient';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { resolveApplicationDirectory } from '../logging/logPaths';
@@ -34,9 +35,11 @@ import { resolveTestLoggerDirectory } from './testLoggerPath';
  * refresh the runsettings file's content just beforehand — `vscode.tests` exports no such signal,
  * and C# Dev Kit's own run lifecycle isn't observable from outside it (same "no cross-controller"
  * finding recorded in docs/Test-Runner-Integration-Design.md). Registration happens
- * once per extension activation instead (effectively: once per VS Code window session, refreshed on
- * reload/restart) and is merged into a Reqnroll-managed runsettings file that
- * `dotnet.unitTests.runSettingsPath` then points at for the rest of that session. This works safely
+ * once per server start instead (the first start at activation, then again each time the language
+ * client restarts the server — see {@link registerTestOutcomes}) and is merged into a
+ * Reqnroll-managed runsettings file that `dotnet.unitTests.runSettingsPath` then points at until the
+ * next server start. A restarted server listens on a new endpoint and knows nothing of the old
+ * run id, so a registration made with the previous server is useless to it. This works safely
  * because the server's endpoint doesn't expire and carries no per-connection secret to go stale —
  * see `TestOutcomeTcpListener`'s remarks on the server side for why a per-run token was tried and
  * removed (it broke exactly this one-registration-many-connections shape).
@@ -111,6 +114,49 @@ function defaultRunSettingsConfigAccessor(): RunSettingsConfigAccessor {
   };
 }
 
+/**
+ * Wires the outcome pipeline to the language client's lifecycle. Call before `client.start()`.
+ *
+ * - When the feature is disabled at activation, runs `activate` at once, so the opt-out cleanup
+ *   does not depend on the server ever starting.
+ * - Runs `activate` on every transition to `Running` — the first start and each restart the
+ *   language client performs on the same `LanguageClient` — so the runsettings file always carries
+ *   the endpoint and run id of the server that is actually running.
+ *
+ * Runs are chained, so a restart that lands while the previous registration is still writing the
+ * runsettings file waits for it rather than racing it. `activate` re-reads the opt-in setting
+ * each time, so a restart after the user turns the feature off performs the cleanup. A
+ * transition fires before `initialized` has been sent; `client.sendRequest` waits for the start to
+ * finish, so the registration request reaches the new server after its `initialized`.
+ * `activate` is injectable for testing.
+ */
+export function registerTestOutcomes(
+  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'workspaceState'>,
+  client: LanguageClient,
+  activate: typeof activateTestOutcomes = activateTestOutcomes,
+  isEnabled: () => boolean = isTestOutcomesEnabled,
+): vscode.Disposable {
+  let queue: Promise<void> = Promise.resolve();
+  const run = (): void => {
+    // activate never throws; the catch only keeps one unexpected rejection from wedging the chain.
+    queue = queue
+      .then(() => activate(context, client))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logWarn(`testOutcomes: registration failed unexpectedly — ${msg}`);
+      });
+  };
+
+  if (client.state === State.Running || !isEnabled()) run();
+  return client.onDidChangeState((event) => {
+    if (event.newState === State.Running) run();
+  });
+}
+
+function isTestOutcomesEnabled(): boolean {
+  return vscode.workspace.getConfiguration('reqnroll').get<boolean>('testOutcomes.enabled', false);
+}
+
 interface RegisterTestRunResponse {
   success: boolean;
   runId?: string;
@@ -134,10 +180,7 @@ export async function activateTestOutcomes(
   context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'workspaceState'>,
   client: LanguageClient,
 ): Promise<void> {
-  const enabled = vscode.workspace
-    .getConfiguration('reqnroll')
-    .get<boolean>('testOutcomes.enabled', false);
-  if (!enabled) {
+  if (!isTestOutcomesEnabled()) {
     try {
       await cleanupRunSettingsOnOptOut(context.workspaceState);
     } catch (err: unknown) {
