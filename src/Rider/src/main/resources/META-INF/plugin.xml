@@ -1,4 +1,4 @@
-<idea-plugin url="https://reqnroll.net">
+<idea-plugin url="https://reqnroll.net" xmlns:xi="http://www.w3.org/2001/XInclude">
   <id>net.reqnroll.idesupport</id>
   <name>Reqnroll Extension (Preview)</name>
   <vendor url="https://github.com/reqnroll/Reqnroll.IdeSupport">Reqnroll</vendor>
@@ -124,10 +124,15 @@ for what is available in each IDE.</p>
     <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.codevision.StepHooksCodeVisionProvider" />
 
     <!-- "▶ Run" lens on each Scenario/Scenario Outline line (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — same
-         PSI-free CodeVisionProvider mechanism as the hook-match lenses above; see
-         RunTestCodeVisionProvider's doc comment for why RunLineMarkerContributor (the design doc's
-         original recommendation, a PSI-based gutter-icon API) isn't viable for this plugin. -->
+         PSI-free CodeVisionProvider mechanism as the hook-match lenses above. With the backend module,
+         Rider's own test gutter marks take over Feature and Scenario lines (see RunTestCodeVisionProvider). -->
     <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider" />
+    <!-- Where the backend module adds Rider's own test gutter marks, the Run lens keeps only Rule lines; this key
+         brings it back on every line (see BackendTestGutterMarks). -->
+    <registryKey
+        key="reqnroll.feature.showRunLensWithGutterMarks"
+        defaultValue="false"
+        description="Reqnroll: show the inline Run lens on Feature and Scenario lines even when Rider's test gutter marks are there" />
 
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see
@@ -291,4 +296,9 @@ for what is available in each IDE.</p>
       <separator />
     </group>
   </actions>
+  <!-- Rider test gutter marks on .feature scenarios. Only builds that bundle the backend module (-PwithBackend=true)
+       package this file; elsewhere the fallback leaves the editor frontend-only, as before. -->
+  <xi:include href="/META-INF/reqnroll-backend.xml" xpointer="xpointer(/idea-plugin/*)">
+    <xi:fallback />
+  </xi:include>
 </idea-plugin>

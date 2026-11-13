@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\Debugger\BreakpointLineFilter.cs" Link="BreakpointLineFilter.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\GeneratedTestLines.cs" Link="GeneratedTestLines.cs" />
   </ItemGroup>
 </Project>

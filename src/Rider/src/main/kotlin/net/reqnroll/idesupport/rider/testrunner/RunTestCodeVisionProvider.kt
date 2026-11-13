@@ -15,20 +15,14 @@ import net.reqnroll.idesupport.rider.codevision.EditorLensRefresh
  * "▶ Run" CodeVision lens on each Scenario/Scenario Outline line in `.feature` files (design doc
  * §5/§6) — the Rider counterpart to VS Code's Run CodeLens / VS's classic Run CodeLens.
  *
- * The design doc's original Rider recommendation was `RunLineMarkerContributor` (a true left-gutter
- * icon). That API is inherently PSI-based (`getInfo(PsiElement)`, invoked as the platform walks a
- * file's PSI tree) and this plugin registers `.feature` with no `ParserDefinition` at all — see
- * [net.reqnroll.idesupport.rider.ReqnrollFeatureLanguage]'s own doc comment — so it has no PSI tree to
- * walk. `CodeVisionProvider` is used instead: it's PSI-free (operates on `Editor`/`Document`
- * offsets, same as every other `.feature` editor feature in this plugin), and it's the exact
- * mechanism already proven out for the closely analogous hook-match-count lens
- * ([net.reqnroll.idesupport.rider.codevision.HookCodeVisionProvider]), which this class mirrors directly.
+ * It is a PSI-free `CodeVisionProvider` (operating on `Editor`/`Document` offsets), the same
+ * mechanism as the hook-match-count lens
+ * ([net.reqnroll.idesupport.rider.codevision.HookCodeVisionProvider]), which this class mirrors.
  *
  * Clicking the lens shells to `dotnet test --filter` itself (via [RunTestRunner]) rather than
- * integrating with Rider's native Test Runner (`SMTestProxy`) — this plugin has no
- * `com.intellij.execution`/`RunConfiguration` infrastructure at all yet, and native integration was
- * already flagged as needing a live devcontainer session to verify; own execution mirrors VS Code's
- * already-shipped "Option 2" for this same issue.
+ * going through Rider's Unit Tests window. Where the bundled backend module is installed, Rider's own
+ * test gutter marks run and debug the Feature and its scenarios through that window instead, so this
+ * lens keeps only Rule lines there ([BackendTestGutterMarks]).
  */
 class RunTestCodeVisionProvider : CodeVisionProvider<Unit> {
     companion object {
@@ -55,6 +49,8 @@ class RunTestCodeVisionProvider : CodeVisionProvider<Unit> {
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return emptyList()
         if (!file.extension.equals("feature", ignoreCase = true)) return emptyList()
 
-        return RunLensSupport.computeEntries(project, editor.document, file.path, id)
+        return RunLensSupport.computeEntries(
+            project, editor.document, file.path, id, rulesOnly = BackendTestGutterMarks.hideScenarioRunLens,
+        )
     }
 }

@@ -128,7 +128,13 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    folder scanning.
 6. **Shared projects need explicit handling.** Rider's baseline is a project-folder walk, so it reads imported
    `.projitems` directly and sends no delta for a file added to a shared project.
-7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc.
+7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc. Builds with the
+   backend module get it from the backend instead: `FeatureTestGutterStage` adds Rider's own test gutter marks
+   (an internal highlighting type, created by reflection) for the tests discovered in `.feature.cs`, mapped to
+   lines through `#line` directives and outline pickle indexes (`GeneratedTestLines`). The backend daemon only
+   runs on `.feature` because `META-INF/reqnroll-backend.xml`, packaged in backend builds only, associates the
+   `Gherkin` frontend language with the backend's `REQNROLL_FEATURE`. The Run lens then keeps only Rule lines
+   (`BackendTestGutterMarks`).
 8. **The plugin ID must not contain "rider".**
 9. **Native lenses ignore `workspace/codeLens/refresh` (Rider 2026.2+).** The platform caches each file's lenses
    and asks the server again only when the project's PSI modification count has changed; its refresh handler does
@@ -147,7 +153,10 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
 
 ## 8. Known limitations
 
-- No Debug action for scenarios; no native Unit Tests tool window presence.
+- Frontend-only builds: no Debug action for scenarios and no native Unit Tests tool window presence. Backend builds
+  have both through Rider's test gutter marks, except on Rule lines (Rider has no Rule test element), which keep
+  the `dotnet test` Run lens. Runs started from the gutter go through Rider's runner, not this plugin's test
+  logger, so the Run lens glyphs and failed-step marks are not expected to reflect them (not yet checked live).
 - Rider before 2025.3 has no outline (the native Structure view renders the standard `documentSymbol` response from
   2025.3).
 - Lenses are inline, not gutter icons.

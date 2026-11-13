@@ -585,3 +585,11 @@ val generateTelemetryBuildConfig by tasks.registering {
 kotlin.sourceSets.named("main") {
     kotlin.srcDir(generateTelemetryBuildConfig)
 }
+
+// META-INF/reqnroll-backend.xml binds .feature editors to the backend daemon (for its test gutter marks). plugin.xml
+// includes it with a fallback, so only a build that bundles the backend module packages it.
+if (withBackend) {
+    sourceSets.named("main") {
+        resources.srcDir("src/main/resources-backend")
+    }
+}
