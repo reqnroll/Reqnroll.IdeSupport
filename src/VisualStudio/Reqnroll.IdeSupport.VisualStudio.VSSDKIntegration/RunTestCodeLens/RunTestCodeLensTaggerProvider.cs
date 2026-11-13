@@ -32,24 +32,8 @@ internal sealed class RunTestCodeLensTaggerProvider : ITaggerProvider
         if (typeof(T) != typeof(ICodeLensTag))
             return null;
 
-        if (!buffer.Properties.TryGetProperty(typeof(ITextDocument), out ITextDocument doc))
-            return null;
-
-        string fileUri;
-        try
-        {
-            fileUri = new Uri(doc.FilePath).AbsoluteUri;
-        }
-        catch (UriFormatException)
-        {
-            return null;
-        }
-
-        return buffer.Properties.GetOrCreateSingletonProperty(
-            typeof(LineKeyedCodeLensTagger<RunTestLensLocation>),
-            () => new LineKeyedCodeLensTagger<RunTestLensLocation>(
-                buffer, doc.FilePath, fileUri,
-                FetchAsync, e => e.Line, EncodeElementDescription, RunTestCodeLensRedirect.TaggerRegistry)) as ITagger<T>;
+        return LineKeyedCodeLensTagger<RunTestLensLocation>.GetOrCreateForBuffer(
+            buffer, FetchAsync, e => e.Line, EncodeElementDescription, RunTestCodeLensRedirect.TaggerRegistry) as ITagger<T>;
     }
 
     /// <summary>
