@@ -1,5 +1,7 @@
 package net.reqnroll.idesupport.rider.lsp.project
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.jetbrains.rider.model.RdTargetFrameworkId
 import com.jetbrains.rider.model.RunnableProject
@@ -14,7 +16,6 @@ import net.reqnroll.idesupport.rider.lsp.protocol.ProjectFilesKind
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectFilesParams
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollProjectLoadedParams
 import java.io.File
-import kotlin.concurrent.thread
 
 /**
  * Builds and (re-)sends the `reqnroll/projectLoaded` + `reqnroll/projectFiles` baseline for every
@@ -52,11 +53,47 @@ object ReqnrollProjectBaseline {
             ReqnrollDebugLogger.verbose("pushForAllRunnableProjects: projectLoaded ${runnableProject.projectFilePath}")
             ReqnrollNotificationSender.sendProjectLoaded(project, buildProjectLoadedParams(project, runnableProject))
         }
-        // sendProjectFilesBaseline does a synchronous walkTopDown — run on a background
-        // thread so the EDT is not blocked.
-        thread(name = "reqnroll-baseline-walk") {
-            runnableProjects.forEach { runnableProject ->
-                ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject)
+        sendProjectFilesBaselinesInBackground(project, runnableProjects)
+    }
+
+    /**
+     * Sends the `reqnroll/projectFiles` baseline for each of [runnableProjects] on a pooled
+     * background thread: each baseline is a synchronous filesystem walk, which must not block the
+     * caller's thread (typically the EDT). See [sendEachIsolated] for the per-project isolation.
+     */
+    fun sendProjectFilesBaselinesInBackground(project: Project, runnableProjects: List<RunnableProject>) {
+        if (runnableProjects.isEmpty()) return
+        ApplicationManager.getApplication().executeOnPooledThread {
+            sendEachIsolated(
+                runnableProjects,
+                isCancelled = { project.isDisposed },
+                describe = { it.projectFilePath },
+            ) { sendProjectFilesBaseline(project, it) }
+        }
+    }
+
+    /**
+     * Runs [send] for each of [items] in order, stopping as soon as [isCancelled] reports true
+     * (the project was closed while the walk was queued or running) and containing any exception
+     * to the item that threw — logged as a Warning; platform cancellation still propagates — so one unreadable project folder does not
+     * cost every later project its baseline. `internal` and generic purely so it's unit-testable
+     * without a `Project` or `RunnableProject`.
+     */
+    internal fun <T> sendEachIsolated(
+        items: List<T>,
+        isCancelled: () -> Boolean,
+        describe: (T) -> String,
+        send: (T) -> Unit,
+    ) {
+        for (item in items) {
+            if (isCancelled()) return
+            try {
+                send(item)
+            } catch (e: ProcessCanceledException) {
+                // Platform cancellation must propagate, never be logged as a failure.
+                throw e
+            } catch (e: Exception) {
+                ReqnrollDebugLogger.warn("projectFiles baseline failed for ${describe(item)}", e)
             }
         }
     }
@@ -117,13 +154,15 @@ object ReqnrollProjectBaseline {
      * The feature/binding files of [projectFile]: everything under its folder, plus the files it
      * compiles from the shared projects it imports — those live outside its folder by
      * definition, so the walk alone never finds them. The walk skips the project's own `bin/` and
-     * `obj/` (see [isBuildOutput]). Null when [projectFile] has no parent folder. `internal` purely
-     * so it's unit-testable without a `Project` fixture.
+     * `obj/` (see [isBuildOutput]) and tool folders anywhere below it (see [isSkippedFolder]); a
+     * folder it cannot read is skipped rather than failing the walk. Null when [projectFile] has no
+     * parent folder. `internal` purely so it's unit-testable without a `Project` fixture.
      */
     internal fun buildProjectFileEntries(projectFile: String): List<ProjectFileEntry>? {
         val folder = File(projectFile).parent ?: return null
         val folderFiles = File(folder).walkTopDown()
-            .onEnter { dir -> !isBuildOutput(dir.path, folder) }
+            .onEnter { dir -> !isBuildOutput(dir.path, folder) && !isSkippedFolder(dir.name) }
+            .onFail { dir, e -> ReqnrollDebugLogger.verbose("projectFiles baseline: skipped unreadable folder ${dir.path}: ${e.message}") }
             .filter { it.isFile }
             .map { it.path }
             .toList()
@@ -141,6 +180,16 @@ object ReqnrollProjectBaseline {
         return (folderFiles + sharedFiles)
             .mapNotNull { path -> ProjectFileRole.classify(path)?.let { role -> ProjectFileEntry(path, role) } }
     }
+
+    /**
+     * Folder names the baseline walk never enters, at any depth: package-manager and VCS
+     * folders that can hold tens of thousands of files and never contain a project's own feature
+     * or binding files. Case-insensitive, like the rest of this plugin's path matching.
+     */
+    private val skippedFolderNames = setOf("node_modules", ".git")
+
+    internal fun isSkippedFolder(name: String): Boolean =
+        skippedFolderNames.any { it.equals(name, ignoreCase = true) }
 
     /**
      * Whether [path] is, or is inside, [projectFolder]'s `bin/` or `obj/` — MSBuild's default
