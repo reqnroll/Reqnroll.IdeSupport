@@ -140,6 +140,9 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
 - Rider before 2025.3 has no outline (the native Structure view renders the standard `documentSymbol` response from
   2025.3).
 - Lenses are inline, not gutter icons.
+- A `.feature` breakpoint on a Background step stops in one scenario only. Reqnroll 3 copies Background steps into
+  each scenario method, and Rider binds a line to a single method. Break in the step definition instead; see
+  [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §12.
 
 ## 9. Testing
 

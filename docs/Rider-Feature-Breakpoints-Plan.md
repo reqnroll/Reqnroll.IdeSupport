@@ -361,7 +361,7 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 | Check | Expected |
 |---|---|
 | F9 and gutter click on a step line | Breakpoint created, survives IDE restart |
-| Debug a scenario | Stops on Background steps (once per scenario), plain steps, and Outline steps (once per row) |
+| Debug a scenario | Stops on plain steps, and on Outline steps once per row (verified). Stops on a Background step in **one** scenario only (verified; a known limitation, see [§12](#12-known-limitations)) |
 | Step Into from a stopped step | Lands on the first line of the step definition's body (`StepIntoStepDefinitionAction`, [§4](#4-frontend-changes)); an ambiguous step falls back to plain Step Into |
 | Breakpoint on a blank, comment, tag, table or Examples row, or doc string line | Refused by the filter |
 | Breakpoint on a description, `Rule:`, `Background:` or `Examples:` line | Accepted; binds to the next line with code (a known limitation) |
@@ -384,7 +384,6 @@ Live, in Rider, on a sample Reqnroll project (Windows first; macOS/Linux at leas
 
 These are assumptions until the spike runs:
 
-- That the debugger worker binds `.feature` line breakpoints through `#line` sequence points.
 - `StepIntoStepDefinitionAction`'s fallback paths (undefined or ambiguous step, binding without source); the run-to
   path was verified live on Rider 2026.2.3.1, landing on the `{` line of two different step definitions.
 - Why Rider's Just My Code stepping misses the step definition (the other-thread explanation is not confirmed).
@@ -398,3 +397,24 @@ These are assumptions until the spike runs:
 - That `net472` is the right target framework for every targeted SDK.
 - Exact zone requirements.
 - The Marketplace's handling of the proposed version scheme.
+
+## 12. Known limitations
+
+**A breakpoint on a Background step stops in one scenario only.** Verified on Rider 2026.2.3.1 with Reqnroll 3.0.0.
+
+- **Cause in the generated code.** Reqnroll 3 does not call a shared background method. It copies the Background
+  steps into every scenario's generated test method, so the same `#line` maps the Background line into several
+  methods.
+- **Cause in Rider.** Rider binds a line breakpoint to a single method. The selection is
+  `MethodAndSequencePointResolveProcessor` in `Debugger.Common.dll`. Visual Studio binds the line in every method,
+  so it stops once per scenario.
+- **Why multi-method mode doesn't fix it.** Rider's multi-method breakpoints (`TextRangeBreakpoint` with
+  `isMultiMethodBreakpoint`) only add methods with exactly as many sequence points as the first match, and scenarios
+  with different numbers of steps never have that. Switching the backend to them would make Background breakpoints
+  work for some features and not others, so it is not done.
+- **Workaround.** Put the breakpoint in the Background step's step definition. That is hit for every scenario.
+- **Not affected.** Scenario Outline rows share one method, so an Outline step stops once per row.
+
+**Lines without generated code still take a breakpoint.** This applies to description lines and to `Rule:`,
+`Background:` and `Examples:` header lines. Rider moves such a breakpoint to the next line that has code.
+`BreakpointLineFilter` refuses the lines it can recognise without the dialect's keywords; see [§3.2](#32-types).
