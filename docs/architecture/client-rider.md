@@ -129,6 +129,17 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    `.projitems` directly and sends no delta for a file added to a shared project.
 7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc.
 8. **The plugin ID must not contain "rider".**
+9. **Native lenses ignore `workspace/codeLens/refresh` (Rider 2026.2+).** The platform caches each file's lenses
+   and asks the server again only when the project's PSI modification count has changed; its refresh handler does
+   not clear that cache (the inlay hint refresh does). Without an edit, lenses requested before binding discovery
+   stay empty (no hook lenses on the first file opened). `NativeLensRefreshService` therefore answers each
+   (debounced) refresh with `PsiManager.dropPsiCaches()`, which bumps the count, and a CodeVision recompute.
+   The cache also moves lenses with edits while their command arguments keep the server's line numbers, so a click
+   on a stale lens lands on the wrong line (a step-hooks lens shows the scenario's hooks):
+   `ReqnrollLspCommandsSupport` re-requests the file's lenses on each click and runs the lens the clicked one now
+   corresponds to (`StaleLensCommandResolver`), and `EditorLensRefresh` names the platform's
+   `LspCodeVisionProvider` in every invalidation it sends, since a signal for this plugin's providers alone can
+   cancel the platform's recompute in progress.
 
 ## 8. Known limitations
 
