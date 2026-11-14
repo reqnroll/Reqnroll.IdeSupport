@@ -1,6 +1,7 @@
 package net.reqnroll.idesupport.rider.psi
 
 import net.reqnroll.idesupport.rider.testrunner.BackendTestGutterMarks
+import net.reqnroll.idesupport.rider.testrunner.GutterRunOutcomesActivity
 import org.w3c.dom.Element
 import java.nio.file.Paths
 import javax.xml.parsers.DocumentBuilderFactory
@@ -98,6 +99,13 @@ class PluginXmlPsiRegistrationTest {
         val keys = registrations("registryKey").map { it.getAttribute("key") }
 
         assertTrue(BackendTestGutterMarks.SHOW_RUN_LENS_KEY in keys, keys.toString())
+    }
+
+    @Test
+    fun `the gutter-run outcomes activity is registered and resolves`() {
+        val activities = registrations("postStartupActivity").map { it.getAttribute("implementation") }
+
+        assertTrue(GutterRunOutcomesActivity::class.java.name in activities, activities.toString())
     }
 
     @Test

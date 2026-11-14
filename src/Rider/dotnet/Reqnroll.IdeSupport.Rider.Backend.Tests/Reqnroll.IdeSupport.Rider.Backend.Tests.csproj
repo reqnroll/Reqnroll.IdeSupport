@@ -17,5 +17,7 @@
   <ItemGroup>
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\Debugger\BreakpointLineFilter.cs" Link="BreakpointLineFilter.cs" />
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\GeneratedTestLines.cs" Link="GeneratedTestLines.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\RiderTestRunReport.cs" Link="RiderTestRunReport.cs" />
+    <Compile Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Common\NdjsonWriter.cs" Link="NdjsonWriter.cs" />
   </ItemGroup>
 </Project>

@@ -6,7 +6,8 @@
          -p:RiderSdkVersion=... (see src/Rider/CONTRIBUTING.md). -->
     <RiderSdkVersion Condition="'$(RiderSdkVersion)' == ''">2026.2.3.1</RiderSdkVersion>
     <LangVersion>latest</LangVersion>
-    <Nullable>disable</Nullable>
+    <!-- Annotations only: sources shared with the outcome reporters carry nullable annotations. -->
+    <Nullable>annotations</Nullable>
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
     <NoPackageAnalysis>true</NoPackageAnalysis>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>

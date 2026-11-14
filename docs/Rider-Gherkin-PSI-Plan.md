@@ -466,16 +466,27 @@ unit-tested; **not yet run in a live Rider.**
 - **Frontend-only builds are unchanged.** The `rd.languageAssociation` and `backend.markup.adapterFactory`
   registrations live in `META-INF/reqnroll-backend.xml`. `plugin.xml` pulls it in with an `xi:include` that has a
   fallback, and only `-PwithBackend=true` builds package the file.
+- **Failed-step marks after a gutter run.** Injecting the test logger through runsettings (an
+  `IRunSettingsPostProcessor`, which the SDK offers) was ruled out. Rider's MSTest, NUnit, xUnit and VSTest
+  adapters host the frameworks' executors directly with their own framework handle, and none of them load a
+  runsettings `<Logger>`. Instead:
+  - The backend's `FeatureTestResultReporter` listens to Rider's test-run and result events. After each run it
+    sends the results of tests generated from `.feature` files to the server's outcome listener, in the wire
+    format the VSTest logger uses, with the output carrying Reqnroll's step trace. It finds the listener through
+    the session breadcrumbs, matched by the solution directory, and skips projects with the MTP stub (their
+    reporter already sends).
+  - `GutterRunOutcomes` (frontend) starts the listener on every server start, so the breadcrumb exists. On the
+    `changed` push it applies outcomes that changed to the failed-step marks and the Run lens results.
 - **Still to check live:**
   - Outline-row marks for each framework.
   - NUnit and xUnit at all.
   - Debug stopping on a `.feature` breakpoint.
   - The refresh after discovery.
   - Whether the early unresponsiveness recurs.
-  - Rider's `FailedStepGutterMarks` after a gutter run. Runs through Rider's runner do not go through our test
-    logger, so failed-step marks probably do not appear.
+  - Failed-step marks after a gutter run, for each framework; in particular, whether Rider's result output
+    carries the Reqnroll step trace, and whether row display names match across runs.
   - Multi-target projects, which may produce one element per target framework. Only the first gets the line's
-    mark.
+    mark, and outcomes are looked up under the first target's output only.
 
 ## 7. Rollback
 

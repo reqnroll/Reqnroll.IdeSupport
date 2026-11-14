@@ -321,6 +321,9 @@ Reqnroll traces steps: the Feature's Background steps, then the enclosing Rule's
 plus the first line of each failed row's error) to each open editor's markup model. A Scenario Outline whose
 rows fail on different steps gets one mark per distinct step. Marks are in memory, replaced on re-run, and a
 file's marks are dropped on its first edit. A TRX-only fallback result has no step detail and gets no mark.
+In builds with the backend module, a run started from Rider's own test gutter marks gets the same marks: the
+backend sends Rider's results to the server, and `GutterRunOutcomes` applies changed outcomes on the
+`testOutcomes/changed` push (see the outcomes pipeline).
 
 ### 9.3 VS Code
 

@@ -7,6 +7,7 @@ import com.intellij.platform.lsp.api.Lsp4jClient
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollEmptyParams
 import net.reqnroll.idesupport.rider.telemetry.ReqnrollTelemetryEventInterceptor
+import net.reqnroll.idesupport.rider.testrunner.GutterRunOutcomes
 import net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 
@@ -49,5 +50,7 @@ class ReqnrollLsp4jClient(
             { if (!project.isDisposed) RunTestCodeVisionProvider.refreshOpenFeatureEditors(project) },
             ModalityState.any(),
         )
+        // Results of runs Rider started itself reach the editor only through this push.
+        GutterRunOutcomes.scheduleRefresh(project)
     }
 }

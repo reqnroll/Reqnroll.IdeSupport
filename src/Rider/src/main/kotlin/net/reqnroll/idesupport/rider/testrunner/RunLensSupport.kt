@@ -99,17 +99,7 @@ internal object RunLensSupport {
             val startLine = selectionRange.start.line
             if (startLine < 0 || startLine >= document.lineCount) continue
 
-            val identity = "${symbol.detail}|${symbol.name}"
-            val targets = RunTestTargetCache.get(uri, startLine, identity) ?: run {
-                val response = ReqnrollRequestSender.resolveTestTargets(
-                    project, uri,
-                    selectionRange.start.line, selectionRange.start.character,
-                    selectionRange.end.line, selectionRange.end.character,
-                )
-                val resolved = response?.targets.orEmpty()
-                RunTestTargetCache.put(uri, startLine, identity, resolved)
-                resolved
-            }
+            val targets = scenarioTargets(project, uri, symbol)
             if (targets.isEmpty()) continue
             resolvedScenarios.add(ScenarioRunTarget(startLine, targets))
 
@@ -152,6 +142,27 @@ internal object RunLensSupport {
             result.add(TextRange(offset, offset) to entry)
         }
         return result
+    }
+
+    /**
+     * The generated test method(s) of one scenario/Outline [symbol] (which has a selection range), from
+     * [RunTestTargetCache] while the scenario's identity (kind + name) is unchanged, otherwise resolved with
+     * `reqnroll/resolveTestTargets` and cached. Empty when none resolve (not built yet).
+     */
+    fun scenarioTargets(project: Project, uri: String, symbol: DocumentSymbol): List<ScenarioTestTargetItem> {
+        val selectionRange = symbol.selectionRange ?: return emptyList()
+        val startLine = selectionRange.start.line
+        val identity = "${symbol.detail}|${symbol.name}"
+        return RunTestTargetCache.get(uri, startLine, identity) ?: run {
+            val response = ReqnrollRequestSender.resolveTestTargets(
+                project, uri,
+                selectionRange.start.line, selectionRange.start.character,
+                selectionRange.end.line, selectionRange.end.character,
+            )
+            val resolved = response?.targets.orEmpty()
+            RunTestTargetCache.put(uri, startLine, identity, resolved)
+            resolved
+        }
     }
 
     /**

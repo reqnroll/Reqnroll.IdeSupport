@@ -15,7 +15,9 @@ It provides:
 - Live and last-run pass/fail on every Scenario and Scenario Outline line, with a per-example-row
   breakdown and the first failing step.
 - Results taken from the standard test pipelines (VSTest and Microsoft.Testing.Platform, "MTP"), not from
-  an IDE-internal test API, so all three IDEs observe results the same way.
+  an IDE-internal test API, so all three IDEs observe results the same way. The one exception is a run Rider
+  starts itself (its test gutter marks or Unit Tests window): Rider's runners ignore runsettings loggers, so the
+  Rider backend module reads those results from Rider and sends them in the same format (§6.2).
 - A design that runs out of process from the user's test run and never slows or fails it.
 
 It does not provide outcomes for a terminal `dotnet test` run when no IDE session exists to hear it,
@@ -28,6 +30,9 @@ flowchart LR
     subgraph Runner["Test runner process"]
         L["VSTest logger<br/>ReqnrollIdeTestLogger"]
         M["MTP reporter<br/>ReqnrollMtpReporter"]
+    end
+    subgraph RiderBackend["Rider backend (Rider's own runs)"]
+        RB["FeatureTestResultReporter"]
     end
     subgraph Server["LSP server (one per IDE window)"]
         TL["TestOutcomeTcpListener"]
@@ -44,8 +49,8 @@ flowchart LR
     RS -->|"registerRun"| HD
     RS -.->|"Endpoint, RunId"| L
     TL -.->|"writes endpoint"| BC
-    M -.->|"reads"| BC
-    L & M -->|"NDJSON over TCP loopback"| TL
+    M & RB -.->|"reads"| BC
+    L & M & RB -->|"NDJSON over TCP loopback"| TL
     TL --> ST
     ST <--> PE
     ST -->|"testOutcomes/changed"| CL
@@ -201,7 +206,8 @@ classDiagram
 |---|---|---|
 | `ReqnrollIdeTestLogger` | `src/Core/Reqnroll.IdeSupport.TestLogger` | VSTest logger; turns vstest events into NDJSON. Inert without an `Endpoint`. |
 | `ReqnrollMtpReporter` | `src/Core/Reqnroll.IdeSupport.TestReporter.MTP` | MTP session handler and data consumer; same wire format; finds the server through breadcrumbs. |
-| `OutcomeSink`, `NdjsonWriter` | `…TestReporter.Common` | Hand-written JSON writer and fire-and-forget TCP/file sink shared by both reporters. |
+| `FeatureTestResultReporter`, `RiderTestRunReport` | `src/Rider/dotnet/…Rider.Backend/UnitTesting` | Rider backend: sends the results of runs Rider starts itself; same wire format; links the shared sources below. |
+| `OutcomeSink`, `NdjsonWriter` | `…TestReporter.Common` | Hand-written JSON writer and fire-and-forget TCP/file sink shared by the reporters. |
 | `SessionBreadcrumbMatcher`, `WorkspaceRootLocator`, `SessionsDirectory` | `…TestReporter.MTP` | Reporter-side breadcrumb discovery (deepest workspace match wins). |
 | `Reqnroll.IdeSupport.TestReporter.MTP.targets` | `…TestReporter.MTP/build` | MSBuild gate and source injection for the MTP reporter. |
 | `TestOutcomeTcpListener` | `src/LSP/…LSP.Server/Features/TestOutcomes` | Loopback receiver; feeds the store; debounced `changed` push. |
@@ -216,6 +222,7 @@ classDiagram
 | `TestOutcomesChangedInterceptor` | `src/VisualStudio/…Extension/LspInterception` | Forwards the `changed` push to the lens. |
 | `MtpProjectStubs`, `MtpProjectStubSolutionListener` | VS `…VSSDKIntegration/TestReporter`, `…Extension/TestOutcomes`; Rider `MtpProjectStubs.kt`; VS Code `mtpProjectStubs.ts` | Keep each Reqnroll project's `obj/` stub in sync. |
 | `RunTestRunner`, `RunLensSupport` | `src/Rider/…/testrunner` | Rider `dotnet test` invocation and lens. |
+| `GutterRunOutcomes` | `src/Rider/…/testrunner` | Backend builds: starts the listener on each server start; on `changed`, applies changed outcomes to the open `.feature` editors. |
 | `testOutcomesService.ts`, `runSettingsInjector.ts`, `testOutcomeCodeLens.ts` | `src/VSCode/src/testOutcomes` | VS Code registration, runsettings merge, read-only lens. |
 
 ## 6. Contracts and behaviour
@@ -229,14 +236,15 @@ incompatible changes. Field names are the contract; see `OutcomeSink`, `Reqnroll
 
 | Message | Meaning | Notable fields |
 |---|---|---|
-| `hello` | Connection opened | `protocol`, `runId`, `reporterKind` (`VSTestLogger` or `MTP`), `runnerPid`, `idePid`, `targetFramework` |
+| `hello` | Connection opened | `protocol`, `runId`, `reporterKind` (`VSTestLogger`, `MTP` or `RiderTestRunner`), `runnerPid`, `idePid`, `targetFramework` |
 | `runStart` | VSTest only. Run begins | `testCount`, `sources`, `tests` (identities, used to mark methods as running) |
 | `result` | One per test case (one per Scenario Outline example row) | `source`, `managedType`, `managedMethod`, `fqn`, `displayName`, `outcome`, `durationMs`, `errorMessage`, `stdout`, `stdoutTruncated` |
 | `runComplete` | Run finished | `executed`, `aborted`, `canceled`, `elapsedMs` |
 
 `stdout` carries Reqnroll's step trace, capped at 64 KB and flagged when truncated. A connection that
 closes without `runComplete` is treated as an aborted run. MTP never sends `runStart` (it does not hand a
-reporter the test list up front), so MTP-sourced runs show final results but no "running" state.
+reporter the test list up front), so MTP-sourced runs show final results but no "running" state. The Rider
+backend reporter sends its results after the run has finished, so it sends no `runStart` either.
 
 ### 6.2 Getting a reporter into the test run
 
@@ -279,6 +287,24 @@ the reporter discovers the server itself.
    breadcrumbs, and connects to the one whose workspace root is the deepest ancestor of its own. With no
    match it disables itself in `IsEnabledAsync`, so MTP never activates it; a failed connect leaves it
    inert. Breadcrumbs of dead processes are pruned on write, and a clean shutdown deletes its own.
+
+**Rider's own runs: the backend reporter.** Rider runs tests from its gutter marks and Unit Tests window through
+its own runners, which call the test frameworks directly; a runsettings `<Logger>` is never loaded, so neither
+reporter above takes part. Builds with the Rider backend module cover these runs instead.
+
+1. **Collection.** `FeatureTestResultReporter` (a backend solution component) listens to Rider's test-run and
+   result events. Each finished test of a running session is noted, and the run's results are sent half a second
+   after it ends. Only tests whose class lives in a `.feature.cs` code-behind are sent; an outline method whose
+   rows report for themselves is skipped, as are projects carrying the MTP stub, whose reporter already sends.
+2. **Identity.** `source` is the project's output for the test's target framework, `managedType`/`managedMethod`
+   come from Rider's test element, `displayName` is the row's name for an example row, and `stdout` is the test's
+   output from Rider's result store.
+3. **Discovery.** As for MTP: the breadcrumb whose workspace root is the deepest ancestor of the solution
+   directory. The listener writes its breadcrumb only once started, so in backend builds the Rider frontend
+   (`GutterRunOutcomes`) sends `registerRun` on every server start.
+4. **Display.** On the `changed` push, `GutterRunOutcomes` re-reads `getOutcome` for every scenario in the open
+   `.feature` editors and applies those whose outcome changed since it last looked to the failed-step marks and
+   to the results the Run lens tooltips read.
 
 ### 6.3 Server behaviour
 

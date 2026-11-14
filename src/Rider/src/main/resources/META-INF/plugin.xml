@@ -100,6 +100,7 @@ for what is available in each IDE.</p>
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollProjectFilesSync" />
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollDocumentActivationSync" />
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.testrunner.GutterRunOutcomesActivity" />
 
     <!-- Rider 2026.2 routes the Go to Declaration shortcuts (F12, Ctrl+B, Ctrl+click) through its
          ReSharper backend first, which knows nothing about Gherkin; ReqnrollGoToDefinitionAction runs

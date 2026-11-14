@@ -21,7 +21,8 @@ object BackendTestGutterMarks {
     /** Path of the backend module inside the installed plugin, as `prepareSandbox` packages it. */
     internal const val BACKEND_ASSEMBLY = "dotnet/Reqnroll.IdeSupport.Rider.Backend.dll"
 
-    private val backendInstalled: Boolean by lazy {
+    /** Whether the backend module is part of the installed plugin. */
+    val backendInstalled: Boolean by lazy {
         ReqnrollPlugin.descriptor()?.let { isBackendIn(it.pluginPath) } ?: false
     }
 
