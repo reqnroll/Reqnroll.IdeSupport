@@ -109,12 +109,12 @@ for a race that doesn't exist.
   - `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches`: each closed feature file it edits,
     before the invalidation;
   - `ReqnrollConfigChangedHandler`: the changed project's config generation, before it publishes
-    `BindingRegistryPatchedNotification`; in the workspace-root fallback, every project under the
-    root;
-  - a feature file leaving the project via a membership delta. `MembershipIndex` currently purges only
-    files in the binding role (`ProjectBindingFilesRemovedNotification`), and no path for a feature
-    file leaving was found (design I1). Confirm this. If it's a gap, add the bump **and**
-    `InvalidateAllForDocument` for removed feature files together, so I1 holds.
+    `BindingRegistryPatchedNotification`. Its workspace-root path (`.editorconfig` changes) doesn't
+    bump: `.editorconfig` never sets the feature language.
+
+A feature file leaving one project via a membership delta is **not** a bump site (design §3.1 and
+Q7). Confirmed during Phase 1 that the delta leaves a stale `(uri, project)` match set; that's a
+separate per-key fix, not part of this phase.
 
 **Tests:** unit tests for `DocumentGenerations` (starts at 0, monotonic, kept after close,
 case-insensitive) and `ProjectConfigGenerations`, plus handler tests asserting one bump per event

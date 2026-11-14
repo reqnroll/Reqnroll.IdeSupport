@@ -145,16 +145,24 @@ changes what the server believes the text is:
 
 - `textDocument/didOpen`, `didChange`, `didClose` (a close switches the source of truth from the
   editor buffer to the file on disk);
-- a feature file leaving the project (a membership delta via `reqnroll/projectFiles`);
 - a rename that edits a **closed** feature file (`RenamePostApplyCoordinator`). Open files edited by a
   rename already get a `didChange`, which bumps (R5).
+
+A feature file leaving **one** project (a membership delta via `reqnroll/projectFiles`) is **not** a
+bump site, although an earlier draft listed it. The text didn't change, and the generation is per
+document, not per `(document, project)`: bumping it would reject in-flight writes for the file's
+*other* owners, and nothing would re-derive them, which breaks I1. The removal leaves a stale
+`(uri, project)` match set behind today (confirmed 2026-11-14: `MembershipIndex` publishes a purge
+only for binding-role files). That is a separate fix: drop the one `(uri, project)` entry when the
+delta removes the feature file. See §5 Q7.
 
 **Config generation.** A per-project counter, bumped by `ReqnrollConfigChangedHandler` **before**
 it publishes the reconcile for that project. Derivations read it before they read the project's
 feature language. It sits next to the registry version because both describe "the project", not
 "the document"; it's separate because a configuration change doesn't produce a new registry when
-the assembly is unchanged (R6). The workspace-root fallback in that handler (no project resolved)
-bumps every project under the root.
+the assembly is unchanged (R6). The handler's workspace-root path (no project on the notification)
+doesn't bump: it serves `.editorconfig` changes, and the feature language comes only from
+`reqnroll.json` or the SpecFlow configuration, never from `.editorconfig`.
 
 The server doesn't watch `.feature` files on disk today: `WatchedFilesHandler` handles only config,
 `.editorconfig`, output assemblies and deleted `.cs` files. So a closed feature file changed outside
@@ -196,12 +204,9 @@ This prevents a stamp that is newer than the input it describes.
 can flip it back. A total order avoids that. Lexicographic order is correct as long as these hold:
 
 - **I1 — every content bump is followed by a re-derivation of the new content.** `didOpen`,
-  `didChange` → scheduled parse. `didClose` → `RescanClosedFileAsync`. Membership removal →
-  invalidation. Rename of a closed file → `RescanClosedFileAsync` (**gap today**: it only
-  invalidates, R5; Phase 1b adds the rescan). *Unconfirmed:* `MembershipIndex` currently publishes a
-  purge (`ProjectBindingFilesRemovedNotification`) only for files in the **binding** role, and no
-  feature-file removal path was found (rechecked 2026-11-14: still the case). Phase 1 confirms this,
-  and if it's a gap adds the bump plus `InvalidateAllForDocument` together.
+  `didChange` → scheduled parse. `didClose` → `RescanClosedFileAsync`. Rename of a closed file →
+  `RescanClosedFileAsync` (**gap today**: it only invalidates, R5; Phase 1b adds the rescan).
+  Membership removal isn't a content bump (§3.1).
 - **I2 — every registry change re-derives that project's entries.** Replaced → every file. Patched →
   open files immediately, closed files after the rescan debounce. (Existing behaviour, #577.)
 - **I3 — project-input reads are monotonic per project.** A derivation that starts later never sees
@@ -265,7 +270,7 @@ semantic-token invalidation and the `MatchCacheChangedNotification` publish.
 | `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches` | Bumps the generation of each closed feature file it edits, then invalidates and calls `RescanClosedFileAsync` for it. Fixes R5's missing re-derivation; the `Store` rule fixes its late-write case. |
 | `FeatureBindingMatchSet` | adds `DerivationStamp Stamp`. `DocumentVersion` stays (diagnostics need it on the wire). `RegistryVersion` becomes `Stamp.RegistryVersion`. |
 | `BindingMatchService.Store` | the rule from §3.3. Returns `StoreOutcome`. Counts accepted and rejected writes in `GetCacheStats`. |
-| `BindingMatchService.InvalidateAllForDocument` | no change. The generation bump that comes before it (on `didClose`, membership removal) is what rejects late writes. |
+| `BindingMatchService.InvalidateAllForDocument` | no change. The generation bump that comes before it (on `didClose`, a rename of a closed file) is what rejects late writes. |
 | `SemanticTokensService` cache | key becomes `(uri, Stamp)` instead of `(uri, clientVersion)`. The explicit `InvalidateCache` call in `ParseAsync` becomes unnecessary and is removed. `PurgePriorVersions` compares stamps. |
 | `FeatureTagIndex` | compares `Generation` instead of the client `Version` (same logic, and it now works for closed files). It already records the feature language each file's counts were parsed with; that check can move to `ConfigGeneration`. |
 
@@ -343,6 +348,13 @@ property can be added later through the normal telemetry-inventory process.
 - **Q6. Is R5's scan-then-rename overlap real?** It needs a closed-file scan of the project to be in
   progress while a rename is applied. Phase 0 tests it; if it can't be driven deterministically, the
   rescan in Phase 1b still fixes the user-visible part (files dropping out of Find Usages).
+- **Q7. A feature file leaving one project keeps that project's match set.** The membership delta
+  publishes nothing that drops `(uri, project)`, so the removed file's steps keep counting as that
+  project's usages until the next full scan. The fix is per key, not per document (a linked file may
+  still belong to other projects), so `IBindingMatchService` needs a single-key invalidation. A late
+  write for the removed key could still bring it back; once Phase 4b is in, that write can be
+  rejected by also checking membership at the writer, or accepted as harmless until the next scan.
+  This is independent of the stamps and can be fixed and shipped on its own.
 - **Risk: a wrongly rejected write leaves a cached entry missing or stale.** This is the main risk:
   an I1 gap means rule 1 drops a write and nothing follows it up. That's why Phase 4 ships in
   **log-only mode** first. Counters and logs over real sessions show whether any rejection was
@@ -368,3 +380,6 @@ still last-writer-wins. Changes to this document:
 - §1.2 writer table updated (rename invalidation, config reconcile through the patch path, no
   separate feature-rescan debouncer caller of `RescanClosedFileAsync`).
 - Alternatives: added "fix each path locally" and why it isn't enough.
+- During Phase 1: membership removal dropped as a content-bump site (a per-document bump for a
+  per-project change breaks I1; the stale entry is now Q7), and the config handler's
+  `.editorconfig` path confirmed as needing no config bump.
