@@ -1,7 +1,8 @@
 # Versioned Derived State — Design
 
-**Status: PROPOSED (2026-10-05).** Tracking issue: #906. Migration plan:
-[Versioned-Derived-State-Migration-Plan.md](Versioned-Derived-State-Migration-Plan.md).
+**Status: PROPOSED (2026-10-05), revised 2026-11-14.** Tracking issue: #906. Migration plan:
+[Versioned-Derived-State-Migration-Plan.md](Versioned-Derived-State-Migration-Plan.md). What the
+revision changed is listed in §6.
 
 This is a design record for how the LSP server keeps the state it derives from `.feature` and `.cs`
 files (match sets, tags, semantic-token cache, tag index) from being overwritten by stale results.
@@ -15,7 +16,7 @@ refuse to replace a newer read model with an older one.**
 Related: #554 (non-atomic `Store` race — fixed by a lock, not by ordering), #517 (`.cs` reparse race),
 #471 (`ParseCoordinator` / Serial-lane offload), #477 (fire-and-forget registry publish),
 #577 (Replaced vs Patched registry events), #580 (bounded closed-file scan),
-#469 / #515 (duplicate bindings).
+#469 / #515 (duplicate bindings), #938 (late parse re-created a closed buffer — fixed, see R4b).
 
 ---
 
@@ -25,7 +26,8 @@ Related: #554 (non-atomic `Store` race — fixed by a lock, not by ordering), #5
 
 | Artifact | Version information today | Enforced? |
 |---|---|---|
-| `DocumentBuffer` (`LSP.Server/Documents`) | `int? Version` — client's document version | No: `Update` and `UpdateTags` overwrite unconditionally |
+| `DocumentBuffer` (`LSP.Server/Documents`) | `int? Version` — client's document version | No: `Update` overwrites unconditionally. `UpdateTags` is update-only (it never creates a buffer) but tags whichever buffer is there now |
+| Project configuration (feature language) | none | n/a — read at derivation time with `ProjectFeatureLanguage.For(project)`; nothing records which configuration a derived entry used |
 | `ProjectBindingRegistry` (`LSP.Core/Bindings`) | `int Version` — process-wide monotonic counter, new value per immutable instance | n/a (instances are immutable; swapping is the provider's job) |
 | `FeatureBindingMatchSet` (`LSP.Core/Matching`) | `int? DocumentVersion`, `int RegistryVersion` | **No.** Nothing in `LSP.Core` or `LSP.Server` reads either property |
 | `BindingMatchService` reverse/location indexes | none (derived from the stored match sets) | n/a |
@@ -40,48 +42,70 @@ atomic, but it doesn't order writes.
 
 | Writer | Path | Serialised by `ParseCoordinator`? |
 |---|---|---|
-| `GherkinDocumentTaggerService.ParseAsync` via `FeatureDocumentReparser` | `didOpen` / `didChange` (`TextDocumentSyncHandler`), `DocumentActivatedHandler`, `ReqnrollConfigChangedHandler`, `BindingRegistryChangedHandler` (open files) | **Yes** — per-URI chain |
-| `GherkinDocumentTaggerService.ScanClosedFileAsync` | `BindingRegistryChangedHandler` full-replacement scan of closed files | **No** |
-| `GherkinDocumentTaggerService.RescanClosedFileAsync` | `didClose` (inline on the Serial lane), feature-rescan debouncer | **No** |
-| `BindingMatchService.InvalidateAllForDocument` / `InvalidateAllForProject` | `didClose`, project removal (`BindingRegistryProviderRouter.OnProjectRemoved`) | **No** |
+| `GherkinDocumentTaggerService.ParseAsync` via `FeatureDocumentReparser` | `didOpen` / `didChange` (`TextDocumentSyncHandler`), `DocumentActivatedHandler`, `ReqnrollConfigChangedHandler` (workspace-root fallback), `BindingRegistryChangedHandler` (open files) | **Yes** — per-URI chain |
+| `GherkinDocumentTaggerService.ScanClosedFileAsync` | `BindingRegistryChangedHandler.ScanAllFeatureFilesAsync`: run inline for a full replacement, and through the rescan debouncer for a patch (which also covers a `reqnroll.json` change, since `ReqnrollConfigChangedHandler` publishes `BindingRegistryPatchedNotification` for the changed project) | **No** |
+| `GherkinDocumentTaggerService.RescanClosedFileAsync` | `didClose` (inline on the Serial lane) | **No** |
+| `BindingMatchService.InvalidateAllForDocument` / `InvalidateAllForProject` | `didClose`; project removal (`BindingRegistryProviderRouter.OnProjectRemoved`); closed feature files edited by a rename (`RenamePostApplyCoordinator.InvalidateClosedFeatureCaches`) | **No** |
 
 The registry-change events themselves are published with `FireAndForget` from
 `BindingRegistryProviderRouter.OnProviderChanged` (#477). Two registry changes for the same project in
 quick succession therefore run `BindingRegistryChangedHandler` **concurrently**, with nothing ordering
-them.
+them. Three triggers can each start a closed-file scan of the same project: a full replacement, the
+debounced rescan after a patch, and a `reqnroll.json` change (which goes through the patch path).
+
+`ParseAsync` already drops its result when `UpdateTags` reports that the buffer is gone (#938). It
+then skips both the match-set `Store` and the semantic-token invalidation.
 
 ### 1.3 Concrete stale-write paths
 
-All four were found by reading the code. **None has been reproduced yet**; Phase 0 of the migration
-plan writes deterministic tests for each.
+All of these were found by reading the code, and rechecked against `main` on 2026-11-14. **None of
+the open ones has been reproduced yet**; Phase 0 of the migration plan writes deterministic tests for
+each.
 
 - **R1 — Closed-file scan overwrites an open file.** `ScanClosedFileAsync` checks
   `_documentBufferService.TryGet(uri)` and skips the scan if the file is open. That's a check-then-act:
   a `didOpen` can land between the check and `Store`. The closed scan then replaces the open file's
   match set with one built from disk text (`documentVersion: null`), possibly against an older
   registry. The method's own comment says the guard only narrows the race.
-- **R2 — A parse started before `didClose` lands after it.** The `didClose` handler removes the
-  buffer, calls `InvalidateAllForDocument`, then rescans from disk. A `ParseAsync` scheduled earlier
-  for the open buffer runs off the Serial lane. If it reaches `Store` after the invalidation, it puts
-  back a match set built from the editor text, which may have been discarded. If it lands after the
-  rescan, it replaces the disk-based entry.
-- **R3 — Two registry changes race on closed files.** Registry vN and vN+1 for project P each trigger
-  a full closed-file scan (R1/R2 do not apply — files are closed). Both loops run concurrently, so for
-  any file the vN result can land after the vN+1 result. The cache then holds matches against the old
-  bindings until the next registry change.
-- **R4 — Tags from an older buffer get attached to a newer one, or bring a closed buffer back.**
-  - `didChange` calls `DocumentBufferService.Update` inline. That replaces the buffer and clears
-    `Tags`. The parse runs later on the coordinator chain. If parse N is still running when
-    `Update(N+1)` lands, parse N's `UpdateTags` attaches N's tags to the N+1 buffer. They stay there
-    until parse N+1 finishes.
-  - Worse, `UpdateTags` uses `AddOrUpdate`. If the buffer was removed by `didClose` while the parse
-    was running, `UpdateTags` **creates** a buffer with empty text and a null version. The file then
-    looks open: `ScanClosedFileAsync`'s guard skips it on every later closed scan, and loops over
-    `IDocumentBufferService.All` include it.
+- **R2 — A parse started before `didClose` stores after it.** The `didClose` handler removes the
+  buffer, calls `InvalidateAllForDocument`, then rescans from disk. It doesn't wait for or cancel a
+  parse already scheduled for the URI on `ParseCoordinator`. Since #938, a parse that reaches
+  `UpdateTags` after `Remove` drops its result, which closes most of the original window. What's left
+  is this order: the parse's `UpdateTags` succeeds (the buffer still exists), then the whole close
+  sequence runs, then the parse reaches `Store`. It then puts back a match set built from the editor
+  text, which may have been discarded, over the disk-based entry.
+- **R3 — Two closed-file scans of one project race.** Each file's scan reads `provider.Current` when
+  it reaches that file, not once per loop. So the race isn't between two whole loops: for one file,
+  scan A reads registry vN and is still parsing when scan B reads vN+1 and stores; then A stores the
+  vN result. The cache then holds matches against the old bindings until the next scan of that file.
+  The window is one file's parse, but there are three triggers that can overlap (§1.2).
+- **R4 — Tags from an older buffer get attached to a newer one.**
+  - **R4a (open).** `didChange` calls `DocumentBufferService.Update` inline. That replaces the
+    buffer and clears `Tags`. The parse runs later on the coordinator chain. `ParseAsync` checks the
+    version only at its start. If `Update(N+1)` lands after that check but before parse N's
+    `UpdateTags`, N's tags are attached to the N+1 buffer. They stay there until parse N+1 finishes,
+    which the coordinator schedules right after. Impact is short-lived wrong folding, outline or
+    colouring for open-buffer readers.
+  - **R4b (fixed, #938).** `UpdateTags` used `AddOrUpdate`, so a parse finishing after `didClose`
+    re-created the buffer as a ghost "open" document. `UpdateTags` is now update-only and returns
+    `false` when the buffer is gone; `GherkinDocumentTaggerServiceCloseRaceTests` cover it.
+- **R5 — A rename edits a closed feature file without a re-derivation.**
+  `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches` invalidates the match sets of closed
+  feature files the rename edited. It doesn't rescan them, so they drop out of Find Usages, usage
+  counts and later renames until the next scan of their project. A closed-file scan that read the
+  old disk text before the edit can also store after the invalidation. Today that brings the old
+  step text back; under this design it would be accepted because nothing bumped the generation. The
+  "is it open?" check in that method has the same check-then-act shape as R1.
+- **R6 — Configuration isn't an input anyone records.** A `reqnroll.json` change (for example
+  `language.feature`) changes how every feature file of the project parses. It's reconciled through
+  the patch path (§1.2), which re-derives every file with the same content and, if the assembly
+  didn't change, the same registry. A scan that read the old configuration can therefore store after
+  one that read the new configuration, and nothing tells them apart. A stamp of only
+  `(contentGeneration, registryVersion)` would see equal stamps and accept both, so it wouldn't fix
+  this.
 
-R1–R3 produce wrong usage counts, find-usages results and rename coverage. Those features read the
-cache across documents, so a wrong entry stays until the next re-derivation of that file. R4's
-resurrection case can make a file vanish from workspace-wide features until it is reopened.
+R1–R3, R5 and R6 produce wrong usage counts, find-usages results and rename coverage. Those features
+read the cache across documents, so a wrong entry stays until the next re-derivation of that file.
 
 ## 2. Goals and non-goals
 
@@ -110,6 +134,7 @@ resurrection case can make a file vanish from workspace-wide features until it i
 | Source | Scope | Owner | Status |
 |---|---|---|---|
 | **Content generation** `long` | per document URI | new `IDocumentGenerations` in `LSP.Core/Documents` | **new** |
+| **Config generation** `long` | per project | new `IProjectConfigGenerations` in `LSP.Core` | **new** (R6) |
 | Registry version `int` | per `ProjectBindingRegistry` instance, unique across the process | `ProjectBindingRegistry.Version` | existing |
 | Client document version `int?` | per open document | LSP client | existing — kept only for wire messages (`publishDiagnostics.version`, `WorkspaceEdit`) |
 
@@ -120,7 +145,16 @@ changes what the server believes the text is:
 
 - `textDocument/didOpen`, `didChange`, `didClose` (a close switches the source of truth from the
   editor buffer to the file on disk);
-- a feature file leaving the project (a membership delta via `reqnroll/projectFiles`).
+- a feature file leaving the project (a membership delta via `reqnroll/projectFiles`);
+- a rename that edits a **closed** feature file (`RenamePostApplyCoordinator`). Open files edited by a
+  rename already get a `didChange`, which bumps (R5).
+
+**Config generation.** A per-project counter, bumped by `ReqnrollConfigChangedHandler` **before**
+it publishes the reconcile for that project. Derivations read it before they read the project's
+feature language. It sits next to the registry version because both describe "the project", not
+"the document"; it's separate because a configuration change doesn't produce a new registry when
+the assembly is unchanged (R6). The workspace-root fallback in that handler (no project resolved)
+bumps every project under the root.
 
 The server doesn't watch `.feature` files on disk today: `WatchedFilesHandler` handles only config,
 `.editorconfig`, output assemblies and deleted `.cs` files. So a closed feature file changed outside
@@ -138,20 +172,24 @@ which already holds an entry for every feature file in the workspace.
 Every per-document derived entry records a `DerivationStamp`:
 
 ```csharp
-public readonly record struct DerivationStamp(long ContentGeneration, int RegistryVersion)
+public readonly record struct DerivationStamp(
+    long ContentGeneration, long ConfigGeneration, int RegistryVersion)
     : IComparable<DerivationStamp>
 {
-    // Lexicographic: newer text always wins; for the same text, the newer registry wins.
+    // Lexicographic: newer text always wins; for the same text, the newer configuration wins;
+    // for the same text and configuration, the newer registry wins.
     public int CompareTo(DerivationStamp other) => ...;
 }
 ```
 
-`ContentGeneration` is **read before the text is read**:
+Every component is **read before the input it describes**:
 
-- for an open file, it's captured together with the buffer snapshot;
-- for a closed file, it's captured before `ReadAllTextAsync`.
+- `ContentGeneration`: for an open file, captured together with the buffer snapshot; for a closed
+  file, captured before `ReadAllTextAsync`;
+- `ConfigGeneration`: captured before `ProjectFeatureLanguage.For(project)`;
+- `RegistryVersion`: taken from the registry instance actually used for matching.
 
-This prevents a stamp that is newer than the content it describes.
+This prevents a stamp that is newer than the input it describes.
 
 **Why lexicographic order and not "dominates on both".** With a strict "both components ≥" rule,
 `(g6, r8)` and `(g5, r9)` are incomparable. Whatever tie-break you pick, the next incomparable write
@@ -159,19 +197,25 @@ can flip it back. A total order avoids that. Lexicographic order is correct as l
 
 - **I1 — every content bump is followed by a re-derivation of the new content.** `didOpen`,
   `didChange` → scheduled parse. `didClose` → `RescanClosedFileAsync`. Membership removal →
-  invalidation. *Unconfirmed:* `MembershipIndex` currently publishes a purge
-  (`ProjectBindingFilesRemovedNotification`) only for files in the **binding** role, and no
-  feature-file removal path was found. Phase 1 confirms this, and if it's a gap adds the bump plus
-  `InvalidateAllForDocument` together.
+  invalidation. Rename of a closed file → `RescanClosedFileAsync` (**gap today**: it only
+  invalidates, R5; Phase 1b adds the rescan). *Unconfirmed:* `MembershipIndex` currently publishes a
+  purge (`ProjectBindingFilesRemovedNotification`) only for files in the **binding** role, and no
+  feature-file removal path was found (rechecked 2026-11-14: still the case). Phase 1 confirms this,
+  and if it's a gap adds the bump plus `InvalidateAllForDocument` together.
 - **I2 — every registry change re-derives that project's entries.** Replaced → every file. Patched →
   open files immediately, closed files after the rescan debounce. (Existing behaviour, #577.)
-- **I3 — registry reads are monotonic per project.** A derivation that starts later never sees an
-  older registry than one that started earlier. (Holds today: `provider.Current` is one reference
-  replaced by a newer instance.)
+- **I3 — project-input reads are monotonic per project.** A derivation that starts later never sees
+  an older registry or an older config generation than one that started earlier. (Holds for the
+  registry today: `provider.Current` is one reference replaced by a newer instance. Holds for the
+  config generation by construction: a counter that only goes up.)
+- **I4 — every config bump is followed by a re-derivation of the project's entries.** Holds today:
+  `ReqnrollConfigChangedHandler` publishes `BindingRegistryPatchedNotification`, which reparses open
+  files and schedules the debounced closed-file rescan.
 
-Given I3, a newer content generation in practice comes with a registry version that is equal or
-higher, so the two orderings agree. If a write ever has a newer generation but a *lower* registry
-version, the store logs a warning ("I3 violated") rather than silently accepting it.
+Given I3, a derivation that starts later has every component equal or higher, so lexicographic order
+and "dominates on every component" agree in practice; the order of the components only matters as a
+tie-break that shouldn't arise. If a write is newer on an earlier component but *lower* on a later
+one, the store logs a warning ("I3 violated") rather than silently accepting it.
 
 ### 3.3 Write rule
 
@@ -179,10 +223,11 @@ A guarded store (`BindingMatchService.Store`, `DocumentBufferService.UpdateTags`
 entry `e` for key `k` only if **both** hold:
 
 1. **Not superseded:** `e.Stamp.ContentGeneration == generations.Current(k.DocumentId)`. If the
-   document has changed since the input was read, drop the write. This check covers R2 and the
-   resurrection case of R4, where there's no stored entry to compare against.
-2. **Not stale:** there's no stored entry, or `e.Stamp >= stored.Stamp`. This covers R1, R3 and the
-   stale-tags case of R4.
+   document has changed since the input was read, drop the write. This check covers R2 and R5, where
+   the entry the late write would overwrite has been invalidated, so there's nothing to compare
+   against. (It would also have covered R4b, already fixed by making `UpdateTags` update-only.)
+2. **Not stale:** there's no stored entry, or `e.Stamp >= stored.Stamp`. This covers R1, R3, R6 and
+   R4a.
 
 Equal stamps are accepted. Two scans of identical inputs are interchangeable. A closed file can also
 change on disk without a watched-file notification, so the second scan may have newer disk text
@@ -215,12 +260,14 @@ semantic-token invalidation and the `MatchCacheChangedNotification` publish.
 |---|---|
 | `IDocumentGenerations` (new, `LSP.Core/Documents`) | `long Current(string documentId)`, `long Bump(string documentId)`. Implemented with a `ConcurrentDictionary<string,long>`, case-insensitive like `DocumentBufferService`. Singleton. |
 | `DocumentBuffer` | adds `long Generation`. `Update(uri, version, generation, text)`. |
-| `DocumentBufferService.UpdateTags` | `bool UpdateTags(uri, generation, tags)`. Applies only if the buffer **exists** and `buffer.Generation == generation`. **Never creates a buffer.** Fixes R4. |
+| `IProjectConfigGenerations` (new, `LSP.Core`) | `long Current(ProjectOwner)`, `long Bump(ProjectOwner)`. Same shape as `IDocumentGenerations`. Bumped by `ReqnrollConfigChangedHandler`. Fixes R6 together with the `Store` rule. |
+| `DocumentBufferService.UpdateTags` | Already update-only and returns `bool` (#938). Becomes `bool UpdateTags(uri, generation, tags)`: applies only if `buffer.Generation == generation`. Fixes R4a. |
+| `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches` | Bumps the generation of each closed feature file it edits, then invalidates and calls `RescanClosedFileAsync` for it. Fixes R5's missing re-derivation; the `Store` rule fixes its late-write case. |
 | `FeatureBindingMatchSet` | adds `DerivationStamp Stamp`. `DocumentVersion` stays (diagnostics need it on the wire). `RegistryVersion` becomes `Stamp.RegistryVersion`. |
 | `BindingMatchService.Store` | the rule from §3.3. Returns `StoreOutcome`. Counts accepted and rejected writes in `GetCacheStats`. |
 | `BindingMatchService.InvalidateAllForDocument` | no change. The generation bump that comes before it (on `didClose`, membership removal) is what rejects late writes. |
 | `SemanticTokensService` cache | key becomes `(uri, Stamp)` instead of `(uri, clientVersion)`. The explicit `InvalidateCache` call in `ParseAsync` becomes unnecessary and is removed. `PurgePriorVersions` compares stamps. |
-| `FeatureTagIndex` | compares `Generation` instead of the client `Version` (same logic, and it now works for closed files). |
+| `FeatureTagIndex` | compares `Generation` instead of the client `Version` (same logic, and it now works for closed files). It already records the feature language each file's counts were parsed with; that check can move to `ConfigGeneration`. |
 
 ### 3.6 Relationship to `ParseCoordinator`
 
@@ -265,8 +312,9 @@ property can be added later through the normal telemetry-inventory process.
 
 | Alternative | Why not |
 |---|---|
-| **Formal CQRS** (command/query markers, a dispatcher, one handler per operation) | Mostly renames what is already there. OmniSharp already dispatches requests and notifications through MediatR. It doesn't address any of R1–R4. |
-| **Route every writer through `ParseCoordinator`** | Solves R1/R2/R4 for one URI but not R3: the race is between two *registry* events, not two edits of one file. It also puts bulk scans behind interactive edits. |
+| **Formal CQRS** (command/query markers, a dispatcher, one handler per operation) | Mostly renames what is already there. OmniSharp already dispatches requests and notifications through MediatR. It doesn't address any of R1–R6. |
+| **Route every writer through `ParseCoordinator`** | Solves R1/R2/R4a/R5 for one URI but not R3 or R6: those races are between two *project-level* events (registry or configuration), not two edits of one file. It also puts bulk scans behind interactive edits. |
+| **Fix each path locally** (have `didClose` wait for the URI's pending parse; compare client versions in `UpdateTags`; rescan after rename) | Fixes R2, R4a and R5's missing rescan, and is cheaper. It can't fix R1, R3 or R6: those are about writes from *different* paths or *different* triggers to the same key, and only a check at the store can order them. The rename rescan is still worth doing on its own (Phase 1b). |
 | **Componentwise dominance instead of lexicographic order** | Leaves an "incomparable" case whose tie-break can flip back and forth (§3.2). |
 | **Client version plus a "closed" marker instead of a server generation** | Client versions restart when a file is reopened, so a reopened file's version 1 compares as older than the previous session's version 40. Fixing that requires a server-side counter anyway. |
 | **Whole-workspace immutable snapshot** (Roslyn `Solution` model) | Every keystroke would look like it invalidated everything unless we also build Roslyn-style tracking of which parts changed. Too large for the problem. |
@@ -288,8 +336,35 @@ property can be added later through the normal telemetry-inventory process.
   which is the right behaviour. Making it `readonly` is a small cleanup bundled into Phase 4.
 - **Q4. `ParseAsync(uri, version)` already bails when `snapshot.Version != version`.** That check
   runs at the *start* of the parse, not at the write. It stays; the rule in §3.3 supersedes it in
-  practice.
+  practice. The same goes for its "buffer gone" bail-out after `UpdateTags` (#938).
+- **Q5. Other configuration inputs.** Only the feature language was found to change how a feature
+  file is derived. If another project setting starts to affect parsing or matching, it must bump the
+  config generation through the same handler, or I4 breaks.
+- **Q6. Is R5's scan-then-rename overlap real?** It needs a closed-file scan of the project to be in
+  progress while a rename is applied. Phase 0 tests it; if it can't be driven deterministically, the
+  rescan in Phase 1b still fixes the user-visible part (files dropping out of Find Usages).
 - **Risk: a wrongly rejected write leaves a cached entry missing or stale.** This is the main risk:
   an I1 gap means rule 1 drops a write and nothing follows it up. That's why Phase 4 ships in
   **log-only mode** first. Counters and logs over real sessions show whether any rejection was
   unexpected before enforcement is switched on.
+
+## 6. Revision 2026-11-14
+
+Rechecked against `main` at 352a2608. The core finding holds: nothing reads
+`FeatureBindingMatchSet.DocumentVersion` or `RegistryVersion`, and `BindingMatchService.Store` is
+still last-writer-wins. Changes to this document:
+
+- **R4b marked fixed** by #938 (`UpdateTags` update-only; `ParseAsync` drops its result when the
+  buffer is gone). R4 is now only R4a.
+- **R2 narrowed** to the window left after #938: `UpdateTags` succeeds, then the close sequence runs,
+  then `Store`.
+- **R3 reworded**: the race is per file, because each file's scan reads `provider.Current` when it
+  reaches that file. Three triggers can start overlapping scans, including the `reqnroll.json`
+  reconcile added after the first draft.
+- **R5 added**: rename invalidates closed feature files without bumping or rescanning them. Adds a
+  bump site, an I1 entry and a rescan.
+- **R6 added**: project configuration (feature language) is a derivation input. The stamp gains a
+  per-project `ConfigGeneration` and invariant I4.
+- §1.2 writer table updated (rename invalidation, config reconcile through the patch path, no
+  separate feature-rescan debouncer caller of `RescanClosedFileAsync`).
+- Alternatives: added "fix each path locally" and why it isn't enough.

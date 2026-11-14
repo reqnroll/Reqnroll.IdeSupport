@@ -1,8 +1,13 @@
 # Versioned Derived State — Migration Plan
 
-**Status: PROPOSED (2026-10-05).** Tracking issue: #906. Design:
+**Status: PROPOSED (2026-10-05), revised 2026-11-14.** Tracking issue: #906. Design:
 [Versioned-Derived-State-Design.md](Versioned-Derived-State-Design.md). Section references (§) are to
-that document; R1–R4 are the stale-write paths in its §1.3.
+that document; R1–R6 are the stale-write paths in its §1.3 (R4b is already fixed, so R4 here means
+R4a).
+
+**Before Phase 0:** this branch was written against a much older `main`. Rebase it (or start Phase 0
+from a fresh branch off `main`) and re-read §1.2 against the code once more; the writer list is the
+part most likely to drift.
 
 This plan says what to build, in what order, and what "done" means for each step. Each phase is
 **one PR**: it can ship on its own, it leaves `main` releasable, and it can be undone with a plain
@@ -15,12 +20,13 @@ untouched throughout.
 
 | Phase | What | Changes behaviour? | Fixes | Size |
 |---|---|---|---|---|
-| 0 | Characterisation tests for R1–R4 (skipped until fixed) | No | — | S |
-| 1 | `IDocumentGenerations` + bump wiring | No (nothing reads it yet) | — | S |
+| 0 | Characterisation tests for R1–R3, R4a, R5, R6 (skipped until fixed) | No | — | S |
+| 1 | `IDocumentGenerations` + `IProjectConfigGenerations` + bump wiring | No (nothing reads them yet) | — | S |
+| 1b | Rescan closed feature files after a rename edits them | **Yes** | R5 (missing re-derivation) | S |
 | 2 | Stamp plumbing: `DocumentBuffer.Generation`, `FeatureBindingMatchSet.Stamp` | No | — | M |
-| 3 | Guard `DocumentBufferService.UpdateTags` | **Yes** | R4 | S |
+| 3 | Generation check in `DocumentBufferService.UpdateTags` | **Yes** | R4a | S |
 | 4a | Guard `BindingMatchService.Store` — **log-only** | No (logs and counters only) | — | S |
-| 4b | Enforce the `Store` guard; skip follow-on work on rejection | **Yes** | R1, R2, R3 | M |
+| 4b | Enforce the `Store` guard; skip follow-on work on rejection | **Yes** | R1, R2, R3, R5 (late write), R6 | M |
 | 5 | Semantic-token cache and `FeatureTagIndex` keyed by stamp | **Yes** (removes the explicit invalidation) | — | S |
 | 6 | *(conditional)* Generation for cross-document reads | Yes | §3.7 | S |
 | 7 | Doc reconciliation | No | — | S |
@@ -33,20 +39,33 @@ nothing follows up (design §5) — is observed in real sessions before it is en
 
 ## Phase 0 — Characterisation tests
 
-**Goal:** turn R1–R4 from code-reading findings into failing tests, so the later phases have an
-objective "fixed" signal and so we find out early if any of them can't actually happen.
+**Goal:** turn R1–R3, R4a, R5 and R6 from code-reading findings into failing tests, so the later
+phases have an objective "fixed" signal and so we find out early if any of them can't actually happen.
 
 **Scope**
 
-- `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Tagging/GherkinDocumentTaggerServiceRaceTests.cs` (new):
-  - **R1:** a fake `IDocumentBufferService` whose `TryGet` returns "not open" for the guard, then
-    simulates a `didOpen` + `ParseAsync` before `ScanClosedFileAsync` reaches `Store`. Assert the
-    open file's match set survives.
-  - **R2:** start `ParseAsync`, then run the `didClose` sequence (`Remove`, `InvalidateAllForDocument`,
-    `RescanClosedFileAsync`) before its `Store`. Assert the cache holds the disk-based entry.
-  - **R4a:** `ParseAsync` for buffer N, with `Update(N+1)` landing before `UpdateTags`. Assert the
-    N+1 buffer's `Tags` are not N's tags.
-  - **R4b:** `ParseAsync` with `Remove` landing before `UpdateTags`. Assert no buffer exists afterwards.
+- `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Tagging/GherkinDocumentTaggerServiceRaceTests.cs` (new),
+  next to the existing `GherkinDocumentTaggerServiceCloseRaceTests` (which already covers R4b; don't
+  duplicate it):
+  - **R1:** a fake `IDocumentBufferService` whose `TryGet` returns "not open" for the guard, and a
+    fake tag parser that, during the closed scan's parse, simulates a `didOpen` + `ParseAsync`. Assert
+    the open file's match set survives the closed scan's `Store`.
+  - **R2:** the narrowed window left after #938. A fake `IDocumentBufferService` whose `UpdateTags`
+    returns `true` and then, before returning, runs the `didClose` sequence (`Remove`,
+    `InvalidateAllForDocument`, `RescanClosedFileAsync`). Assert the cache holds the disk-based entry
+    after `ParseAsync`'s `Store`.
+  - **R4a:** `ParseAsync` for buffer N, with `Update(N+1)` landing after the version check and before
+    `UpdateTags` (inject it from the fake tag parser). Assert the N+1 buffer's `Tags` are not N's tags.
+  - **R6:** two closed scans of the same file against the same registry, the first with the old
+    feature language and the second with the new one, where the old-language scan stores last. Assert
+    the new-language set is kept.
+- `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Features/Rename/RenamePostApplyCoordinatorTests.cs`
+  (existing):
+  - **R5a:** after a rename edits a closed feature file, assert its match set is repopulated (not just
+    invalidated).
+  - **R5b:** a closed scan that read the pre-rename text stores after the rename's invalidation.
+    Assert the post-rename entry is kept (design Q6: drop this test if the overlap can't be driven
+    deterministically).
 - `tests/LSP/Reqnroll.IdeSupport.LSP.Core.Tests/Matching/BindingMatchServiceOrderingTests.cs` (new):
   - **R3:** store a closed-file set built against registry v2, then one built against v1, for the same
     key. Assert the v2 set is kept.
@@ -57,8 +76,9 @@ interfaces, so no production seams are needed. Follow the "Core tests avoid `Stu
 the net10 Core tests don't load WPF.
 
 Each test asserts the **desired** behaviour and is marked
-`[Fact(Skip = "Versioned derived state #906 — fixed in Phase N")]`. Each fixing phase removes its
-skips.
+`[Fact(Skip = "Stale derived-state write is accepted until versioned-derived-state Phase N")]`. Don't
+put the issue number in the skip text or in test comments: code describes what it does, not which
+issue asked for it. Each fixing phase removes its skips.
 
 **Exit criteria:** each test fails when its `Skip` is temporarily removed. If one passes, the race it
 describes can't happen as written. Update design §1.3 and drop that test rather than carrying a fix
@@ -70,7 +90,8 @@ for a race that doesn't exist.
 
 ## Phase 1 — `IDocumentGenerations`
 
-**Goal:** the server keeps a per-URI content generation (design §3.1). Nothing reads it yet.
+**Goal:** the server keeps a per-URI content generation and a per-project config generation (design
+§3.1). Nothing reads them yet.
 
 **Scope**
 
@@ -78,20 +99,52 @@ for a race that doesn't exist.
   - `long Current(string documentId)` and `long Bump(string documentId)`;
   - backed by a case-insensitive `ConcurrentDictionary<string,long>` with `AddOrUpdate`. Increments
     are commutative, so `AddOrUpdate` re-running its update function under contention is harmless.
-- Register as a singleton in `Hosting/ServiceCollectionExtensions.cs`.
+- `IProjectConfigGenerations` + `ProjectConfigGenerations` in `LSP.Core`: the same shape, keyed by
+  `ProjectOwner`.
+- Register both as singletons in `Hosting/ServiceCollectionExtensions.cs`.
 - Bump sites:
   - `TextDocumentSyncHandler`: `didOpen`, `didChange` (before `Update`), and `didClose` (before
     `Remove`), for `.feature` files only;
+  - `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches`: each closed feature file it edits,
+    before the invalidation;
+  - `ReqnrollConfigChangedHandler`: the changed project's config generation, before it publishes
+    `BindingRegistryPatchedNotification`; in the workspace-root fallback, every project under the
+    root;
   - a feature file leaving the project via a membership delta. `MembershipIndex` currently purges only
     files in the binding role (`ProjectBindingFilesRemovedNotification`), and no path for a feature
     file leaving was found (design I1). Confirm this. If it's a gap, add the bump **and**
     `InvalidateAllForDocument` for removed feature files together, so I1 holds.
 
 **Tests:** unit tests for `DocumentGenerations` (starts at 0, monotonic, kept after close,
-case-insensitive), plus sync-handler tests asserting one bump per event.
+case-insensitive) and `ProjectConfigGenerations`, plus handler tests asserting one bump per event
+(sync handler, rename coordinator, config handler).
 
-**Exit criteria:** every event in design §3.1 bumps exactly once. The design's I1 table is confirmed
-against the code, and corrected in the design doc if not.
+**Exit criteria:** every event in design §3.1 bumps exactly once. The design's I1 and I4 lists are
+confirmed against the code, and corrected in the design doc if not.
+
+---
+
+## Phase 1b — Rescan closed feature files after a rename (fixes R5's missing re-derivation)
+
+**Goal:** a closed feature file edited by a rename stays visible to Find Usages, usage counts and
+later renames, instead of dropping out of the cache until the next project scan.
+
+**Scope**
+
+- `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches`: after invalidating a closed feature
+  file, call `IGherkinDocumentTaggerService.RescanClosedFileAsync` for it. The rename has already been
+  applied by the client, so check that the disk text is the post-rename text when the rescan runs;
+  if the client applies edits in memory without saving, the rescan must wait for the save or use the
+  edited text the coordinator already has. Settle this from the existing coordinator tests and a live
+  check before choosing.
+
+This doesn't depend on Phases 2–4 and can ship any time after Phase 0. It's a fix of its own even
+if the rest of the plan stops.
+
+**Tests:** remove the skip on R5a.
+
+**Exit criteria:** R5a passes. Live: rename a step from a `.cs` file with a closed feature file that
+uses it, then run Find Usages on the renamed binding; the closed file is listed.
 
 ---
 
@@ -102,8 +155,8 @@ enforced.
 
 **Scope**
 
-- `DerivationStamp` record struct in `LSP.Core/Matching` (design §3.2), with lexicographic ordering
-  and `IComparable`.
+- `DerivationStamp(ContentGeneration, ConfigGeneration, RegistryVersion)` record struct in
+  `LSP.Core/Matching` (design §3.2), with lexicographic ordering and `IComparable`.
 - `FeatureBindingMatchSet`:
   - adds `DerivationStamp Stamp`;
   - `RegistryVersion` becomes `Stamp.RegistryVersion`;
@@ -115,38 +168,43 @@ enforced.
     snapshots;
   - `ScanClosedFileAsync` takes it from `IDocumentGenerations.Current` **before** its caller reads the
     disk text. That means passing it in from `BindingRegistryChangedHandler` and
-    `RescanClosedFileAsync`, both of which read the file before calling.
+    `RescanClosedFileAsync`, both of which read the file before calling;
+  - both read `IProjectConfigGenerations.Current` for the owner before
+    `ProjectFeatureLanguage.For(...)`. In `ParseAsync` that's the primary owner, which is also the
+    match-set key's owner.
 
-**Tests:** stamp ordering unit tests (all four quadrants plus equal); construction sites populate
-stamps.
+**Tests:** stamp ordering unit tests (each component deciding on its own, mixed cases, equal);
+construction sites populate stamps.
 
 **Exit criteria:** no behaviour change. The full `LSP.Core.Tests` and `LSP.Server.Tests` suites pass
 unchanged.
 
 ---
 
-## Phase 3 — Guard the buffer's tag write (fixes R4)
+## Phase 3 — Generation check on the buffer's tag write (fixes R4a)
 
-**Goal:** tags are attached only to the buffer they were computed from, and a closed buffer is never
-brought back.
+**Goal:** tags are attached only to the buffer they were computed from.
+
+Most of the original phase already shipped with #938: `UpdateTags` is update-only (a
+`TryGetValue` / `TryUpdate` loop), returns `bool`, never creates a buffer, and `ParseAsync` drops its
+result when it returns `false`. What's left:
 
 **Scope**
 
-- `IDocumentBufferService.UpdateTags(uri, generation, tags)` returns `bool`:
-  - it is applied only if the buffer exists **and** `buffer.Generation == generation`;
-  - it uses an `AddOrUpdate`-free compare-and-swap loop (`TryGetValue` / `TryUpdate`);
-  - it never creates a buffer.
-- `ParseAsync`: if `UpdateTags` returns `false`, log at verbose and return early. That skips the match
-  `Store` and the semantic-token invalidation, because the parse is superseded.
+- `IDocumentBufferService.UpdateTags(uri, generation, tags)`: inside the existing loop, also return
+  `false` when `existing.Generation != generation`.
+- `ParseAsync`: passes the generation from its snapshot. The existing `false` branch already skips
+  the match `Store` and the semantic-token invalidation; update its log text so it covers "superseded"
+  as well as "closed".
 
 This is enforced directly with no log-only step. A rejected tag write always has a newer parse
 already scheduled behind it on the same `ParseCoordinator` chain (`didChange` always schedules one),
 or the document is closed, in which case dropping is correct.
 
-**Tests:** remove the skips on R4a and R4b. Add a test that an `UpdateTags` for an unknown URI is a
-no-op.
+**Tests:** remove the skip on R4a. `GherkinDocumentTaggerServiceCloseRaceTests` and the existing
+"unknown URI is a no-op" coverage must stay green.
 
-**Exit criteria:** R4 tests pass. Full suites pass. A live smoke test in VS Code — type quickly in a
+**Exit criteria:** R4a passes. Full suites pass. A live smoke test in VS Code — type quickly in a
 `.feature` file, close it mid-edit, reopen it — shows correct colouring and no lost CodeLens.
 
 ---
@@ -179,7 +237,7 @@ on the tracking issue.
 
 ---
 
-## Phase 4b — Enforce the `Store` guard (fixes R1–R3)
+## Phase 4b — Enforce the `Store` guard (fixes R1–R3, R5's late write, R6)
 
 **Scope**
 
@@ -187,7 +245,7 @@ on the tracking issue.
 - `ParseAsync` and `ScanClosedFileAsync` check the returned `StoreOutcome`. On rejection they skip
   `InvalidateCache` and anything downstream that a rejected write would otherwise trigger.
 - `ProjectBindingRegistry.Invalid` becomes `static readonly` (design Q3).
-- Remove the skips on R1, R2 and R3.
+- Remove the skips on R1, R2, R3, R5b and R6.
 - Add a linked-file test (design Q2): one URI, two owners, registries advancing independently.
 
 **Validation:**
@@ -196,7 +254,9 @@ on the tracking issue.
 - the LSP behaviour spec suite;
 - `BindingMatchServiceConcurrencyTests` (#554) still green;
 - live: the #554 reproduction (startup burst on a solution with linked feature files) shows correct
-  step-usage CodeLens counts across three cold starts.
+  step-usage CodeLens counts across three cold starts;
+- live: change `language.feature` in a project's `reqnroll.json` while a rebuild is running; closed
+  feature files in the new language report correct usage counts once both settle.
 
 **Rollback:** revert 4b. 4a's logging stays, so a revert still leaves the diagnostics in place.
 
@@ -212,7 +272,8 @@ on the tracking issue.
   - remove the `_semanticTokenService.InvalidateCache(uri)` call in `ParseAsync`. Its comment
     explains it exists only because tags can change without the client version changing, which the
     registry part of the stamp now covers.
-- `FeatureTagIndex`: compare `Generation` instead of client `Version`.
+- `FeatureTagIndex`: compare `Generation` instead of client `Version`, and `ConfigGeneration`
+  instead of the feature language it records today.
 
 **Tests:**
 
