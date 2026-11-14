@@ -19,7 +19,11 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tagging
         /// Used for workspace-wide scans of feature files that are not currently open
         /// (e.g. the initial scan triggered on startup by a full binding-registry replacement).
         /// </summary>
-        Task ScanClosedFileAsync(DocumentUri uri, string text, LspReqnrollProject project);
+        /// <param name="contentGeneration">
+        /// The document's content generation, read by the caller <b>before</b> it read
+        /// <paramref name="text"/>, so the stored stamp is never newer than the text it describes.
+        /// </param>
+        Task ScanClosedFileAsync(DocumentUri uri, string text, LspReqnrollProject project, long contentGeneration);
 
         /// <summary>
         /// Re-scans <paramref name="uri"/> from disk as a closed file for every project that owns
@@ -36,6 +40,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tagging
         /// edited it in the client). No-op when the file has no owning project, and for each owner
         /// while the file is open.
         /// </summary>
-        Task ScanClosedFileForAllOwnersAsync(DocumentUri uri, string text);
+        /// <param name="contentGeneration">The document's content generation that <paramref name="text"/> belongs to.</param>
+        Task ScanClosedFileForAllOwnersAsync(DocumentUri uri, string text, long contentGeneration);
     }
 }

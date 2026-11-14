@@ -15,6 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
@@ -63,6 +64,7 @@ public class BindingRegistryChangedHandler :
     private readonly IOperationDurationRecorder         _recorder;
     private readonly IFileSystemForIDE                  _fileSystem;
     private readonly CsFileReconciliationSelector       _csFileSelector;
+    private readonly IDocumentGenerations               _documentGenerations;
 
     /// <summary>Initializes a new instance of the <see cref="BindingRegistryChangedHandler"/> class.</summary>
     public BindingRegistryChangedHandler(
@@ -78,6 +80,7 @@ public class BindingRegistryChangedHandler :
         IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IFileSystemForIDE fileSystem,
+        IDocumentGenerations documentGenerations,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService  = documentBufferService;
@@ -92,6 +95,7 @@ public class BindingRegistryChangedHandler :
         _parseCoordinator       = parseCoordinator;
         _logger                 = logger;
         _fileSystem             = fileSystem;
+        _documentGenerations    = documentGenerations;
         _recorder               = recorder ?? NullOperationDurationRecorder.Instance;
         _csFileSelector         = new CsFileReconciliationSelector(scopeManager, csharpFileTextCache, fileSystem, logger);
     }
@@ -347,9 +351,11 @@ public class BindingRegistryChangedHandler :
             attempted++;
             try
             {
+                var uri = DocumentUri.FromFileSystemPath(filePath);
+                // Read before the text, so the stamp is never newer than the content it describes.
+                var contentGeneration = _documentGenerations.Current(uri.ToString());
                 var text = await _fileSystem.File.ReadAllTextAsync(filePath, scanToken).ConfigureAwait(false);
-                var uri  = DocumentUri.FromFileSystemPath(filePath);
-                await _taggerService.ScanClosedFileAsync(uri, text, project).ConfigureAwait(false);
+                await _taggerService.ScanClosedFileAsync(uri, text, project, contentGeneration).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (scanToken.IsCancellationRequested)
             {

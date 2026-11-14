@@ -58,7 +58,8 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
 
     private GherkinDocumentTaggerService CreateSut() =>
         new(_bufferService, _tagParser, _registryLookup, _semanticTokenService,
-            _bindingMatchService, _scopeManager, _logger, new FileSystemForIDE());
+            _bindingMatchService, _scopeManager, _logger, new FileSystemForIDE(),
+            new DocumentGenerations(), new ProjectConfigGenerations());
 
     /// <summary>Runs ParseAsync on another thread, simulates didClose while the parse is in flight, then lets the parse finish.</summary>
     private async Task ParseThenCloseMidParseAsync(GherkinDocumentTaggerService sut, DocumentUri uri, int version)

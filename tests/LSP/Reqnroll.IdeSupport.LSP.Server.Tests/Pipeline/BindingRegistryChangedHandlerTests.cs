@@ -13,6 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
@@ -39,6 +40,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly IParseCoordinator     _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IIdeSupportLogger              _logger        = Substitute.For<IIdeSupportLogger>();
     private readonly IFileSystemForIDE            _fileSystem    = new FileSystemForIDE();
+    private readonly IDocumentGenerations         _documentGenerations = new DocumentGenerations();
 
     private readonly IIdeSupportLogger _ideLogger = Substitute.For<IIdeSupportLogger>();
     private readonly LspIdeScope     _ideScope;
@@ -64,7 +66,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         // ScanClosedFileAsync must return a completed Task (NSubstitute default for Task
         // void is already CompletedTask, but be explicit here for clarity).
         _taggerService.ScanClosedFileAsync(
-                Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>())
+                Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>())
             .Returns(Task.CompletedTask);
         // ParseAsync: NSubstitute returns Task.FromResult(null) by default — that is fine
         // since the handler discards the return value.
@@ -82,7 +84,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         => CreateSut(_clientIde);
 
     private BindingRegistryChangedHandler CreateSut(ClientIdeContext clientIde)
-        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem, _documentGenerations);
 
     // ── Closed-file scanning — index-driven (baseline received) ───────────────
 
@@ -102,9 +104,27 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, f1)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, f1)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
         await _taggerService.Received(1).ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
+    }
+
+    [Fact]
+    public async Task ScanAllFeatureFiles_passes_each_files_current_content_generation()
+    {
+        var f1 = Path.Combine(_projectFolder, "A.feature");
+        File.WriteAllText(f1, "Feature: A\n");
+        var uri = DocumentUri.FromFileSystemPath(f1);
+        _documentGenerations.Bump(uri.ToString());
+        _documentGenerations.Bump(uri.ToString());
+
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f1 });
+
+        await CreateSut().Handle(new BindingRegistryReplacedNotification(_project), CancellationToken.None);
+
+        await _taggerService.Received(1).ScanClosedFileAsync(
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, f1)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), 2);
     }
 
     [Fact]
@@ -122,7 +142,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, linked)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, linked)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
     }
 
     [Fact]
@@ -142,9 +162,9 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, f1)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, f1)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
     }
 
     // ── Closed-file scan bound ───────────────────────────────────
@@ -172,7 +192,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.Received(cap).ScanClosedFileAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
         // LogWarning is an extension method over ILogger.Log(LogMessage) -- not itself
         // substitutable -- so the assertion goes through the underlying interface member.
         _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
@@ -200,7 +220,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         await act.Should().NotThrowAsync();
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
         _languageServer.Received(1).SendNotification(
             "reqnroll/refreshCodeLens", Arg.Any<RefreshCodeLensParams>());
     }
@@ -220,7 +240,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, featureFile)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, featureFile)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
     }
 
     [Fact]
@@ -236,7 +256,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
 
         project.Dispose();
     }
@@ -261,7 +281,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         // Already open → ScanClosedFileAsync must NOT be called.
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
     }
 
     // ── Open-file reparsing ───────────────────────────────────────────────────
@@ -373,7 +393,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
         _scopeManager.DidNotReceive().GetIndexedFeatureFiles(Arg.Any<LspReqnrollProject>());
     }
 
@@ -384,7 +404,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem, _documentGenerations);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -415,7 +435,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem, _documentGenerations);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -466,7 +486,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem, _documentGenerations);
 
         var featureFile = Path.Combine(_projectFolder, "A.feature");
         File.WriteAllText(featureFile, "Feature: A\n");
@@ -486,7 +506,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         await capturedRescan!(CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
-            Arg.Is<DocumentUri>(u => FilePathMatches(u, featureFile)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+            Arg.Is<DocumentUri>(u => FilePathMatches(u, featureFile)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>(), Arg.Any<long>());
         _languageServer.Client.Received(1).SendRequest("workspace/codeLens/refresh");
     }
 

@@ -334,12 +334,13 @@ internal sealed class RenamePostApplyCoordinator
                 continue;
 
             // The rename changed this closed file's text, and no didChange will report it.
-            _documentGenerations.Bump(changedUri.ToString());
+            var generation = _documentGenerations.Bump(changedUri.ToString());
             _matchService.InvalidateAllForDocument(changedUri.ToString());
 
             if (pending.ClosedFeatureTexts.TryGetValue(changedUri.ToString(), out var newText))
             {
-                await _taggerService.ScanClosedFileForAllOwnersAsync(changedUri, newText).ConfigureAwait(false);
+                // The staged text is exactly the content this bump records.
+                await _taggerService.ScanClosedFileForAllOwnersAsync(changedUri, newText, generation).ConfigureAwait(false);
                 _logger.LogVerbose($"RenamePostApplyCoordinator: re-derived closed '{changedUri}' from its post-rename text");
             }
             else

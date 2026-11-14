@@ -4,13 +4,28 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 namespace Reqnroll.IdeSupport.LSP.Server.Documents;
 
 /// <summary>The in-memory snapshot of an open document's URI, version, text, and any cached Gherkin tags.</summary>
-public record DocumentBuffer(DocumentUri Uri, int? Version, string Text, IReadOnlyCollection<IdeSupportTag>? Tags = null);
+/// <param name="Generation">
+/// The document's content generation (see <c>IDocumentGenerations</c>) when this text became the
+/// buffer. Unlike <paramref name="Version"/>, which the client assigns and restarts on reopen, it
+/// orders this text against every other text the server has seen for the document, open or closed.
+/// </param>
+public record DocumentBuffer(
+    DocumentUri Uri,
+    int? Version,
+    string Text,
+    IReadOnlyCollection<IdeSupportTag>? Tags = null,
+    long Generation = 0);
 
 /// <summary>Tracks the live text and tag state of documents opened in the editor.</summary>
 public interface IDocumentBufferService
 {
     /// <summary>Replaces the buffer for the given document with new text and version, discarding any cached tags.</summary>
-    void Update(DocumentUri uri, int? version, string text);
+    /// <param name="generation">
+    /// The document's content generation for this text, as returned by bumping it. Defaults to 0 for
+    /// callers that don't track generations; the server's own sync handler always passes it.
+    /// An update carrying a lower generation than the buffer holds is ignored.
+    /// </param>
+    void Update(DocumentUri uri, int? version, string text, long generation = 0);
     /// <summary>Updates the cached Gherkin tags of an existing buffer. Never creates a buffer: returns <see langword="false"/> when the document is not (or no longer) open.</summary>
     bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags);
     /// <summary>Removes the buffer for the given document, typically when it is closed.</summary>
@@ -28,8 +43,16 @@ public class DocumentBufferService : IDocumentBufferService
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
-    public void Update(DocumentUri uri, int? version, string text)
-        => _buffers[uri.ToString()] = new DocumentBuffer(uri, version, text);
+    public void Update(DocumentUri uri, int? version, string text, long generation = 0)
+    {
+        // An update that carries an older generation than the buffer holds is dropped: two changes
+        // to one document can reach here out of order, and the older text must not replace the newer.
+        var buffer = new DocumentBuffer(uri, version, text, Generation: generation);
+        _buffers.AddOrUpdate(
+            uri.ToString(),
+            buffer,
+            (_, existing) => existing.Generation > generation ? existing : buffer);
+    }
 
     /// <inheritdoc/>
     public bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)

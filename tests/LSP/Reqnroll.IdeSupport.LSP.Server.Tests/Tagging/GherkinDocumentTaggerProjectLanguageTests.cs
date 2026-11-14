@@ -2,6 +2,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
@@ -70,7 +71,8 @@ public sealed class GherkinDocumentTaggerProjectLanguageTests : IDisposable
 
     private GherkinDocumentTaggerService CreateSut() =>
         new(_bufferService, _parser, _registryLookup,
-            Substitute.For<ISemanticTokensService>(), _bindingMatchService, _scopeManager, _logger, _fileSystem);
+            Substitute.For<ISemanticTokensService>(), _bindingMatchService, _scopeManager, _logger, _fileSystem,
+            new DocumentGenerations(), new ProjectConfigGenerations());
 
     private void OpenBuffer(DocumentUri uri, string text)
     {
@@ -142,9 +144,9 @@ public sealed class GherkinDocumentTaggerProjectLanguageTests : IDisposable
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "shared", "shared.feature"));
         var sut = CreateSut();
 
-        await sut.ScanClosedFileAsync(uri, FrenchFeature, french);
+        await sut.ScanClosedFileAsync(uri, FrenchFeature, french, contentGeneration: 0);
         var frenchTags = _parser.LastTags;
-        await sut.ScanClosedFileAsync(uri, FrenchFeature, english);
+        await sut.ScanClosedFileAsync(uri, FrenchFeature, english, contentGeneration: 0);
         var englishTags = _parser.LastTags;
 
         // Only the French-configured owner understands the French document.

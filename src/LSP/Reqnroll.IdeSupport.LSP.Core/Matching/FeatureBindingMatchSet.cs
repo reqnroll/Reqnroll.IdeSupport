@@ -29,6 +29,10 @@ public sealed class FeatureBindingMatchSet
     /// CodeLens). Optional and defaults to empty so existing callers (tests, in particular) that
     /// construct a set directly rather than via <see cref="FromTags"/> don't need updating.
     /// </param>
+    /// <remarks>
+    /// Records only the registry version; the content and configuration generations of the
+    /// <see cref="Stamp"/> are 0. Use the <see cref="DerivationStamp"/> overload to record all inputs.
+    /// </remarks>
     public FeatureBindingMatchSet(
         string documentId,
         ProjectOwner owner,
@@ -36,12 +40,29 @@ public sealed class FeatureBindingMatchSet
         int registryVersion,
         IReadOnlyList<StepBindingMatch> steps,
         IReadOnlyList<FeatureScenarioInfo>? scenarios = null)
+        : this(documentId, owner, documentVersion, new DerivationStamp(0, 0, registryVersion), steps, scenarios)
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="FeatureBindingMatchSet"/> class.</summary>
+    /// <param name="stamp">The versions of the inputs these matches were built from.</param>
+    /// <param name="scenarios">
+    /// Every Scenario/Scenario Outline definition in the document (used by the hook-match-count
+    /// CodeLens). Optional and defaults to empty.
+    /// </param>
+    public FeatureBindingMatchSet(
+        string documentId,
+        ProjectOwner owner,
+        int? documentVersion,
+        DerivationStamp stamp,
+        IReadOnlyList<StepBindingMatch> steps,
+        IReadOnlyList<FeatureScenarioInfo>? scenarios = null)
     {
         Key = new MatchSetKey(
             documentId ?? throw new ArgumentNullException(nameof(documentId)),
             owner.IsKnown ? owner : ProjectOwner.Unknown);
         DocumentVersion = documentVersion;
-        RegistryVersion = registryVersion;
+        Stamp           = stamp;
         Steps           = steps ?? throw new ArgumentNullException(nameof(steps));
         Scenarios       = scenarios ?? Array.Empty<FeatureScenarioInfo>();
     }
@@ -55,11 +76,18 @@ public sealed class FeatureBindingMatchSet
     /// <summary>The owning project for this match set (derived from <see cref="Key"/>).</summary>
     public ProjectOwner Owner => Key.Owner;
 
-    /// <summary>The feature document version these matches were computed for, when known.</summary>
+    /// <summary>
+    /// The client's document version these matches were computed for, when the document was open.
+    /// Kept for messages that carry it on the wire (for example published diagnostics); ordering of
+    /// derived state uses <see cref="Stamp"/>.
+    /// </summary>
     public int? DocumentVersion { get; }
 
+    /// <summary>The versions of the text, configuration and binding registry these matches were built from.</summary>
+    public DerivationStamp Stamp { get; }
+
     /// <summary>The <see cref="ProjectBindingRegistry"/> version these matches were computed against.</summary>
-    public int RegistryVersion { get; }
+    public int RegistryVersion => Stamp.RegistryVersion;
 
     /// <summary>Gets every step binding match in this feature document.</summary>
     public IReadOnlyList<StepBindingMatch> Steps { get; }
@@ -93,11 +121,26 @@ public sealed class FeatureBindingMatchSet
     /// A single step can emit both a DefinedStep and an UndefinedStep tag (e.g. a scenario outline
     /// whose example rows partly match), but both reference the same <see cref="MatchResult"/> at the
     /// same span; such duplicates are collapsed so the set holds one entry per step.
+    /// This overload records only the registry version; the content and configuration generations
+    /// of the <see cref="Stamp"/> are 0.
     /// </remarks>
     public static FeatureBindingMatchSet FromTags(
         string documentId,
         int? documentVersion,
         int registryVersion,
+        IEnumerable<IdeSupportTag> tags,
+        ProjectOwner owner = default)
+        => FromTags(documentId, documentVersion, new DerivationStamp(0, 0, registryVersion), tags, owner);
+
+    /// <summary>
+    /// Builds a match set from the flattened tag collection produced by <c>IdeSupportTagParser</c>,
+    /// recording the versions of the inputs it was built from.
+    /// </summary>
+    /// <param name="stamp">The versions of the text, configuration and binding registry the tags were built from.</param>
+    public static FeatureBindingMatchSet FromTags(
+        string documentId,
+        int? documentVersion,
+        DerivationStamp stamp,
         IEnumerable<IdeSupportTag> tags,
         ProjectOwner owner = default)
     {
@@ -162,6 +205,6 @@ public sealed class FeatureBindingMatchSet
             .OrderBy(s => s.Range.Start)
             .ToArray();
 
-        return new FeatureBindingMatchSet(documentId, owner, documentVersion, registryVersion, steps, scenarios);
+        return new FeatureBindingMatchSet(documentId, owner, documentVersion, stamp, steps, scenarios);
     }
 }

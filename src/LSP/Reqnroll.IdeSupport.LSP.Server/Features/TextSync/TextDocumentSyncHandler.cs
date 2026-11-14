@@ -129,8 +129,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // The editor buffer becomes the document's text. Bump before the buffer changes, so a
         // derivation that started on the old text already finds a newer generation when it
         // finishes and is treated as superseded; the re-derivation this change triggers replaces it.
-        _documentGenerations.Bump(uri.ToString());
-        _documentBufferService.Update(uri, version, text);
+        // The buffer stores the generation with its text, so a reader never pairs them separately.
+        var generation = _documentGenerations.Bump(uri.ToString());
+        _documentBufferService.Update(uri, version, text, generation);
         if (isNewOpen)
             ReportFeatureFileOpened(uri);
 
@@ -173,8 +174,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         }
 
         _logger.LogInfo($"Document changed: {uri} (version {version})");
-        _documentGenerations.Bump(uri.ToString()); // before the buffer changes: see didOpen
-        _documentBufferService.Update(uri, version, text);
+        var generation = _documentGenerations.Bump(uri.ToString()); // before the buffer changes: see didOpen
+        _documentBufferService.Update(uri, version, text, generation);
 
         // Off the shared Serial dispatch lane -- see the matching didOpen comment.
         _parseCoordinator.Schedule(uri, async ct =>
