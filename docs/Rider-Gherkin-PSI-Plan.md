@@ -478,14 +478,18 @@ unit-tested; **not yet run in a live Rider.**
     IDE extensions put it into every test project.
   - `GutterRunOutcomes` (frontend) starts the listener on every server start, so the breadcrumb exists. On the
     `changed` push it applies outcomes that changed to the failed-step marks and the Run lens results.
+- **Live-checked 2026-11-14 (Rider 2026.2.3.1, MSTest on VSTest, Quickstart sample):** a scenario run from
+  its gutter mark reached the server as one `RiderTestRunner` result. Rider's captured output carried the
+  Reqnroll step trace, so the server recorded all five steps with the failing one as `Error`, and the frontend
+  re-read the outcome right after the push.
 - **Still to check live:**
   - Outline-row marks for each framework.
   - NUnit and xUnit at all.
   - Debug stopping on a `.feature` breakpoint.
   - The refresh after discovery.
   - Whether the early unresponsiveness recurs.
-  - Failed-step marks after a gutter run, for each framework; in particular, whether Rider's result output
-    carries the Reqnroll step trace, and whether row display names match across runs.
+  - Failed-step marks after a gutter run with NUnit, xUnit and MTP projects, and for outline rows (whether row
+    display names match across runs).
   - Multi-target projects, which may produce one element per target framework. Only the first gets the line's
     mark, and outcomes are looked up under the first target's output only.
 
