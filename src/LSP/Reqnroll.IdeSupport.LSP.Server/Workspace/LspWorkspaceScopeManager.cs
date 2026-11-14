@@ -155,8 +155,10 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // output-assembly file watcher (WatchedFilesHandler) never gets registered there and
             // a plain rebuild — same output path, same TFM — would otherwise trigger nothing at
             // all. The assembly-hash guard in ConnectorDiscoveryService.ComputeHash already makes
-            // a redundant trigger a cheap no-op, so being unconditional here costs nothing when
-            // the output path/TFM didn't change and the assembly is actually unchanged.
+            // a redundant trigger after a finished run a cheap no-op, and
+            // ConnectorBindingRegistryProvider.TriggerRefresh ignores a trigger for the same assembly
+            // while a run for it is still in flight (the preload push followed by the LSP re-send),
+            // so being unconditional here costs nothing when the assembly is actually unchanged.
             TriggerBindingDiscovery(project);
 
             // The same re-send is the only signal a client that never sends
