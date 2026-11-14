@@ -60,6 +60,13 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     private readonly object _cts_lock = new();
     private CancellationTokenSource? _cts;
 
+    // The assembly stamp (path + last-write time) the in-flight run was scheduled for, and that
+    // run's token; null when no run is pending or running. Guarded by _cts_lock. Lets TriggerRefresh
+    // recognise a no-change re-send (same assembly, run not finished) and not restart discovery.
+    private string? _inFlightStamp;
+    private CancellationToken _inFlightToken;
+    private readonly IFileSystemForIDE _fileSystem;
+
     // bool arg = isFullReplacement: true for connector runs, false for Roslyn per-file patches.
     private event EventHandler<bool>? _bindingRegistryChanged;
 
@@ -74,7 +81,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
         ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null)
         : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService,
-            featureFileLookup)
+            featureFileLookup, fileSystem)
     {
     }
 
@@ -108,9 +115,11 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         IConnectorDiscoveryService discoveryService,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService,
-        IProjectFeatureFileLookup? featureFileLookup = null)
+        IProjectFeatureFileLookup? featureFileLookup = null,
+        IFileSystemForIDE? fileSystem = null)
     {
         _featureFileLookup = featureFileLookup;
+        _fileSystem       = fileSystem ?? new FileSystemForIDE();
         _project          = project;
         _logger           = logger;
         _discoveryService = discoveryService;
@@ -154,9 +163,17 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// Schedules a debounced discovery run.  Any in-flight run is cancelled immediately;
     /// the new run starts after <c>500 ms</c> to absorb rapid successive triggers (e.g.
     /// several output files being written by a build).
+    /// <para>
+    /// A trigger is skipped when a run for the very same output assembly (same path and
+    /// last-write time) is still pending or running: the in-flight run will already see exactly what
+    /// this trigger would, so restarting it would only throw its work away (and the connector process
+    /// it launched cannot be cancelled). A rebuilt assembly has a new stamp and always restarts.
+    /// </para>
     /// </summary>
     public void TriggerRefresh()
     {
+        var stamp = TryGetAssemblyStamp();
+
         CancellationTokenSource? oldCts;
         var newCts = new CancellationTokenSource();
         // Captured immediately after construction, before newCts is published to _cts below --
@@ -169,8 +186,19 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
         lock (_cts_lock)
         {
+            if (stamp != null && stamp == _inFlightStamp)
+            {
+                _logger.LogVerbose(
+                    $"[{_project.ProjectName}] Discovery already in flight for the same assembly; " +
+                    "ignoring duplicate trigger.");
+                newCts.Dispose();
+                return;
+            }
+
             oldCts = _cts;
             _cts   = newCts;
+            _inFlightStamp = stamp;
+            _inFlightToken = token;
         }
 
         oldCts?.Cancel();
@@ -262,9 +290,51 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         _currentLock.Dispose();
     }
 
+    /// <summary>
+    /// The current output assembly's path and last-write time, or null when it does not exist (or
+    /// cannot be read), in which case nothing is deduplicated.
+    /// </summary>
+    private string? TryGetAssemblyStamp()
+    {
+        try
+        {
+            var path = _project.OutputAssemblyPath;
+            if (string.IsNullOrEmpty(path) || !_fileSystem.File.Exists(path))
+                return null;
+            return $"{path}@{_fileSystem.File.GetLastWriteTimeUtc(path).Ticks}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Marks the run owning ct as finished so the next trigger for the same assembly may start one
+    // (e.g. after a failed run). A superseded run must not clear its successor's stamp.
+    private void ClearInFlight(CancellationToken ct)
+    {
+        lock (_cts_lock)
+        {
+            if (_inFlightToken == ct)
+                _inFlightStamp = null;
+        }
+    }
+
     // ── Discovery loop ────────────────────────────────────────────────────────
 
     private async Task RunDiscoveryAsync(CancellationToken ct)
+    {
+        try
+        {
+            await RunDiscoveryCoreAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            ClearInFlight(ct);
+        }
+    }
+
+    private async Task RunDiscoveryCoreAsync(CancellationToken ct)
     {
         // Times only the discovery run itself (not the debounce); declared outside the try so the
         // failure event can report it too.

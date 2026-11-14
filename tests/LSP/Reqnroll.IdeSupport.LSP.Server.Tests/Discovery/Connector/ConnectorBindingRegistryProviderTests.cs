@@ -29,7 +29,19 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         _project = DiscoveryTestSupport.MakeProject(_ideScope, _folder);
     }
 
-    public void Dispose() => _project.Dispose();
+    public void Dispose()
+    {
+        _project.Dispose();
+        try { if (Directory.Exists(_folder)) Directory.Delete(_folder, recursive: true); }
+        catch (IOException) { /* best-effort temp cleanup */ }
+    }
+
+    private void GivenBuiltAssembly(DateTime lastWriteUtc)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_project.OutputAssemblyPath)!);
+        File.WriteAllText(_project.OutputAssemblyPath, "x");
+        File.SetLastWriteTimeUtc(_project.OutputAssemblyPath, lastWriteUtc);
+    }
 
     private ConnectorBindingRegistryProvider CreateSut() => new(_project, _discovery, _logger);
 
@@ -164,6 +176,70 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
 
         // The cancelled earlier runs never reach the discovery service; only one run executes.
         _discovery.ReceivedWithAnyArgs(1).RunDiscovery(default!, default!, default!, default);
+    }
+
+    // ── In-flight de-duplication ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TriggerRefresh_for_an_unchanged_assembly_while_a_run_is_in_flight_does_not_start_another()
+    {
+        GivenBuiltAssembly(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var release = new ManualResetEventSlim();
+        var started = new TaskCompletionSource();
+        _discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                started.TrySetResult();
+                release.Wait(5000);
+                return ConnectorDiscoveryOutcome.Discovered(NonInvalidRegistry(1), "h1");
+            });
+
+        var sut = CreateSut();
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+
+        sut.TriggerRefresh();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        sut.TriggerRefresh(); // same assembly, first run still executing: must be ignored
+        release.Set();
+
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(1000); // a wrongly-scheduled second run would have started by now
+        _discovery.ReceivedWithAnyArgs(1).RunDiscovery(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_for_a_rebuilt_assembly_while_a_run_is_in_flight_restarts_discovery()
+    {
+        GivenBuiltAssembly(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        GivenDiscoveryReturns(NonInvalidRegistry(1), "h1");
+
+        var sut = CreateSut();
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+
+        sut.TriggerRefresh(); // pending (debouncing)
+        GivenBuiltAssembly(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
+        sut.TriggerRefresh(); // new write time: supersedes the pending run
+
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        _discovery.ReceivedWithAnyArgs(1).RunDiscovery(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_after_the_previous_run_finished_starts_a_new_run_for_the_same_assembly()
+    {
+        GivenBuiltAssembly(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        GivenDiscoveryIsUnchanged();
+
+        var sut = CreateSut();
+        sut.TriggerRefresh();
+        await Task.Delay(1500);
+        sut.TriggerRefresh();
+        await Task.Delay(1500);
+
+        _discovery.ReceivedWithAnyArgs(2).RunDiscovery(default!, default!, default!, default);
     }
 
     // ── Roslyn source-level patch (F2) ───────────────────────────────────────────
