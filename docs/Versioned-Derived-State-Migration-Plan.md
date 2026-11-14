@@ -125,24 +125,39 @@ confirmed against the code, and corrected in the design doc if not.
 
 ---
 
-## Phase 1b — Rescan closed feature files after a rename (fixes R5's missing re-derivation)
+## Phase 1b — Re-derive closed feature files after a rename (fixes R5's missing re-derivation)
 
 **Goal:** a closed feature file edited by a rename stays visible to Find Usages, usage counts and
 later renames, instead of dropping out of the cache until the next project scan.
 
-**Scope**
+**Decided (built in #1349):** derive from the post-rename text computed **at staging**, not from
+the disk at commit. When the client confirms, the disk can't be trusted either way: a client may
+have applied the edits to the closed file in memory without saving (disk still old), or saved them
+(applying the edits again would apply them twice). At staging the rename response hasn't gone out,
+and the disk holds exactly the text the edits were built against. This mirrors how the coordinator
+already handles the edited `.cs` file (`newCsText`).
 
-- `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches`: after invalidating a closed feature
-  file, call `IGherkinDocumentTaggerService.RescanClosedFileAsync` for it. The rename has already been
-  applied by the client, so check that the disk text is the post-rename text when the rescan runs;
-  if the client applies edits in memory without saving, the rescan must wait for the save or use the
-  edited text the coordinator already has. Settle this from the existing coordinator tests and a live
-  check before choosing.
+**Scope (as built)**
+
+- `TextEditApplier` (new): applies LSP text edits to a string per the specification (line breaks,
+  past-line-end characters, same-position inserts); `null` for edits that don't fit or overlap.
+- `RenamePostApplyCoordinator.StagePendingCommit` reads each touched feature file that is closed
+  and stores its post-rename text with the pending commit. A file that can't be read, or whose edits
+  don't fit, is only invalidated on commit, as before.
+- On commit: refresh the C# bindings **first** (otherwise the renamed steps are matched against the
+  old binding and come out undefined), then for each closed feature file bump its generation,
+  invalidate it, and re-derive it for every owner through the new
+  `IGherkinDocumentTaggerService.ScanClosedFileForAllOwnersAsync(uri, text)`.
+  `RescanClosedFileAsync` reads the file and delegates to it.
 
 This doesn't depend on Phases 2–4 and can ship any time after Phase 0. It's a fix of its own even
 if the rest of the plan stops.
 
-**Tests:** remove the skip on R5a.
+**Tests:** coordinator tests cover the exact renamed text, the staged text surviving a client save,
+binding-refresh order, the invalidate-only fallbacks, open files and rejected renames, plus an end-to-end
+test through the real tagger and match store. The Phase 0 R5a test assumed a disk rescan (it writes
+the renamed text to disk and uses a dummy edit); rewrite it to stage the pre-rename text with a real
+edit, then remove its skip.
 
 **Exit criteria:** R5a passes. Live: rename a step from a `.cs` file with a closed feature file that
 uses it, then run Find Usages on the renamed binding; the closed file is listed.

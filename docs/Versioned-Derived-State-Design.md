@@ -205,7 +205,8 @@ can flip it back. A total order avoids that. Lexicographic order is correct as l
 
 - **I1 — every content bump is followed by a re-derivation of the new content.** `didOpen`,
   `didChange` → scheduled parse. `didClose` → `RescanClosedFileAsync`. Rename of a closed file →
-  `RescanClosedFileAsync` (**gap today**: it only invalidates, R5; Phase 1b adds the rescan).
+  `ScanClosedFileForAllOwnersAsync` with the post-rename text staged before the client applied the
+  edit (**gap on `main`**: it only invalidates, R5; Phase 1b, #1349, adds the re-derivation).
   Membership removal isn't a content bump (§3.1).
 - **I2 — every registry change re-derives that project's entries.** Replaced → every file. Patched →
   open files immediately, closed files after the rescan debounce. (Existing behaviour, #577.)
@@ -267,7 +268,7 @@ semantic-token invalidation and the `MatchCacheChangedNotification` publish.
 | `DocumentBuffer` | adds `long Generation`. `Update(uri, version, generation, text)`. |
 | `IProjectConfigGenerations` (new, `LSP.Core`) | `long Current(ProjectOwner)`, `long Bump(ProjectOwner)`. Same shape as `IDocumentGenerations`. Bumped by `ReqnrollConfigChangedHandler`. Fixes R6 together with the `Store` rule. |
 | `DocumentBufferService.UpdateTags` | Already update-only and returns `bool` (#938). Becomes `bool UpdateTags(uri, generation, tags)`: applies only if `buffer.Generation == generation`. Fixes R4a. |
-| `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches` | Bumps the generation of each closed feature file it edits, then invalidates and calls `RescanClosedFileAsync` for it. Fixes R5's missing re-derivation; the `Store` rule fixes its late-write case. |
+| `RenamePostApplyCoordinator` | Stages each closed feature file's post-rename text when the rename is staged. On commit, after refreshing the C# bindings, bumps the generation of each closed feature file it edited, invalidates it and re-derives it from the staged text (Phase 1b). Fixes R5's missing re-derivation; the `Store` rule fixes its late-write case. |
 | `FeatureBindingMatchSet` | adds `DerivationStamp Stamp`. `DocumentVersion` stays (diagnostics need it on the wire). `RegistryVersion` becomes `Stamp.RegistryVersion`. |
 | `BindingMatchService.Store` | the rule from §3.3. Returns `StoreOutcome`. Counts accepted and rejected writes in `GetCacheStats`. |
 | `BindingMatchService.InvalidateAllForDocument` | no change. The generation bump that comes before it (on `didClose`, a rename of a closed file) is what rejects late writes. |
@@ -383,3 +384,6 @@ still last-writer-wins. Changes to this document:
 - During Phase 1: membership removal dropped as a content-bump site (a per-document bump for a
   per-project change breaks I1; the stale entry is now Q7), and the config handler's
   `.editorconfig` path confirmed as needing no config bump.
+- During Phase 1b: a renamed closed file is re-derived from post-rename text computed when the
+  rename is staged, not from the disk at commit (which may be pre-rename, or post-rename and so
+  double-edited).
