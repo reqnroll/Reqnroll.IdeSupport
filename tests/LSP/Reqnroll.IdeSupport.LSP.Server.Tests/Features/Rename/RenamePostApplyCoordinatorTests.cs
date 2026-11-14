@@ -2,7 +2,10 @@ using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common.Configuration.Model;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
@@ -297,5 +300,49 @@ public class RenamePostApplyCoordinatorTests
 
         await _csharpDiscoveryService.DidNotReceive().UpdateFromSourceAsync(
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Closed feature files stay in the match cache ─────────────────────
+
+    // A closed feature file edited by a rename gets no didChange, so nothing else re-derives it: it must
+    // be rescanned from its post-rename text, not just dropped from the cache until the next project scan.
+    [Fact(Skip = "A rename only invalidates closed feature files until they are rescanned after the edit")]
+    public async Task Confirmed_apply_repopulates_a_closed_feature_files_match_set_from_its_new_text_Async()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "rnr-rename-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var featurePath = Path.Combine(root.FullName, "closed.feature");
+            var featureUri  = DocumentUri.FromFileSystemPath(featurePath);
+            var owner       = new ProjectOwner(Path.Combine(root.FullName, "My.csproj"), "net10.0");
+            var parser      = Tagging.TaggerTestParser.Create(_logger);
+
+            const string beforeRename = "Feature: F\n\nScenario: One\n    Given old step\n";
+            const string afterRename  = "Feature: F\n\nScenario: One\n    Given new step\n\nScenario: Two\n    Given new step\n";
+
+            var matchService = new BindingMatchService();
+            matchService.Store(FeatureBindingMatchSet.FromTags(
+                featureUri.ToString(), null, 0,
+                parser.Parse(new LspTextSnapshot(featureUri.ToString(), 0, beforeRename),
+                             ProjectBindingRegistry.Invalid, IdeSupportConfiguration.FallbackFeatureLanguage),
+                owner));
+
+            // The client has applied the rename to the closed file.
+            await File.WriteAllTextAsync(featurePath, afterRename);
+
+            var sut = new RenamePostApplyCoordinator(
+                _languageServer, new ClientIdeContext("vscode"), matchService, new DocumentBufferService(),
+                _csharpDiscoveryService, _csharpFileTextCache, _logger);
+
+            await StageThenCompleteAsync(sut, featureUri, BuilderWithOneEdit(featureUri), applied: true);
+
+            matchService.TryGet(new MatchSetKey(featureUri.ToString(), owner), out var cached)
+                .Should().BeTrue("the closed file must stay visible to Find Usages and usage counts");
+            cached.Scenarios.Should().HaveCount(2, "the match set must describe the post-rename text");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
     }
 }
