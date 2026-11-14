@@ -59,13 +59,14 @@ phases have an objective "fixed" signal and so we find out early if any of them 
   - **R6:** two closed scans of the same file against the same registry, the first with the old
     feature language and the second with the new one, where the old-language scan stores last. Assert
     the new-language set is kept.
+  - **R5b:** a closed scan that read the pre-rename text stores after the rename's invalidation and
+    the post-rename rescan. Assert the post-rename entry is kept. It lives here rather than with the
+    rename tests because it's about the order writes reach the store; the hook replays what the rename
+    coordinator does. (Design Q6: the overlap could be driven deterministically.)
 - `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Features/Rename/RenamePostApplyCoordinatorTests.cs`
   (existing):
   - **R5a:** after a rename edits a closed feature file, assert its match set is repopulated (not just
     invalidated).
-  - **R5b:** a closed scan that read the pre-rename text stores after the rename's invalidation.
-    Assert the post-rename entry is kept (design Q6: drop this test if the overlap can't be driven
-    deterministically).
 - `tests/LSP/Reqnroll.IdeSupport.LSP.Core.Tests/Matching/BindingMatchServiceOrderingTests.cs` (new):
   - **R3:** store a closed-file set built against registry v2, then one built against v1, for the same
     key. Assert the v2 set is kept.
