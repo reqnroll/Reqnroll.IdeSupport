@@ -39,6 +39,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 /// left the server's file-membership index (<c>reqnroll/projectFiles</c>) pointing at the old
 /// path until the next full build or solution reload, so the renamed file appeared unowned
 /// (no diagnostics, no step rename) in the meantime.
+///
+/// Folder operations raise only the directory events, not per-file events for the files inside,
+/// so those re-send the affected projects' full baseline instead of a delta.
 /// </remarks>
 internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocumentsEvents2
 {
