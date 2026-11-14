@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -48,6 +49,7 @@ internal sealed class RenamePostApplyCoordinator
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService;
     private readonly ICSharpFileTextCache           _csharpFileTextCache;
     private readonly IIdeSupportLogger              _logger;
+    private readonly IDocumentGenerations           _documentGenerations;
     private readonly IOperationDurationRecorder     _recorder;
 
     // Keyed by the rename request's own document URI (DocumentUri.ToString(), matching how every
@@ -65,6 +67,7 @@ internal sealed class RenamePostApplyCoordinator
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         ICSharpFileTextCache           csharpFileTextCache,
         IIdeSupportLogger              logger,
+        IDocumentGenerations           documentGenerations,
         IOperationDurationRecorder?    recorder = null)
     {
         _recorder                = recorder ?? NullOperationDurationRecorder.Instance;
@@ -75,6 +78,7 @@ internal sealed class RenamePostApplyCoordinator
         _csharpDiscoveryService  = csharpDiscoveryService;
         _csharpFileTextCache     = csharpFileTextCache;
         _logger                  = logger;
+        _documentGenerations     = documentGenerations;
     }
 
     /// <summary>
@@ -262,6 +266,8 @@ internal sealed class RenamePostApplyCoordinator
             if (!string.IsNullOrEmpty(changedPath) && changedPath.EndsWith(".feature", StringComparison.OrdinalIgnoreCase) &&
                 !_documentBuffer.TryGet(changedUri, out _))
             {
+                // The rename changed this closed file's text, and no didChange will report it.
+                _documentGenerations.Bump(changedUri.ToString());
                 _matchService.InvalidateAllForDocument(changedUri.ToString());
                 _logger.LogVerbose($"RenamePostApplyCoordinator: invalidated match cache for closed '{changedUri}'");
             }

@@ -34,6 +34,7 @@ public class StepRenameHandlerTests
     private readonly ILanguageServerFacade         _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly ClientIdeContext              _clientIdeContext = new(ide: null);
     private readonly IFileSystemForIDE             _fileSystem = new FileSystemForIDE();
+    private readonly IDocumentGenerations          _documentGenerations = new DocumentGenerations();
 
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
     private static string CsPath => CsUri.GetFileSystemPath();
@@ -59,15 +60,15 @@ public class StepRenameHandlerTests
 
     private RenameHandler CreateSut() =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, _documentGenerations);
 
     private RenameHandler CreateSutForVisualStudio() =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, new ClientIdeContext("visualstudio"), _fileSystem);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, new ClientIdeContext("visualstudio"), _fileSystem, _documentGenerations);
 
     private RenameHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, telemetry);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, _documentGenerations, telemetry);
 
     // reqnroll/renameTargets is handled by the separate RenameTargetsHandler class;
     // it shares no session state with RenameHandler, so a freshly-composed instance over the

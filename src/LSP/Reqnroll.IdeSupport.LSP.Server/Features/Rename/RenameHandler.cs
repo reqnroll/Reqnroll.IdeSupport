@@ -62,6 +62,7 @@ public sealed class RenameHandler
         ILanguageServerFacade         languageServer,
         ClientIdeContext              clientIdeContext,
         IFileSystemForIDE             fileSystem,
+        IDocumentGenerations          documentGenerations,
         ILspTelemetryService?         telemetryService = null,
         IOperationDurationRecorder?   recorder = null,
         ICSharpSyntaxTreeCache?       syntaxTreeCache = null)
@@ -84,7 +85,7 @@ public sealed class RenameHandler
         _nameReconciler  = new NewNameReconciler(logger);
         _postApplyCoordinator = new RenamePostApplyCoordinator(
             languageServer, clientIdeContext, matchService, documentBuffer,
-            csharpDiscoveryService, csharpFileTextCache, logger, _recorder);
+            csharpDiscoveryService, csharpFileTextCache, logger, documentGenerations, _recorder);
     }
 
     // ── textDocument/prepareRename ──────────────────────────────────────────────

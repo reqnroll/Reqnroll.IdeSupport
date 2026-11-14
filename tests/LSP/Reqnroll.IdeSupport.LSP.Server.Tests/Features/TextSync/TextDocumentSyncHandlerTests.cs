@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
@@ -30,6 +31,7 @@ public class TextDocumentSyncHandlerTests
     // Real implementation, not a mock: Handle now schedules its parse/discovery work through this
     // instead of awaiting it inline, so tests need the scheduled work to actually run.
     private readonly IParseCoordinator _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
+    private readonly IDocumentGenerations _documentGenerations = new DocumentGenerations();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
@@ -37,10 +39,10 @@ public class TextDocumentSyncHandlerTests
     private readonly ILspTelemetryService _telemetry = Substitute.For<ILspTelemetryService>();
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
 
-    private TextDocumentSyncHandler CreateSut() =>
+    private TextDocumentSyncHandler CreateSut(IDocumentGenerations? documentGenerations = null) =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
             _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator,
-            scopeManager: _scopeManager, telemetryService: _telemetry);
+            documentGenerations ?? _documentGenerations, scopeManager: _scopeManager, telemetryService: _telemetry);
 
     private static DidOpenTextDocumentParams OpenParams(DocumentUri uri) => new()
     {
@@ -360,5 +362,93 @@ public class TextDocumentSyncHandlerTests
         await CreateSut().Handle(OpenParams(CsUri), CancellationToken.None);
 
         _telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+    }
+
+    // ── Document generation ──────────────────────────────────────────────
+
+    private static DidChangeTextDocumentParams ChangeParams(DocumentUri uri, int version, string text) => new()
+    {
+        TextDocument = new OptionalVersionedTextDocumentIdentifier { Uri = uri, Version = version },
+        ContentChanges = new Container<TextDocumentContentChangeEvent>(new TextDocumentContentChangeEvent { Text = text })
+    };
+
+    private static DidCloseTextDocumentParams CloseParams(DocumentUri uri) => new()
+    {
+        TextDocument = new TextDocumentIdentifier { Uri = uri }
+    };
+
+    [Fact]
+    public async Task Handle_DidOpen_bumps_the_feature_documents_generation_once()
+    {
+        await CreateSut().Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+
+        _documentGenerations.Current(FeatureUri.ToString()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_DidChange_bumps_the_feature_documents_generation_once()
+    {
+        _bufferService.Update(FeatureUri, 1, "Feature: Old\n");
+
+        await CreateSut().Handle(ChangeParams(FeatureUri, 2, "Feature: New\n"), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+
+        _documentGenerations.Current(FeatureUri.ToString()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_DidClose_bumps_the_feature_documents_generation_and_it_survives_the_close()
+    {
+        var sut = CreateSut();
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+
+        await sut.Handle(CloseParams(FeatureUri), CancellationToken.None);
+
+        _documentGenerations.Current(FeatureUri.ToString()).Should().Be(2, "one bump for the open, one for the close");
+    }
+
+    [Fact]
+    public async Task Handle_DidChange_bumps_the_generation_before_the_buffer_takes_the_new_text()
+    {
+        _bufferService.Update(FeatureUri, 1, "Feature: Old\n");
+        int? versionAtBump = -1;
+        var generations = Substitute.For<IDocumentGenerations>();
+        generations.When(g => g.Bump(FeatureUri.ToString())).Do(_ =>
+            versionAtBump = _bufferService.TryGet(FeatureUri, out var b) ? b!.Version : null);
+
+        await CreateSut(generations).Handle(ChangeParams(FeatureUri, 2, "Feature: New\n"), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+
+        versionAtBump.Should().Be(1, "a reader that takes the generation and then the text must never see a newer generation with older text");
+    }
+
+    [Fact]
+    public async Task Handle_DidClose_bumps_the_generation_before_the_buffer_is_removed()
+    {
+        _bufferService.Update(FeatureUri, 1, "Feature: X\n");
+        bool? openAtBump = null;
+        var generations = Substitute.For<IDocumentGenerations>();
+        generations.When(g => g.Bump(FeatureUri.ToString())).Do(_ =>
+            openAtBump = _bufferService.TryGet(FeatureUri, out DocumentBuffer? _));
+
+        await CreateSut(generations).Handle(CloseParams(FeatureUri), CancellationToken.None);
+
+        openAtBump.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CSharp_open_change_and_close_do_not_bump_any_document_generation()
+    {
+        var generations = Substitute.For<IDocumentGenerations>();
+        var sut = CreateSut(generations);
+
+        await sut.Handle(OpenParams(CsUri), CancellationToken.None);
+        await sut.Handle(ChangeParams(CsUri, 2, "class C {}"), CancellationToken.None);
+        await WaitForScheduledWorkAsync(CsUri);
+        await sut.Handle(CloseParams(CsUri), CancellationToken.None);
+
+        generations.DidNotReceiveWithAnyArgs().Bump(default!);
     }
 }
