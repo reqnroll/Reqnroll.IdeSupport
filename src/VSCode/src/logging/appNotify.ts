@@ -18,6 +18,16 @@ export function logInfo(message: string): void {
   appLogChannel?.info(message);
 }
 
+/** The message of an `Error`, or the stringified value otherwise — for log lines. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Writes a debug line to the curated "Reqnroll" output channel only — no popup. For failures a background provider recovers from on its own. */
+export function logDebug(message: string): void {
+  appLogChannel?.debug(message);
+}
+
 /** Writes to the curated "Reqnroll" output channel only — no popup. See {@link logInfo}. */
 export function logWarn(message: string): void {
   appLogChannel?.warn(message);

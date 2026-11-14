@@ -10,6 +10,7 @@ import {
   renameStepFromCSharp,
   selectRenameTarget,
 } from '../../commands/renameStep';
+import { CONTENT_MODIFIED_CODE } from '../../lsp/contentModifiedRetry';
 import { ReqnrollMethods } from '../../lsp/lspMethods';
 
 /** Minimal stand-in for LanguageClient's request/notification surface used by rename disambiguation. */
@@ -84,14 +85,49 @@ suite('renameStep', () => {
       assert.deepStrictEqual(targets, []);
     });
 
-    test('returns an empty array when the request throws (e.g. older server)', async () => {
-      const client = fakeClient({
-        sendRequest: () => Promise.reject(new Error('Unhandled method reqnroll/renameTargets')),
-      });
+    test('returns an empty array when the server answers with an empty target list', async () => {
+      const client = fakeClient({ sendRequest: () => Promise.resolve({ targets: [] }) });
 
       const targets = await getRenameTargets(client, 'file:///Steps.cs', new vscode.Position(0, 0));
 
       assert.deepStrictEqual(targets, []);
+    });
+
+    test('rejects when the request fails, so a failed lookup is not read as no target', async () => {
+      const client = fakeClient({
+        sendRequest: () => Promise.reject(new Error('Unhandled method reqnroll/renameTargets')),
+      });
+
+      await assert.rejects(
+        getRenameTargets(client, 'file:///Steps.cs', new vscode.Position(0, 0)),
+        /Unhandled method/,
+      );
+    });
+
+    test('rejects with the server ResponseError', async () => {
+      const client = fakeClient({
+        sendRequest: () => Promise.reject(new ResponseError(-32603, 'boom')),
+      });
+
+      await assert.rejects(
+        getRenameTargets(client, 'file:///Steps.cs', new vscode.Position(0, 0)),
+        (err: unknown) => err instanceof ResponseError && err.message === 'boom',
+      );
+    });
+
+    test('retries a ContentModified rejection and returns the later answer', async () => {
+      let calls = 0;
+      const client = fakeClient({
+        sendRequest: () =>
+          ++calls === 1
+            ? Promise.reject(new ResponseError(CONTENT_MODIFIED_CODE, 'content modified'))
+            : Promise.resolve({ targets: [{ label: 'a', expression: 'a', attributeIndex: 0 }] }),
+      });
+
+      const targets = await getRenameTargets(client, 'file:///Steps.cs', new vscode.Position(0, 0));
+
+      assert.strictEqual(calls, 2);
+      assert.strictEqual(targets.length, 1);
     });
   });
 

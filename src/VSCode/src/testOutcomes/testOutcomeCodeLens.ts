@@ -6,6 +6,8 @@ import {
   SymbolInformation,
   SymbolKind,
 } from 'vscode-languageclient/node';
+import { errorMessage, logDebug } from '../logging/appNotify';
+import { sendWithContentModifiedRetry } from '../lsp/contentModifiedRetry';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { REQNROLL_LANGUAGE_ID } from '../languageIds';
 import { findOwningProjectFile, ProjectManager } from '../lsp/projectManager';
@@ -78,11 +80,15 @@ async function computeCodeLenses(
 
   let symbols: (DocumentSymbol | SymbolInformation)[] | null;
   try {
-    symbols = await client.sendRequest(DocumentSymbolRequest.type, {
-      textDocument: { uri: document.uri.toString() },
-    });
+    symbols = await sendWithContentModifiedRetry(() =>
+      client.sendRequest(DocumentSymbolRequest.type, {
+        textDocument: { uri: document.uri.toString() },
+      }),
+    );
   } catch (err: unknown) {
-    console.warn('testOutcomeCodeLens: textDocument/documentSymbol request failed', err);
+    logDebug(
+      `testOutcomeCodeLens: textDocument/documentSymbol request failed: ${errorMessage(err)}`,
+    );
     return [];
   }
   if (!symbols) return [];
@@ -96,14 +102,19 @@ async function computeCodeLenses(
 
     let targets: { declaringTypeFullName: string; methodName: string }[];
     try {
-      const response = await client.sendRequest<{
-        targets: { declaringTypeFullName: string; methodName: string }[];
-      }>(ReqnrollMethods.resolveTestTargets, {
-        textDocument: { uri: document.uri.toString() },
-        range: scenario.selectionRange,
-      });
+      const response = await sendWithContentModifiedRetry(() =>
+        client.sendRequest<{
+          targets: { declaringTypeFullName: string; methodName: string }[];
+        }>(ReqnrollMethods.resolveTestTargets, {
+          textDocument: { uri: document.uri.toString() },
+          range: scenario.selectionRange,
+        }),
+      );
       targets = response?.targets ?? [];
-    } catch {
+    } catch (err: unknown) {
+      logDebug(
+        `testOutcomeCodeLens: reqnroll/resolveTestTargets request failed: ${errorMessage(err)}`,
+      );
       continue; // A resolution failure for one scenario shouldn't drop the rest of the document.
     }
     if (targets.length === 0) continue;

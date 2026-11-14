@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { CodeLensRequest, LanguageClient } from 'vscode-languageclient/node';
 import { getCodeLensRefreshEvent } from './codeLensRefresh';
 import { CSHARP_LANGUAGE_ID } from '../languageIds';
+import { errorMessage, logDebug } from '../logging/appNotify';
+import { sendWithContentModifiedRetry } from '../lsp/contentModifiedRetry';
 
 /**
  * Registers the step-usage-count CodeLens provider for C# files, querying the server via
@@ -21,9 +23,11 @@ export function registerStepCodeLens(
     onDidChangeCodeLenses: getCodeLensRefreshEvent(client, context),
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
       try {
-        const lenses = await client.sendRequest(CodeLensRequest.type, {
-          textDocument: { uri: document.uri.toString() },
-        });
+        const lenses = await sendWithContentModifiedRetry(() =>
+          client.sendRequest(CodeLensRequest.type, {
+            textDocument: { uri: document.uri.toString() },
+          }),
+        );
         if (!lenses || lenses.length === 0) return [];
         return lenses.map((lens) => {
           const range = new vscode.Range(
@@ -43,7 +47,8 @@ export function registerStepCodeLens(
           return codeLens;
         });
       } catch (err) {
-        console.warn('StepCodeLens: textDocument/codeLens request failed', err);
+        // Debug, not warn: the lens is simply left blank until the next refresh event.
+        logDebug(`StepCodeLens: textDocument/codeLens request failed: ${errorMessage(err)}`);
         return [];
       }
     },

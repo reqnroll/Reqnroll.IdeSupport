@@ -9,7 +9,15 @@ import {
 } from 'vscode-languageclient/node';
 import { REQNROLL_LANGUAGE_ID } from '../languageIds';
 import { ReqnrollMethods } from '../lsp/lspMethods';
-import { logWarn, showEditRejected, showError, showInfo } from '../logging/appNotify';
+import {
+  errorMessage,
+  logDebug,
+  logWarn,
+  showEditRejected,
+  showError,
+  showInfo,
+} from '../logging/appNotify';
+import { sendWithContentModifiedRetry } from '../lsp/contentModifiedRetry';
 import { asEditRejection, rejectedOrRethrow } from '../lsp/editRejection';
 import { executeForeignCommand } from '../clientExceptionTelemetry';
 
@@ -26,9 +34,10 @@ interface RenameTargetsResponse {
 
 /**
  * Queries `reqnroll/renameTargets` for the binding attribute(s) at `position`. Returns an empty
- * array when the server has nothing renameable there, or when the request itself fails (e.g. an
- * older server that doesn't implement it) — in either case the caller falls back to the normal
- * `prepareRename` flow.
+ * array only when the server answered that nothing is renameable there. A failed request (an
+ * error response, a timeout, a closed connection, or an older server that doesn't implement the
+ * method) rejects, so a caller can tell "no step here" from "the lookup did not work"; a
+ * `ContentModified` rejection is retried a bounded number of times first.
  *
  * `requireAttributeLine`: pass `true` for the F2-bound dispatcher, which must not
  * steal an ordinary C# rename-symbol away from a method or local identifier. Without it, the
@@ -43,19 +52,14 @@ export async function getRenameTargets(
   position: vscode.Position,
   options?: { requireAttributeLine?: boolean },
 ): Promise<RenameTargetItem[]> {
-  try {
-    const response = await client.sendRequest<RenameTargetsResponse | null>(
-      ReqnrollMethods.renameTargets,
-      {
-        textDocument: { uri: uriStr },
-        position: { line: position.line, character: position.character },
-        requireAttributeLine: options?.requireAttributeLine ?? false,
-      },
-    );
-    return response?.targets ?? [];
-  } catch {
-    return [];
-  }
+  const response = await sendWithContentModifiedRetry(() =>
+    client.sendRequest<RenameTargetsResponse | null>(ReqnrollMethods.renameTargets, {
+      textDocument: { uri: uriStr },
+      position: { line: position.line, character: position.character },
+      requireAttributeLine: options?.requireAttributeLine ?? false,
+    }),
+  );
+  return response?.targets ?? [];
 }
 
 /**
@@ -203,7 +207,14 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
       const client = getClient();
       if (!client) return next(document, position, token);
 
-      const targets = await getRenameTargets(client, document.uri.toString(), position);
+      let targets: RenameTargetItem[];
+      try {
+        targets = await getRenameTargets(client, document.uri.toString(), position);
+      } catch (err) {
+        // Quiet: this runs on every rename, and the ordinary prepareRename flow still works.
+        logDebug(`Rename: reqnroll/renameTargets lookup failed: ${errorMessage(err)}`);
+        return next(document, position, token);
+      }
 
       if (targets.length > 1) {
         const chosen = await pickRenameTarget(targets);
@@ -297,9 +308,22 @@ export async function renameStepFromCSharp(
   const uriStr = editor.document.uri.toString();
   const position = editor.selection.active;
 
-  const targets = await getRenameTargets(client, uriStr, position, {
-    requireAttributeLine: options?.fallbackToNativeRename,
-  });
+  let targets: RenameTargetItem[];
+  try {
+    targets = await getRenameTargets(client, uriStr, position, {
+      requireAttributeLine: options?.fallbackToNativeRename,
+    });
+  } catch (err) {
+    if (options?.fallbackToNativeRename) {
+      // F2 must stay a plain C# rename; a failed lookup is logged, not announced.
+      logDebug(`Rename Step: reqnroll/renameTargets lookup failed: ${errorMessage(err)}`);
+      await executeForeignCommand('editor.action.rename');
+      return;
+    }
+    logWarn(`Rename Step: reqnroll/renameTargets lookup failed: ${errorMessage(err)}`);
+    void showError(`Reqnroll: Rename Step lookup failed - ${errorMessage(err)}`);
+    return;
+  }
   if (targets.length === 0) {
     if (options?.fallbackToNativeRename) {
       await executeForeignCommand('editor.action.rename');

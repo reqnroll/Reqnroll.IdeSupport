@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { LanguageClient } from 'vscode-languageclient/node';
+import { LanguageClient, ResponseError } from 'vscode-languageclient/node';
+import { CONTENT_MODIFIED_CODE } from '../../lsp/contentModifiedRetry';
 import { registerHookCodeLens } from '../../commands/hookCodeLens';
 
 /** Minimal stand-in for LanguageClient's sendRequest/onRequest surface used by registerHookCodeLens. */
@@ -119,7 +120,29 @@ suite('hookCodeLens', () => {
       assert.deepStrictEqual(lenses, []);
     });
 
-    test('swallows a request failure into an empty array and logs via console.warn, without showing a user-facing error', async () => {
+    test('retries a ContentModified rejection and returns the lenses from the later answer', async () => {
+      let calls = 0;
+      const client = fakeClient({
+        sendRequest: () =>
+          ++calls === 1
+            ? Promise.reject(new ResponseError(CONTENT_MODIFIED_CODE, 'content modified'))
+            : Promise.resolve([
+                {
+                  range: { start: { line: 1, character: 0 }, end: { line: 1, character: 5 } },
+                  command: { title: '1 hook', command: 'x' },
+                },
+              ]),
+      });
+      const { provider } = captureProvider(client);
+      const document = { uri: vscode.Uri.parse('file:///Steps.feature') } as vscode.TextDocument;
+
+      const lenses = await provider.provideCodeLenses(document, {} as vscode.CancellationToken);
+
+      assert.strictEqual(calls, 2);
+      assert.strictEqual(lenses?.length, 1);
+    });
+
+    test('swallows a request failure into an empty array, logging at debug rather than warn, without showing a user-facing error', async () => {
       const client = fakeClient({
         sendRequest: () => Promise.reject(new Error('server unavailable')),
       });
@@ -144,7 +167,7 @@ suite('hookCodeLens', () => {
         );
 
         assert.deepStrictEqual(lenses, []);
-        assert.ok(warned, 'console.warn should be called on request failure');
+        assert.ok(!warned, 'a failed request is logged at debug level, not via console.warn');
         assert.strictEqual(
           errorShown,
           false,
