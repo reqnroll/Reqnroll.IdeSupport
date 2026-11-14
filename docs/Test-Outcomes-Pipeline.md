@@ -295,7 +295,9 @@ reporter above takes part. Builds with the Rider backend module cover these runs
 1. **Collection.** `FeatureTestResultReporter` (a backend solution component) listens to Rider's test-run and
    result events. Each finished test of a running session is noted, and the run's results are sent half a second
    after it ends. Only tests whose class lives in a `.feature.cs` code-behind are sent; an outline method whose
-   rows report for themselves is skipped, as are projects carrying the MTP stub, whose reporter already sends.
+   rows report for themselves is skipped. So is a test assembly with the MTP reporter built in, found by its
+   `TestingPlatformBuilderHook` type, since that reporter already sends. The `obj` stub is not the test: every
+   test project gets one, and its targets build the reporter in only for projects that run on MTP.
 2. **Identity.** `source` is the project's output for the test's target framework, `managedType`/`managedMethod`
    come from Rider's test element, `displayName` is the row's name for an example row, and `stdout` is the test's
    output from Rider's result store.

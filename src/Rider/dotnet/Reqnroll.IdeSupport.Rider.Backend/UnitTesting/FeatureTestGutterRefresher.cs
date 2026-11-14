@@ -24,16 +24,18 @@ public class FeatureTestGutterRefresher
     private const int DebounceMilliseconds = 1000;
 
     private readonly Lifetime _lifetime;
-    private readonly IDaemon _daemon;
+    private readonly ISolution _solution;
     private readonly IShellLocks _locks;
     private readonly Timer _timer;
     private readonly object _gate = new object();
     private readonly List<WeakReference<IDocument>> _documents = new List<WeakReference<IDocument>>();
 
-    public FeatureTestGutterRefresher(Lifetime lifetime, IUnitTestElementStore elementStore, IDaemon daemon, IShellLocks locks)
+    // IDaemon is created on the primary thread, so this any-thread component looks it up when it needs it (on the
+    // primary thread, by then long created) rather than taking it as a dependency.
+    public FeatureTestGutterRefresher(Lifetime lifetime, ISolution solution, IUnitTestElementStore elementStore, IShellLocks locks)
     {
         _lifetime = lifetime;
-        _daemon = daemon;
+        _solution = solution;
         _locks = locks;
         _timer = new Timer(_ => Refresh(), null, Timeout.Infinite, Timeout.Infinite);
 
@@ -98,8 +100,12 @@ public class FeatureTestGutterRefresher
                 }
             }
 
+            if (documents.Count == 0)
+                return;
+
+            var daemon = _solution.GetComponent<IDaemon>();
             foreach (var document in documents)
-                _daemon.Invalidate("Reqnroll: discovered tests changed", document);
+                daemon.Invalidate("Reqnroll: discovered tests changed", document);
         });
     }
 }

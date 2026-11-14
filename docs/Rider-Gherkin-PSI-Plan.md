@@ -473,8 +473,9 @@ unit-tested; **not yet run in a live Rider.**
   - The backend's `FeatureTestResultReporter` listens to Rider's test-run and result events. After each run it
     sends the results of tests generated from `.feature` files to the server's outcome listener, in the wire
     format the VSTest logger uses, with the output carrying Reqnroll's step trace. It finds the listener through
-    the session breadcrumbs, matched by the solution directory, and skips projects with the MTP stub (their
-    reporter already sends).
+    the session breadcrumbs, matched by the solution directory. It skips test assemblies that have the MTP
+    reporter built in, since that reporter already sends. The reporter's stub alone is no sign of that: the
+    IDE extensions put it into every test project.
   - `GutterRunOutcomes` (frontend) starts the listener on every server start, so the breadcrumb exists. On the
     `changed` push it applies outcomes that changed to the failed-step marks and the Run lens results.
 - **Still to check live:**

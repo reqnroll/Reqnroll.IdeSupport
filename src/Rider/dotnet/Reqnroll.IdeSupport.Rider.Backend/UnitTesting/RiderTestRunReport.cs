@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using Reqnroll.IdeSupport.TestReporter.Common;
 
 namespace Reqnroll.IdeSupport.Rider.Backend.UnitTesting;
@@ -74,11 +77,39 @@ public static class RiderTestRunReport
     public static bool IsFeatureCodeBehind(string fileName) =>
         fileName != null && fileName.EndsWith(CodeBehindSuffix, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Namespace of the type the MTP reporter's build targets compile into a test assembly.</summary>
+    public const string MtpReporterHookNamespace = "Reqnroll.IdeSupport.TestReporter.MTP";
+
+    /// <summary>Name of the type the MTP reporter's build targets compile into a test assembly.</summary>
+    public const string MtpReporterHookName = "TestingPlatformBuilderHook";
+
     /// <summary>
-    /// Name of the stub the plugin writes into a project's <c>obj</c> folder to build the MTP reporter in, for
-    /// the project file named <paramref name="projectFileName"/> (matches the frontend's <c>MtpProjectStubs</c>).
+    /// Whether the assembly at <paramref name="assemblyPath"/> has the MTP reporter built in, which then reports
+    /// every run of it, Rider's included. The IDE extensions put the reporter's stub into every test project, but
+    /// its targets compile the reporter in only for projects that run on Microsoft.Testing.Platform, so the
+    /// built assembly is what tells. False if the file is missing or not a .NET assembly.
     /// </summary>
-    public static string MtpReporterStubFileName(string projectFileName) => projectFileName + ".reqnroll-ide.targets";
+    public static bool ContainsMtpReporter(string assemblyPath)
+    {
+        if (string.IsNullOrEmpty(assemblyPath) || !File.Exists(assemblyPath))
+            return false;
+        try
+        {
+            using var stream = new FileStream(assemblyPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var pe = new PEReader(stream);
+            if (!pe.HasMetadata)
+                return false;
+            var metadata = pe.GetMetadataReader();
+            return metadata.TypeDefinitions
+                .Select(metadata.GetTypeDefinition)
+                .Any(type => metadata.StringComparer.Equals(type.Name, MtpReporterHookName)
+                             && metadata.StringComparer.Equals(type.Namespace, MtpReporterHookNamespace));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>Cuts <paramref name="stdout"/> to <see cref="MaxStdoutLength"/>; reports whether it was cut.</summary>
     public static (string Text, bool Truncated) LimitStdout(string stdout)

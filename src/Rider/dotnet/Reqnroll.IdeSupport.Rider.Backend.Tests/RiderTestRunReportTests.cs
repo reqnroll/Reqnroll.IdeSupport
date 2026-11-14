@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Reqnroll.IdeSupport.Rider.Backend.UnitTesting;
@@ -35,9 +36,34 @@ public class RiderTestRunReportTests
     }
 
     [Fact]
-    public void Mtp_stub_name_follows_the_project_file_name()
+    public void An_assembly_with_the_mtp_hook_type_contains_the_reporter()
     {
-        Assert.Equal("Specs.csproj.reqnroll-ide.targets", RiderTestRunReport.MtpReporterStubFileName("Specs.csproj"));
+        // This test assembly declares a type with the hook's name (below).
+        Assert.True(RiderTestRunReport.ContainsMtpReporter(typeof(RiderTestRunReportTests).Assembly.Location));
+    }
+
+    [Fact]
+    public void An_assembly_without_the_hook_type_does_not_contain_the_reporter()
+    {
+        Assert.False(RiderTestRunReport.ContainsMtpReporter(typeof(FactAttribute).Assembly.Location));
+    }
+
+    [Fact]
+    public void A_missing_or_non_assembly_file_does_not_contain_the_reporter()
+    {
+        Assert.False(RiderTestRunReport.ContainsMtpReporter(null));
+        Assert.False(RiderTestRunReport.ContainsMtpReporter(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll")));
+
+        var notAnAssembly = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(notAnAssembly, "not a PE file");
+            Assert.False(RiderTestRunReport.ContainsMtpReporter(notAnAssembly));
+        }
+        finally
+        {
+            File.Delete(notAnAssembly);
+        }
     }
 
     [Fact]

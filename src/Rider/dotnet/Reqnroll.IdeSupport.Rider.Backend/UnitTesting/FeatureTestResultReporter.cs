@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -38,6 +40,9 @@ public class FeatureTestResultReporter
     private static readonly TimeSpan FlushDelay = TimeSpan.FromMilliseconds(500);
 
     private static readonly ILogger Log = Logger.GetLogger<FeatureTestResultReporter>();
+
+    private static readonly ConcurrentDictionary<string, (DateTime Written, bool Contains)> MtpReporterChecks =
+        new ConcurrentDictionary<string, (DateTime Written, bool Contains)>(StringComparer.OrdinalIgnoreCase);
 
     private readonly Lifetime _lifetime;
     private readonly ISolution _solution;
@@ -191,10 +196,10 @@ public class FeatureTestResultReporter
             return null;
 
         var project = element.Project;
-        if (project == null || HasMtpReporterStub(project))
+        if (project == null)
             return null;
         var assembly = project.GetOutputFilePath(element.TargetFrameworkId);
-        if (assembly.IsEmpty)
+        if (assembly.IsEmpty || ContainsMtpReporter(assembly.FullPath))
             return null;
 
         return new ReportedTestResult
@@ -236,15 +241,26 @@ public class FeatureTestResultReporter
     }
 
     /// <summary>
-    /// Whether the plugin's own runs left the MTP reporter stub in the project's <c>obj</c> folder; that
-    /// reporter is then built into the test assembly and sends Rider's runs too.
+    /// <see cref="RiderTestRunReport.ContainsMtpReporter"/>, read once per build of the assembly: a run reports
+    /// many tests from the same one.
     /// </summary>
-    private static bool HasMtpReporterStub(IProject project)
+    private static bool ContainsMtpReporter(string assemblyPath)
     {
-        var projectFile = project.ProjectFileLocation;
-        if (projectFile.IsEmpty)
+        DateTime written;
+        try
+        {
+            written = File.GetLastWriteTimeUtc(assemblyPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
             return false;
-        return projectFile.Directory.Combine("obj").Combine(RiderTestRunReport.MtpReporterStubFileName(projectFile.Name)).ExistsFile;
+        }
+
+        if (MtpReporterChecks.TryGetValue(assemblyPath, out var known) && known.Written == written)
+            return known.Contains;
+        var contains = RiderTestRunReport.ContainsMtpReporter(assemblyPath);
+        MtpReporterChecks[assemblyPath] = (written, contains);
+        return contains;
     }
 
     private static void Send(string solutionDirectory, IReadOnlyCollection<ReportedTestResult> reports)
