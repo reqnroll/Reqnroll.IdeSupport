@@ -140,4 +140,24 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
             dir.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public async Task ParseAsync_completing_after_a_newer_change_does_not_attach_its_tags_to_the_newer_buffer()
+    {
+        var uri = DocumentUri.FromFileSystemPath("/workspace/race.feature");
+        _bufferService.Update(uri, 3, "Feature: old\n", generation: 1);
+        var sut = CreateSut();
+
+        var parse = Task.Run(() => sut.ParseAsync(uri, 3));
+        _parseStarted.Wait(GateTimeout).Should().BeTrue("ParseAsync must reach the tag parser");
+        _bufferService.Update(uri, 4, "Feature: new\n", generation: 2); // what didChange does
+        _releaseParse.Set();
+        await parse;
+
+        _bufferService.TryGet(uri, out var buffer).Should().BeTrue();
+        buffer!.Generation.Should().Be(2);
+        buffer.Tags.Should().BeNull("tags computed from the older text must not land on the newer buffer");
+        _bindingMatchService.DidNotReceive().Store(Arg.Any<FeatureBindingMatchSet>());
+        _semanticTokenService.DidNotReceive().InvalidateCache(Arg.Any<DocumentUri>());
+    }
 }

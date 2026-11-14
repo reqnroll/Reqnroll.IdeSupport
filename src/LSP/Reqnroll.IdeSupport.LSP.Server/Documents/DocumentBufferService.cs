@@ -26,8 +26,13 @@ public interface IDocumentBufferService
     /// An update carrying a lower generation than the buffer holds is ignored.
     /// </param>
     void Update(DocumentUri uri, int? version, string text, long generation = 0);
-    /// <summary>Updates the cached Gherkin tags of an existing buffer. Never creates a buffer: returns <see langword="false"/> when the document is not (or no longer) open.</summary>
-    bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags);
+    /// <summary>
+    /// Updates the cached Gherkin tags of an existing buffer. Never creates a buffer: returns
+    /// <see langword="false"/> when the document is not (or no longer) open, or when the buffer
+    /// has moved past <paramref name="generation"/> (the tags were computed from superseded text).
+    /// </summary>
+    /// <param name="generation">The content generation of the buffer the tags were computed from.</param>
+    bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags);
     /// <summary>Removes the buffer for the given document, typically when it is closed.</summary>
     void Remove(DocumentUri uri);
     /// <summary>Attempts to retrieve the current buffer for the given document.</summary>
@@ -55,15 +60,19 @@ public class DocumentBufferService : IDocumentBufferService
     }
 
     /// <inheritdoc/>
-    public bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
+    public bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags)
     {
         // Update-only: a parse can finish after didClose has removed the buffer, and
         // re-creating it here would leave a ghost "open" document. TryUpdate only swaps in the
         // tagged copy if the entry is still the one just read; retry if a concurrent
         // Update/UpdateTags replaced it, and give up once Remove has taken it away.
+        // Likewise, tags computed from an older generation must not be attached to a newer
+        // buffer: Update replaced the text (and cleared the tags) while the parse ran.
         var key = uri.ToString();
         while (_buffers.TryGetValue(key, out var existing))
         {
+            if (existing.Generation != generation)
+                return false;
             if (_buffers.TryUpdate(key, existing with { Tags = tags }, existing))
                 return true;
         }

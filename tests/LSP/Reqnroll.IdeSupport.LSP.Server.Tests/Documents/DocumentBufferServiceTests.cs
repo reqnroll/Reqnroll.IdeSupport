@@ -65,7 +65,7 @@ public class DocumentBufferServiceTests
         var uri = MakeUri();
         sut.Update(uri, 3, "Feature: X\n");
         var tags = Array.Empty<Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.IdeSupportTag>();
-        sut.UpdateTags(uri, tags);
+        sut.UpdateTags(uri, 0, tags);
 
         sut.TryGet(uri, out var buffer).Should().BeTrue();
         buffer!.Tags.Should().BeSameAs(tags);
@@ -80,7 +80,7 @@ public class DocumentBufferServiceTests
         var uri = MakeUri();
         sut.Update(uri, 3, "Feature: X\n");
 
-        sut.UpdateTags(uri, Array.Empty<Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.IdeSupportTag>())
+        sut.UpdateTags(uri, 0, Array.Empty<Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.IdeSupportTag>())
            .Should().BeTrue();
     }
 
@@ -93,7 +93,7 @@ public class DocumentBufferServiceTests
         var uri = MakeUri();
         var tags = Array.Empty<Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.IdeSupportTag>();
 
-        sut.UpdateTags(uri, tags).Should().BeFalse();
+        sut.UpdateTags(uri, 0, tags).Should().BeFalse();
 
         sut.TryGet(uri, out _).Should().BeFalse();
         sut.All.Should().BeEmpty();
@@ -107,7 +107,7 @@ public class DocumentBufferServiceTests
         sut.Update(uri, 3, "Feature: X\n");
         sut.Remove(uri);
 
-        sut.UpdateTags(uri, Array.Empty<Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.IdeSupportTag>())
+        sut.UpdateTags(uri, 0, Array.Empty<Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.IdeSupportTag>())
            .Should().BeFalse();
 
         sut.TryGet(uri, out _).Should().BeFalse();
