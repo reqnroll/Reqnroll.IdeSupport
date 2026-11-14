@@ -124,6 +124,17 @@ public class FeatureStepTextBuilderTests
     }
 
     [Fact]
+    public void Build_regex_fallback_ignores_nested_capture_groups()
+    {
+        var result = FeatureStepTextBuilder.Build(
+            @"I consumed ((\d+) green) (\w+) (?:ripe )?bananas", @"I ate ((\d+) green) (\w+) (?:ripe )?bananas",
+            new Regex(@"^I ate ((\d+) green) (\w+) (?:ripe )?bananas$"),
+            "I ate 5 green fast ripe bananas");
+
+        result.Should().Be("I consumed 5 green fast (?:ripe )?bananas");
+    }
+
+    [Fact]
     public void Build_cucumber_multi_param_preserves_values()
     {
         var result = FeatureStepTextBuilder.Build(

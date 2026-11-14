@@ -75,10 +75,20 @@ public static class FeatureStepTextBuilder
         if (!match.Success || match.Groups.Count <= 1)
             return null;
 
+        // Only outermost groups correspond to parameter slots; a group nested inside another
+        // captured group would otherwise add an extra value and shift every later one.
         var capturedValues = new List<string>();
+        Group? outer = null;
         for (int i = 1; i < match.Groups.Count; i++)
-            if (match.Groups[i].Success)
-                capturedValues.Add(match.Groups[i].Value);
+        {
+            var group = match.Groups[i];
+            if (!group.Success)
+                continue;
+            if (outer != null && group.Index >= outer.Index && group.Index + group.Length <= outer.Index + outer.Length)
+                continue;
+            outer = group;
+            capturedValues.Add(group.Value);
+        }
 
         if (capturedValues.Count == 0)
             return null;
