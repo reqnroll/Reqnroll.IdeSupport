@@ -28,5 +28,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tagging
         /// No-op when the file is missing on disk or has no owning project.
         /// </summary>
         Task RescanClosedFileAsync(DocumentUri uri);
+
+        /// <summary>
+        /// Scans <paramref name="text"/> as the content of the closed file <paramref name="uri"/> for
+        /// every project that owns it, repopulating the binding match cache. Used when the server
+        /// knows a closed file's new text without reading it from disk (for example after a rename
+        /// edited it in the client). No-op when the file has no owning project, and for each owner
+        /// while the file is open.
+        /// </summary>
+        Task ScanClosedFileForAllOwnersAsync(DocumentUri uri, string text);
     }
 }

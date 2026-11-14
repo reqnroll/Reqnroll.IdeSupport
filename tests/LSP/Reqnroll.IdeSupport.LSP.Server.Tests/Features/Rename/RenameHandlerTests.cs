@@ -18,6 +18,7 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Rename;
@@ -35,6 +36,7 @@ public class StepRenameHandlerTests
     private readonly ClientIdeContext              _clientIdeContext = new(ide: null);
     private readonly IFileSystemForIDE             _fileSystem = new FileSystemForIDE();
     private readonly IDocumentGenerations          _documentGenerations = new DocumentGenerations();
+    private readonly IGherkinDocumentTaggerService _taggerService = Substitute.For<IGherkinDocumentTaggerService>();
 
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
     private static string CsPath => CsUri.GetFileSystemPath();
@@ -60,15 +62,15 @@ public class StepRenameHandlerTests
 
     private RenameHandler CreateSut() =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, _documentGenerations);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, _documentGenerations, _taggerService);
 
     private RenameHandler CreateSutForVisualStudio() =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, new ClientIdeContext("visualstudio"), _fileSystem, _documentGenerations);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, new ClientIdeContext("visualstudio"), _fileSystem, _documentGenerations, _taggerService);
 
     private RenameHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, _documentGenerations, telemetry);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, _documentGenerations, _taggerService, telemetry);
 
     // reqnroll/renameTargets is handled by the separate RenameTargetsHandler class;
     // it shares no session state with RenameHandler, so a freshly-composed instance over the
