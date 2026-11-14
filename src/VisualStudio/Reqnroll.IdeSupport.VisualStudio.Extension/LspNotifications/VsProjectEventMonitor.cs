@@ -612,7 +612,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         }
     }
 
-    // Directory and SCC events are not part of the file-membership index — no-ops that
+    // Query* and SCC events are not part of the file-membership index — no-ops that
     // approve/ignore. Query* methods leave the result arrays untouched (no veto).
 
     /// <summary>No-op approval — file adds are not vetoed.</summary>
@@ -626,10 +626,13 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         VSQUERYADDDIRECTORYRESULTS[] rgResults)
         => VSConstants.S_OK;
 
-    /// <summary>No-op — directory adds are not part of the file-membership index.</summary>
+    /// <summary>Fires after directories are added; re-sends the affected projects' baselines.</summary>
     public int OnAfterAddDirectoriesEx(int cProjects, int cDirectories, IVsProject[] rgpProjects,
         int[] rgFirstIndices, string[] rgpszMkDocuments, VSADDDIRECTORYFLAGS[] rgFlags)
-        => VSConstants.S_OK;
+    {
+        ResendBaselinesForDirectoryChange("add", cProjects, cDirectories, rgpProjects, rgFirstIndices);
+        return VSConstants.S_OK;
+    }
 
     /// <summary>No-op approval — file removals are not vetoed.</summary>
     public int OnQueryRemoveFiles(IVsProject pProject, int cFiles, string[] rgpszMkDocuments,
@@ -643,10 +646,13 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         VSQUERYREMOVEDIRECTORYRESULTS[] rgResults)
         => VSConstants.S_OK;
 
-    /// <summary>No-op — directory removals are not part of the file-membership index.</summary>
+    /// <summary>Fires after directories are removed; re-sends the affected projects' baselines.</summary>
     public int OnAfterRemoveDirectories(int cProjects, int cDirectories, IVsProject[] rgpProjects,
         int[] rgFirstIndices, string[] rgpszMkDocuments, VSREMOVEDIRECTORYFLAGS[] rgFlags)
-        => VSConstants.S_OK;
+    {
+        ResendBaselinesForDirectoryChange("remove", cProjects, cDirectories, rgpProjects, rgFirstIndices);
+        return VSConstants.S_OK;
+    }
 
     /// <summary>No-op approval — file renames are not vetoed.</summary>
     public int OnQueryRenameFiles(IVsProject pProject, int cFiles, string[] rgszMkOldNames,
@@ -660,10 +666,48 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         VSQUERYRENAMEDIRECTORYRESULTS[] pSummaryResult, VSQUERYRENAMEDIRECTORYRESULTS[] rgResults)
         => VSConstants.S_OK;
 
-    /// <summary>No-op — directory renames are not part of the file-membership index.</summary>
+    /// <summary>Fires after directories are renamed; re-sends the affected projects' baselines.</summary>
     public int OnAfterRenameDirectories(int cProjects, int cDirs, IVsProject[] rgpProjects, int[] rgFirstIndices,
         string[] rgszMkOldNames, string[] rgszMkNewNames, VSRENAMEDIRECTORYFLAGS[] rgFlags)
-        => VSConstants.S_OK;
+    {
+        ResendBaselinesForDirectoryChange("rename", cProjects, cDirs, rgpProjects, rgFirstIndices);
+        return VSConstants.S_OK;
+    }
+
+    /// <summary>
+    /// A directory event does not enumerate the files inside the folder, and renaming a folder in an
+    /// SDK-style project raises only the directory event (no per-file events for its contents), so a full
+    /// baseline per affected project is the only way to keep the membership index current. A baseline
+    /// replaces the project's membership, so a redundant send is harmless.
+    /// </summary>
+    private void ResendBaselinesForDirectoryChange(string change, int projectCount, int directoryCount,
+        IVsProject[] projects, int[] directoryStartIndices)
+    {
+        _logger.LogDebug(
+            "VsProjectEventMonitor: directory {Change} for {DirectoryCount} directorie(s) in {ProjectCount} project(s); re-sending baselines.",
+            change, directoryCount, projectCount);
+
+        FireAndForget(ct => HandleDirectoryChangeAsync(projectCount, directoryCount, projects,
+            directoryStartIndices, ct));
+    }
+
+    private async Task HandleDirectoryChangeAsync(int projectCount, int directoryCount, IVsProject[] projects,
+        int[] directoryStartIndices, CancellationToken ct)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(ct);
+
+        // Resolve every project before the first send: the send continues off the UI thread, and
+        // ResolveProject is UI-affine.
+        var resolved = new List<Project>();
+        foreach (var (vsProject, _, _) in GroupByProject(projectCount, directoryCount, projects, directoryStartIndices))
+        {
+            if (ResolveProject(vsProject) is { } project)
+                resolved.Add(project);
+        }
+
+        foreach (var project in resolved)
+            await TrySendProjectFilesAsync(project, ct).ConfigureAwait(false);
+    }
 
     /// <summary>No-op — source-control status changes do not affect the file-membership index.</summary>
     public int OnAfterSccStatusChanged(int cProjects, int cFiles, IVsProject[] rgpProjects, int[] rgFirstIndices,

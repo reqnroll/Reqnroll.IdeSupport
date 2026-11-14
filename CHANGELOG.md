@@ -11,6 +11,7 @@
 * In VS Code, the opt-in test-outcome pipeline (`reqnroll.testOutcomes.enabled`) now registers with the language server again each time the server restarts, so test runs keep reporting outcomes after a server crash instead of sending them to the old server's endpoint; turning the option off now also restores `dotnet.unitTests.runSettingsPath` when the server fails to start (VS Code) - see #1012
 * In Visual Studio, a message between the editor and the language server that contains a date-like string (for example `2026-10-25T10:11:12Z`) is no longer rewritten as a `DateTime` when the extension re-encodes it after rewriting a drive-letter URI; such strings are now passed through unchanged (VS) - see #1236
 * In Visual Studio, the Run and hook-count CodeLens on a `.feature` file now follow the file when it is renamed or saved under a new name with Save As; previously they kept asking the language server about the old file name until the file was closed and reopened (VS) - see #1033
+* In Visual Studio, renaming, deleting or adding a folder in a project now updates the language server's list of the project's `.feature` and binding files straight away; previously it stayed stale until the next build or restore, because Visual Studio raises only a folder event, not one per file inside it (VS) - see #1235
 * A project whose `.csproj` sets `AppConfig` to a file that does not exist no longer logs a configuration warning on every reload; the setting is ignored until the file exists (LSP server) - see #972
 
 # v2026.2 - 2026-10-25
