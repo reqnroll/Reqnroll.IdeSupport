@@ -354,6 +354,15 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
             ct.ThrowIfCancellationRequested();
 
+            // The connector has finished: from here the run's outcome (a swapped registry and
+            // advanced hash, or a hash match) answers any further trigger for this assembly, so it
+            // is no longer "in flight" -- and clearing it before the registry-changed event below
+            // means a trigger raised in response to that event is never mistaken for a duplicate.
+            // The Discovered case clears again after committing, so a trigger can't slip in between
+            // here and the _lastHash write and re-run against a stale hash.
+            if (outcome.Status != ConnectorDiscoveryStatus.Discovered)
+                ClearInFlight(ct);
+
             // Every non-Discovered status hands back the unchanged last-good registry and
             // hash, so the hash cannot tell these apart -- the status does. None of them swaps the
             // registry or advances _lastHash, so the next trigger retries exactly as before.
@@ -415,6 +424,8 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             {
                 _currentLock.Release();
             }
+
+            ClearInFlight(ct);
 
             // Only reachable on a Discovered outcome, i.e. when RunDiscovery actually found and read
             // a compiled DLL (an unset OutputAssemblyPath or a not-yet-built file is Skipped, so this
