@@ -1,6 +1,9 @@
 # Complexity Hot Spots — Reqnroll.IdeSupport
 
 **Status:** Reference (point-in-time measurement, 2026-10-18). The code wins if it disagrees.
+**Update (2026-11-14):** `TestOutcomeTcpListener.HandleConnectionAsync` has been split into a per-connection
+state object (§4, §10). The tables below still show the 2026-10-18 numbers; with that method gone no
+method in the product is above CX 20.
 **Scope:** C# under `src/LSP`, `src/Core` and `src/VisualStudio`; TypeScript under `src/VSCode/src`
 (excluding `src/VSCode/src/test`); Kotlin under `src/Rider/src/main`. Generated files (`obj/`, `bin/`,
 `*.Designer.cs`, `*.g.cs`, `*.d.ts`) are excluded.
@@ -94,7 +97,7 @@ knows they were looked at.
 
 | Method | LOC | CX | Assessment |
 |---|---|---|---|
-| `TestOutcomeTcpListener.HandleConnectionAsync` (`LSP.Server/Features/TestOutcomes/TestOutcomeTcpListener.cs:212`) | 148 | 33 | **The only method above CX 20.** One method handles the whole NDJSON connection lifecycle: it parses the hello line and infers the reporter kind, dispatches `runStart`/`result`/`runComplete` messages, keeps per-run counters, sends telemetry, and finalizes aborted runs in `finally`. It carries ten mutable locals across those stages. The seam is a per-connection state object with `OnHello` / `OnMessage` / `OnClosed` methods, which leaves the listener with accept-and-dispatch only. About 8 points of the CX are `??` defaults, so the real branching is closer to 25. It still ranks first |
+| `TestOutcomeTcpListener.HandleConnectionAsync` (`LSP.Server/Features/TestOutcomes/TestOutcomeTcpListener.cs`) | 148 → about 45 | 33 → 10 | **Done.** The connection lifecycle moved into `TestRunConnection` (`OnHello` / `OnMessage` / `OnClosed`, with a `ConnectionPhase` enum for the lifecycle). The largest method there is `OnHello` at CX 7. The listener keeps accept, read and dispatch only. `TestRunConnection` is unit-tested without a socket (`TestRunConnectionTests`). The remaining CX 10 is exception handling and the read loop |
 | `RunTestRunner.run` / `runDotnetTest` / `detectDotnetTestMode` (Rider `testrunner/RunTestRunner.kt:69, :416, :587`) | 91 / 120 / 49 | 20 / 16 / 16 | Three of the five branchiest Kotlin methods are in this one 756-line file, the largest in the plugin. It also has the most history narrative of any file (§7). Branching comes from the test-runner mode (VSTest logger or MTP reporter) and from failure handling. A mode-strategy split would follow the existing `detectDotnetTestMode` result |
 | `RunTestOutcomeBridge.GetOrCreateProxyAsync` (VSSDK `RunTestCodeLens/RunTestOutcomeBridge.cs:138`) | 79 | 20 | **Mostly essential.** It is reflection interop against `internal` VS test-window types, and its contract is "never throws", so every reflection step needs a defensive check. Leave it as is |
 | `TestOutcomePersistence.ReadFile` (`LSP.Core/TestOutcomes/TestOutcomePersistence.cs:183`) | 49 | 19 | Reads the persisted outcome file: a format-version check, then validation of each entry before it is accepted. Dense but local |
@@ -291,5 +294,5 @@ None of these has been filed as an issue. In rough order of value for Beta reada
 
 1. **Comment hygiene pass** (§7), file by file starting with the table above, plus a check that
    rejects new `#NNN` references in comments.
-2. **Split `TestOutcomeTcpListener.HandleConnectionAsync`** into a per-connection state object (§4).
+2. ~~**Split `TestOutcomeTcpListener.HandleConnectionAsync`** into a per-connection state object (§4).~~ Done.
 3. **Rider `RunTestRunner.kt`**: separate the runner modes (§4), together with its comment cleanup.
