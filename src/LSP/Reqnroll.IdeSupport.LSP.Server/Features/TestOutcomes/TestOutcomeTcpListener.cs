@@ -211,17 +211,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
 
     private async Task HandleConnectionAsync(TcpClient client)
     {
-        string? runId = null;
-        string? connectionId = null;
-        var results = 0;
-        var started = false;
-        var completed = false;
-        var passed = 0;
-        var failed = 0;
-        var skipped = 0;
-        string reporterKind = "unknown";
-        string targetFramework = string.Empty;
-        Stopwatch? runStopwatch = null;
+        var connection = new TestRunConnection(_store, _logger, _recorder, _lspTelemetryService, () => Interlocked.Increment(ref _connectionSeq));
         try
         {
             client.NoDelay = true;
@@ -230,35 +220,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
 
             var helloLine = await reader.ReadLineAsync().ConfigureAwait(false);
             if (helloLine is null) return;
-            var hello = JObject.Parse(helloLine);
-            if (!string.Equals(hello.Value<string>("type"), "hello", StringComparison.Ordinal))
-            {
-                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: first line was not a hello; closing.");
-                return;
-            }
-
-            runId = hello.Value<string>("runId") ?? Guid.NewGuid().ToString("N");
-            // The store's running marks are owned per *connection*, not per registration id. VS Code
-            // registers once per session and bakes that one id into a static runsettings file, and
-            // vstest.console in design mode re-Initializes the logger several times per Run click, so
-            // several live connections can share a runId — a stale, idle one dropping mid-run must not
-            // clear the marks the real one set.
-            connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
-            var protocol = hello.Value<int?>("protocol") ?? 0;
-            targetFramework = hello.Value<string>("targetFramework") ?? string.Empty;
-            // Reporter kind: prefer the explicit "reporterKind" field both loggers send. Fall back to the
-            // presence-of-"targetFramework" inference for hello lines from older loggers that predate the field — the VSTest logger
-            // always carried a (possibly empty) "targetFramework" key, the MTP reporter never did.
-            reporterKind = hello.Value<string>("reporterKind")
-                ?? (hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP");
-            _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
-            if (protocol != 1)
-                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
-
-            // Perf instrumentation: the NDJSON ingestion hot path, timed from the
-            // connection's hello to its runComplete — not covered by the two thin RPC handlers'
-            // Measure() calls, which only time registerRun/getOutcome themselves.
-            runStopwatch = Stopwatch.StartNew();
+            if (!connection.OnHello(JObject.Parse(helloLine))) return;
 
             string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
@@ -268,118 +230,31 @@ public sealed class TestOutcomeTcpListener : IDisposable
                 try { message = JObject.Parse(line); }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: unparseable line from run {runId}: {ex.Message}");
+                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: unparseable line from run {connection.RunId}: {ex.Message}");
                     continue;
                 }
-
-                switch (message.Value<string>("type"))
-                {
-                    case "runStart":
-                        started = true;
-                        var running = _store.MarkRunning(connectionId, ParseRunStartTests(message));
-                        _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
-                        break;
-                    case "result":
-                        var record = ToRecord(connectionId, message);
-                        if (_store.Record(record) is not null)
-                        {
-                            results++;
-                            switch (record.Outcome)
-                            {
-                                case TestOutcomeKind.Passed: passed++; break;
-                                case TestOutcomeKind.Failed: failed++; break;
-                                case TestOutcomeKind.Skipped: skipped++; break;
-                            }
-                        }
-                        break;
-                    case "runComplete":
-                        completed = true;
-                        // Clear the running marks now rather than at socket close: the logger closes
-                        // right after this line, but the glyph should follow the protocol, not the FIN.
-                        _store.CompleteRun(connectionId);
-                        var aborted = message.Value<bool?>("aborted") ?? false;
-                        var canceled = message.Value<bool?>("canceled") ?? false;
-                        _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={aborted}, canceled={canceled}, {results} result(s) stored");
-
-                        runStopwatch.Stop();
-                        var executed = message.Value<int?>("executed") ?? 0;
-                        _recorder.Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, runStopwatch.Elapsed.TotalMilliseconds,
-                            detail: $"results={results} reporterKind={reporterKind}");
-                        // Product telemetry: counts/flags only — no paths, no
-                        // test names, no content — plus which reporter sent the run, so MTP ephemeral
-                        // injection's real-world adoption is visible in aggregate without a dedicated
-                        // client→server telemetry channel for it.
-                        SendRunCompletedTelemetry(results, passed, failed, skipped, executed, aborted, canceled,
-                            completedNormally: !aborted && !canceled, reporterKind, targetFramework, runStopwatch.Elapsed.TotalMilliseconds);
-                        break;
-                }
+                connection.OnMessage(message);
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)
         {
-            _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: connection for run {runId ?? "?"} dropped: {ex.Message}");
+            _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: connection for run {connection.RunId ?? "?"} dropped: {ex.Message}");
         }
         catch (Exception ex)
         {
-            LogException(ex, $"{nameof(TestOutcomeTcpListener)}: connection handler failed for run {runId ?? "?"}");
+            LogException(ex, $"{nameof(TestOutcomeTcpListener)}: connection handler failed for run {connection.RunId ?? "?"}");
         }
         finally
         {
-            if (connectionId is not null && !completed)
-            {
-                // A connection that never even sent runStart is vstest.console's spare logger
-                // instance (it Initializes the logger more than once per run and only closes the idle
-                // sockets later) — routine, not a lost run.
-                if (started || results > 0)
-                {
-                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
-                    // The most interesting runs (killed test host, crashed MTP process) never send
-                    // runComplete; count them too so aborted runs aren't undercounted.
-                    // ExecutedCount is what we saw (no runComplete to read it from).
-                    runStopwatch?.Stop();
-                    SendRunCompletedTelemetry(results, passed, failed, skipped, executed: results, aborted: true, canceled: false,
-                        completedNormally: false, reporterKind, targetFramework, runStopwatch?.Elapsed.TotalMilliseconds ?? 0);
-                }
-                else
-                    _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: idle connection for run {runId} closed without a runStart; ignoring.");
-            }
             try { client.Dispose(); } catch (Exception) { }
-            if (connectionId is not null)
+            if (connection.OnClosed())
             {
-                // Whether the run completed or the runner died: nothing this connection marked is
-                // running any more, and whatever arrived is worth keeping for the next session.
-                _store.CompleteRun(connectionId);
-                if (results > 0)
-                    _persistence?.Save(_store.Snapshot());
+                _persistence?.Save(_store.Snapshot());
+                // Make sure the client catches up even if the debounce timer was cancelled by disposal ordering.
+                ScheduleRefresh();
             }
-            // Make sure the client catches up even if the debounce timer was cancelled by disposal ordering.
-            if (results > 0) ScheduleRefresh();
         }
     }
-
-    /// <summary>
-    /// Product telemetry: counts, flags, a duration and the target framework moniker
-    /// only — no paths, no test names, no content. Run mode / scope (Run vs Debug, Scenario vs Feature)
-    /// are not sent: <c>reqnroll/registerTestRun</c> takes no parameters and is called once per client
-    /// session (VS Code), not per Run click, so the server never learns them.
-    /// </summary>
-    private void SendRunCompletedTelemetry(int results, int passed, int failed, int skipped, int executed,
-        bool aborted, bool canceled, bool completedNormally, string reporterKind, string targetFramework, double elapsedMs)
-        => _lspTelemetryService?.SendEvent(TelemetryEvents.ProjectTestRunCompleted, new Dictionary<string, object?>
-        {
-            ["ResultCount"] = results,
-            ["PassedCount"] = passed,
-            ["FailedCount"] = failed,
-            ["SkippedCount"] = skipped,
-            ["ExecutedCount"] = executed,
-            ["Aborted"] = aborted,
-            ["Canceled"] = canceled,
-            ["CompletedNormally"] = completedNormally,
-            ["ReporterKind"] = reporterKind,
-            ["TargetFramework"] = targetFramework,
-            ["DurationMs"] = (long)Math.Round(elapsedMs),
-            ["DurationBucket"] = OperationDurationRecorder.Bucket(elapsedMs),
-        });
 
     /// <summary>Mirror of the logger's <c>ReqnrollIdeTestLogger.TestIdentitySeparator</c> (U+001F).</summary>
     internal const char TestIdentitySeparator = (char)0x1f;
