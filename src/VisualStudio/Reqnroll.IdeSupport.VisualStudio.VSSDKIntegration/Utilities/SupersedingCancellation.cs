@@ -12,6 +12,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 /// Not thread-safe by design: <see cref="Begin"/> is called from a command handler's <c>Exec</c>,
 /// which VS always invokes on the UI thread. <see cref="End"/> may be called from any thread; it only
 /// clears the slot if the ending operation is still the current one.
+/// The lifetime token is only observed, never owned: each operation's linked source registers on it
+/// and unregisters when <see cref="End"/> disposes the source, so callers must always call
+/// <see cref="End"/> (in a <c>finally</c>) for every source <see cref="Begin"/> returns.
 /// </remarks>
 internal sealed class SupersedingCancellation
 {
@@ -34,6 +37,12 @@ internal sealed class SupersedingCancellation
             // The previous operation finished and End() disposed it between the exchange above and
             // this Cancel() — it no longer needs cancelling. (Begin runs on the UI thread, End on
             // whichever thread the operation completed on.)
+        }
+        catch (AggregateException)
+        {
+            // A callback registered on the previous operation's token threw. Cancellation has still
+            // been signalled to every callback, and that failure belongs to the superseded
+            // operation — it must not stop the new one from starting on the UI thread.
         }
         return next;
     }
