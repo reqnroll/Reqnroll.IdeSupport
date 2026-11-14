@@ -29,7 +29,7 @@ public class GherkinDocumentTaggerServiceStampTests
     private readonly IDocumentBufferService        _bufferService       = new DocumentBufferService();
     private readonly IProjectBindingRegistryLookup _registryLookup      = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly ILspWorkspaceScopeManager     _scopeManager        = Substitute.For<ILspWorkspaceScopeManager>();
-    private readonly BindingMatchService           _matchService        = new();
+    private readonly BindingMatchService           _matchService;
     private readonly IDocumentGenerations          _documentGenerations = new DocumentGenerations();
     private readonly IProjectConfigGenerations     _configGenerations   = new ProjectConfigGenerations();
     private readonly IIdeSupportConfigurationProvider _configProvider   = Substitute.For<IIdeSupportConfigurationProvider>();
@@ -43,6 +43,7 @@ public class GherkinDocumentTaggerServiceStampTests
 
     public GherkinDocumentTaggerServiceStampTests()
     {
+        _matchService = new BindingMatchService(_documentGenerations, _logger);
         _project = new LspReqnrollProject(
             new ReqnrollProjectLoadedParams
             {

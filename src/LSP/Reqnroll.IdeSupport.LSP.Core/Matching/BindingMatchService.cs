@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -20,6 +21,22 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// </remarks>
 public sealed class BindingMatchService : IBindingMatchService
 {
+    private readonly IDocumentGenerations _documentGenerations;
+    private readonly IIdeSupportLogger _logger;
+
+    private long _acceptedWrites;
+    private long _rejectedSuperseded;
+    private long _rejectedStale;
+
+    /// <summary>Creates the service.</summary>
+    /// <param name="documentGenerations">The generations a stored match set's stamp is compared with.</param>
+    /// <param name="logger">Receives a line for every write the stamp rule would reject.</param>
+    public BindingMatchService(IDocumentGenerations documentGenerations, IIdeSupportLogger logger)
+    {
+        _documentGenerations = documentGenerations ?? throw new ArgumentNullException(nameof(documentGenerations));
+        _logger              = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
     private readonly ConcurrentDictionary<MatchSetKey, FeatureBindingMatchSet> _cache = new();
 
     /// <summary>Reverse index: binding identity -> every cached step that resolves to it (clangd's <c>Refs</c> table).</summary>
@@ -77,15 +94,26 @@ public sealed class BindingMatchService : IBindingMatchService
     private readonly ReaderWriterLockSlim _sync = new(LockRecursionPolicy.NoRecursion);
 
     /// <summary>Caches the given match set under its key, evicting any pre-baseline "Unknown" placeholder for the same document once a project-keyed entry arrives.</summary>
-    public void Store(FeatureBindingMatchSet matchSet)
+    /// <remarks>
+    /// The write rule is applied and reported but not enforced: the set is stored whatever the outcome.
+    /// </remarks>
+    public StoreOutcome Store(FeatureBindingMatchSet matchSet)
     {
         if (matchSet == null) throw new ArgumentNullException(nameof(matchSet));
+
+        StoreOutcome outcome;
+        FeatureBindingMatchSet? previous;
+        long currentGeneration;
 
         // Replace-in-place must be atomic against every other writer for this key: see _sync.
         _sync.EnterWriteLock();
         try
         {
-            if (_cache.TryGetValue(matchSet.Key, out var previous))
+            currentGeneration = _documentGenerations.Current(matchSet.Key.DocumentId);
+            _cache.TryGetValue(matchSet.Key, out previous);
+            outcome = Evaluate(matchSet, previous, currentGeneration);
+
+            if (previous != null)
                 RemoveFromReverseIndex(matchSet.Key, previous);
 
             _cache[matchSet.Key] = matchSet;
@@ -103,6 +131,60 @@ public sealed class BindingMatchService : IBindingMatchService
         finally
         {
             _sync.ExitWriteLock();
+        }
+
+        RecordOutcome(outcome, matchSet, previous, currentGeneration);
+        return outcome;
+    }
+
+    /// <summary>The write rule: a set is rejected when its text is not the document's current text, or when it is older than what is stored. Equal stamps are accepted.</summary>
+    private static StoreOutcome Evaluate(FeatureBindingMatchSet incoming, FeatureBindingMatchSet? stored, long currentGeneration)
+    {
+        if (incoming.Stamp.ContentGeneration != currentGeneration)
+            return StoreOutcome.RejectedSuperseded;
+
+        if (stored != null && incoming.Stamp < stored.Stamp)
+            return StoreOutcome.RejectedStale;
+
+        return StoreOutcome.Accepted;
+    }
+
+    private void RecordOutcome(
+        StoreOutcome outcome, FeatureBindingMatchSet incoming, FeatureBindingMatchSet? stored,
+        long currentGeneration)
+    {
+        switch (outcome)
+        {
+            case StoreOutcome.Accepted:
+                Interlocked.Increment(ref _acceptedWrites);
+                break;
+            case StoreOutcome.RejectedSuperseded:
+                Interlocked.Increment(ref _rejectedSuperseded);
+                break;
+            case StoreOutcome.RejectedStale:
+                Interlocked.Increment(ref _rejectedStale);
+                break;
+        }
+
+        if (outcome != StoreOutcome.Accepted)
+        {
+            _logger.LogVerbose(
+                $"MatchStore: would reject {outcome} write for {incoming.Key.DocumentId} " +
+                $"owner='{(incoming.Key.Owner.IsKnown ? incoming.Key.Owner.ProjectFile : "<Unknown>")}' " +
+                $"incoming={incoming.Stamp} stored={(stored != null ? stored.Stamp.ToString() : "<none>")} " +
+                $"documentVersion={(incoming.DocumentVersion?.ToString() ?? "null")} currentGeneration={currentGeneration}; stored anyway");
+        }
+
+        // Project inputs are read monotonically, so newer text can never have been derived from an
+        // older registry or configuration than older text was.
+        if (stored != null
+            && incoming.Stamp.ContentGeneration > stored.Stamp.ContentGeneration
+            && (incoming.Stamp.RegistryVersion < stored.Stamp.RegistryVersion
+                || incoming.Stamp.ConfigGeneration < stored.Stamp.ConfigGeneration))
+        {
+            _logger.LogWarning(
+                $"MatchStore: project-input regression for {incoming.Key.DocumentId}: newer text derived from older " +
+                $"project inputs. incoming={incoming.Stamp} stored={stored.Stamp}");
         }
     }
 
@@ -279,6 +361,12 @@ public sealed class BindingMatchService : IBindingMatchService
             _sync.ExitReadLock();
         }
     }
+
+    /// <inheritdoc />
+    public StoreStats GetStoreStats() => new(
+        Interlocked.Read(ref _acceptedWrites),
+        Interlocked.Read(ref _rejectedSuperseded),
+        Interlocked.Read(ref _rejectedStale));
 
     /// <inheritdoc />
     public IReadOnlyList<string> AuditIndexConsistency()

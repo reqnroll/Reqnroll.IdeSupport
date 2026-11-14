@@ -23,7 +23,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 /// </summary>
 public class FindStepDefinitionsHandlerTests
 {
-    private readonly BindingMatchService       _matchService  = new();
+    private readonly BindingMatchService       _matchService  = new(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
     private readonly IDocumentBufferService    _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly ILspWorkspaceScopeManager _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger         _logger        = Substitute.For<IIdeSupportLogger>();

@@ -65,7 +65,7 @@ public class BindingMatchServiceConcurrencyTests
         // released together. Whatever the winner is, exactly one set may remain indexed.
         for (var round = 0; round < 2000 && inflatedAt < 0; round++)
         {
-            var sut = new BindingMatchService();
+            var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
             sut.Store(BuildSet(registry, version: 0));   // the "previous" entry the race replaces
 
             var first = BuildSet(registry, version: round * 2 + 1);
@@ -102,7 +102,7 @@ public class BindingMatchServiceConcurrencyTests
 
         for (var round = 0; round < 2000 && leakedAt < 0; round++)
         {
-            var sut = new BindingMatchService();
+            var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
             sut.Store(BuildSet(registry, version: 0));
 
             var next = BuildSet(registry, version: round + 1);
@@ -131,7 +131,7 @@ public class BindingMatchServiceConcurrencyTests
     [Fact]
     public void AuditIndexConsistency_is_silent_when_the_index_matches_the_cache()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(RegistryWith(GivenBinding("my step")), version: 1));
         sut.Store(BuildSet(RegistryWith(GivenBinding("my step")), version: 2));
 

@@ -23,7 +23,7 @@ public class BindingMatchServiceOrderingTests
         var older = EmptyRegistry();
         var newer = EmptyRegistry();
         newer.Version.Should().BeGreaterThan(older.Version);
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
 
         sut.Store(new FeatureBindingMatchSet(DocumentId, Owner, documentVersion: null, newer.Version, Array.Empty<StepBindingMatch>()));
         sut.Store(new FeatureBindingMatchSet(DocumentId, Owner, documentVersion: null, older.Version, Array.Empty<StepBindingMatch>()));
