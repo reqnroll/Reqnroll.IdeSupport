@@ -66,6 +66,21 @@ public class SupersedingCancellationTests
     }
 
     [Fact]
+    public void Beginning_does_not_throw_when_a_cancellation_callback_of_the_previous_operation_throws()
+    {
+        var sut = new SupersedingCancellation(CancellationToken.None);
+        var first = sut.Begin();
+        first.Token.Register(() => throw new InvalidOperationException("callback failure"));
+
+        CancellationTokenSource? second = null;
+        var begin = () => second = sut.Begin();
+
+        begin.Should().NotThrow();
+        first.IsCancellationRequested.Should().BeTrue();
+        second!.IsCancellationRequested.Should().BeFalse();
+    }
+
+    [Fact]
     public void The_lifetime_token_cancels_the_operation_in_flight()
     {
         using var lifetime = new CancellationTokenSource();
