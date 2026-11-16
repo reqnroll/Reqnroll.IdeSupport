@@ -144,9 +144,10 @@ Both need checking in Rider ([§9](#9-not-verified)).
 4. The per-file default language ([§2.2](#22-lexer)).
 
 **Parity with the server.** Both sides come from the same Cucumber release train, so grammar and
-keywords should agree. Contract tests: run the Cucumber shared test corpus (the `good/*.feature` files
-with their expected token output) through the adapter, and compare structure for a fixed sample against
-the server's `documentSymbol`.
+keywords should agree. Contract tests: run a selection of the Cucumber test files (the edge cases our lexer,
+adapter and tree builder must survive, valid and invalid) through them, and compare structure for a fixed
+sample against the server's `documentSymbol`. Gherkin's own parsing of those files is the Cucumber project's
+to test, not ours.
 
 ## 3. Area-by-area rework
 
