@@ -1,8 +1,11 @@
 # Versioned Derived State — Design
 
-**Status: PROPOSED (2026-10-05), revised 2026-11-14.** Tracking issue: #906. Migration plan:
-[Versioned-Derived-State-Migration-Plan.md](Versioned-Derived-State-Migration-Plan.md). What the
-revision changed is listed in §6.
+**Status: IMPLEMENTED (2026-11-16). Historical record, not maintained.** The system as it is now is described in
+[../architecture/derived-state-versioning.md](../architecture/derived-state-versioning.md); this document keeps the
+problem analysis, the stale-write paths and the options considered. Where the code departed from the design is listed
+in §7. Tracking issue: #906. Migration plan:
+[Versioned-Derived-State-Migration-Plan.md](Versioned-Derived-State-Migration-Plan.md). What the 2026-11-14 revision
+changed is listed in §6.
 
 This is a design record for how the LSP server keeps the state it derives from `.feature` and `.cs`
 files (match sets, tags, semantic-token cache, tag index) from being overwritten by stale results.
@@ -387,3 +390,47 @@ still last-writer-wins. Changes to this document:
 - During Phase 1b: a renamed closed file is re-derived from post-rename text computed when the
   rename is staged, not from the disk at commit (which may be pre-rename, or post-rename and so
   double-edited).
+
+## 7. As built (2026-11-16)
+
+Where the implementation differs from the design above, or adds to it.
+
+- **`Store` and its counters.** `Store` returns `StoreOutcome` and drops a rejected write, as designed. The counters are
+  read through a separate `GetStoreStats()` rather than added to the `GetCacheStats` tuple, so existing tuple
+  deconstruction keeps compiling. A rejection logs at Verbose without the writer's name: a caller-name parameter on the
+  mocked `Store` method becomes part of NSubstitute's argument match and turns `DidNotReceive` assertions into no-ops.
+  The I3 breach logs a Warning (`project-input regression`).
+- **Work skipped on rejection.** The design says `ParseAsync` and `ScanClosedFileAsync` skip their follow-on work. Once
+  the semantic-token cache keyed on stamps, `ParseAsync` had no follow-on work left, so it only calls `Store`.
+  `ScanClosedFileAsync` logs that the result was out of date. `MatchCacheChangedNotification` is still published by
+  `FeatureDocumentReparser` after a dropped parse: it costs a refresh that reads current state and publishes nothing stale.
+- **`UpdateTags` takes a stamp.** The design has `UpdateTags(uri, generation, tags)`. It takes the whole
+  `DerivationStamp`, because the buffer keeps it as `DocumentBuffer.TagsStamp` for the token cache key.
+- **Semantic-token cache.** Keyed `(uri, TagsStamp)` as designed, with older stamps purged. `InvalidateCache` is removed
+  from `ISemanticTokensService`, and `GherkinDocumentTaggerService` no longer depends on the token service. `ResultId` is
+  derived from the stamp. A request made while the buffer has no tags always returns an empty result.
+- **`FeatureTagIndex`.** Open buffers are anchored on `buffer.Generation`. Closed files also record the generation read
+  before the file, next to the write time (the design proposed replacing the client version only). The feature language
+  check stays a comparison of the value the parse used; it did not move to `ConfigGeneration`, because the language can
+  change without a configuration notification and a counter would miss it.
+- **Rename of closed files.** The post-rename text is computed when the rename is staged, from the disk text plus the
+  staged edits (`TextEditApplier`), not read at commit. The commit refreshes the C# registry first and then re-derives
+  each closed file through `ScanClosedFileForAllOwnersAsync`, a method added to `IGherkinDocumentTaggerService`. The
+  end-to-end rename test replaced the Phase 0 R5a test, which assumed a rescan from disk.
+- **Added, not in the design.** `ClosedFileMatchCacheChangedNotification` and
+  `IFeatureDocumentReparser.RescanClosedDocumentAsync`: `didClose` rewrites a closed file's match sets from disk, and the
+  rename commit rewrites closed files after its registry refresh, with no open-document parse behind either. Each now
+  ends in a code lens refresh so the step usage counts follow the cache.
+- **Open questions.** Q1 (closed `.feature` files are not watched) is unchanged. Q2 is covered by a Core-level test of two
+  owners of one document advancing independently, not by a tagger-level linked-file test. Q3 is done:
+  `ProjectBindingRegistry.Invalid` is `static readonly`. Q7 (a file leaving one project keeps that project's match set) is
+  not addressed.
+- **Optional §3.7 was not built.** Every bulk writer already ends in a debounced lens refresh, so a sweep that overlapped
+  a rescan corrects itself, and no wrong-and-stays-wrong count was seen. The two writers that lacked a refresh were fixed
+  instead (previous item).
+- **What was observed before enforcing.** The log-only build ran on a 60-project solution in Visual Studio (three runs,
+  including opens during the startup scan, a branch switch and configuration edits), Rider and VS Code. No write was
+  rejected, so the follow-up of a rejection (the I1 invariant) was never exercised live. The planned week of
+  dogfooding was skipped. Typing in a slow-to-parse file was not run.
+- **Not verified live after enforcing:** usage lens counts across three cold starts on a solution with linked feature
+  files, a language change during a rebuild, and a `.cs` step definition edit recolouring an open `.feature` file.

@@ -1,9 +1,28 @@
 # Versioned Derived State — Migration Plan
 
-**Status: PROPOSED (2026-10-05), revised 2026-11-14.** Tracking issue: #906. Design:
+**Status: COMPLETED (2026-11-16), except Phase 6 which was evaluated and not built. Historical record, not
+maintained.** What shipped is described in
+[../architecture/derived-state-versioning.md](../architecture/derived-state-versioning.md); the departures from the
+design are in §7 of the design. Tracking issue: #906. Design:
 [Versioned-Derived-State-Design.md](Versioned-Derived-State-Design.md). Section references (§) are to
 that document; R1–R6 are the stale-write paths in its §1.3 (R4b is already fixed, so R4 here means
 R4a).
+
+## As executed
+
+| Phase | PR | Outcome |
+|---|---|---|
+| 0 | #1347 | Seven characterisation tests, all failed on their final assertion before being skipped, so every path was real. R5a was later replaced by the end-to-end rename test. |
+| 1 | #1348 | Generations and bump sites. Membership removal is not a bump site; `.editorconfig` changes do not bump the config generation. |
+| 1b | #1349 | Closed feature files are re-derived after a rename, from text computed when the rename is staged. |
+| 2 | #1350 | `DerivationStamp`, `DocumentBuffer.Generation`, `FeatureBindingMatchSet.Stamp`. |
+| 3 | #1351 | `UpdateTags` rejects tags from superseded text (R4a). |
+| 4a | #1352 | `Store` returns `StoreOutcome` and logs; still stores. |
+| 4b | #1357 | `Store` drops superseded and stale writes. R1, R2, R3, R4a, R5b and R6 unskipped. |
+| 5 | #1358 | Token cache and tag index keyed on stamps. `UpdateTags` takes the stamp. `InvalidateCache` removed. |
+| 6 | — | Evaluated, not built: see the design's §7. |
+| 7 | this change | The current-state document replaces the design as the maintained description. |
+| — | #1359 | Added: code lens refresh after `didClose` and rename rewrite closed files. |
 
 **Before Phase 0:** this branch was written against a much older `main`. Rebase it (or start Phase 0
 from a fresh branch off `main`) and re-read §1.2 against the code once more; the writer list is the

@@ -35,7 +35,7 @@ flowchart LR
     RTH --> BR
     RTH --> SES["RenameSessionManager<br/>(30 s pending target)"]
     WEB -->|"annotated DocumentChanges or legacy Changes"| CLIENT
-    RH --> PAC["RenamePostApplyCoordinator<br/>(push edit for VS; invalidate closed-file caches)"]
+    RH --> PAC["RenamePostApplyCoordinator<br/>(push edit for VS; re-derive closed-file match sets)"]
 ```
 
 ## 3. Flows
@@ -118,7 +118,7 @@ sequenceDiagram
 | `RenameTargetsHandler`, `RenameTargetsParams/Response`, `SelectRenameTargetParams` | same | Candidate enumeration and the pending-session selection. |
 | `RenameBindingResolver`, `RenameBindingIdentity`, `NewNameReconciler`, `CSharpAttributeLiteralResolver` | same | Cursor → candidate bindings; reconcile new name with the existing shape; locate the C# literal (shared syntax-tree cache). |
 | `WorkspaceEditBuilder`, `RenameChangeAnnotations`, `ChangeAnnotationIdentifierKeySerialization` | same, `…LSP.Core/Rename` | Negotiated edit shape and annotation ids (`reqnroll.rename.feature`, `reqnroll.rename.binding`). |
-| `RenamePostApplyCoordinator` | same | Visual Studio push and closed-file cache invalidation. |
+| `RenamePostApplyCoordinator` | same | Visual Studio push, and re-deriving the match sets of closed feature files from their post-rename text. |
 | `StepRenameValidator`, `RenameSessionManager`, `FeatureStepTextBuilder`, `StepExpressionParameters` | `…LSP.Core/Rename` | Validation rules, sessions, feature text building. |
 | `RenameStepCommand`, `RenameStepService`, `RenameStepState` | `src/VisualStudio/…Extension/RenameStep` | Visual Studio command. |
 | `renameStep.ts` | `src/VSCode/src/commands` | VS Code command with targets, picker and selection. |
@@ -170,9 +170,13 @@ versions are always null (`OptionalVersionedTextDocumentIdentifier` without a ve
   Shift+F6; the `.cs` side is context-menu only.
 
 **Post-apply.** `RenamePostApplyCoordinator` pushes the edit for Visual Studio only; only when its `ApplyWorkspaceEditResponse`
-comes back `Applied = true` does cache invalidation proceed (a reported failure such as a locked file short-circuits before
-any cache is touched). It also invalidates the match cache of touched `.feature` files that are **not open**: open files get
-this from the `didChange` their edit triggers, but a closed file never does.
+comes back `Applied = true` does cache work proceed (a reported failure such as a locked file short-circuits before
+any cache is touched). It first refreshes the registry for the edited `.cs` file, then bumps the content generation of each
+touched `.feature` file that is **not open**, invalidates its match sets and re-derives them from the post-rename text,
+which was computed when the rename was staged. Open files get this from the `didChange` their edit triggers, but a closed
+file never does. A rewrite of closed files ends with one code lens refresh, since the registry refresh before it ran
+before those usages were back in the cache. The rules are in
+[../architecture/derived-state-versioning.md](../architecture/derived-state-versioning.md).
 
 **Error handling.**
 
@@ -191,8 +195,12 @@ this from the `didChange` their edit triggers, but a closed file never does.
    registry. A dynamic parse is simple and always current.
 2. **Visual Studio double-applies if the response carries the edit.** Its pipeline applies a returned edit as well as the pushed
    one; hence the empty response plus `applyEdit` push for the behaviour flag, and no push at all for other clients.
-3. **Invalidate closed-file caches explicitly, and only after success.** Invalidating a closed file before the open-file race
-   dropped the rebuild entirely (inlay hints vanished for the whole file after a rename).
+3. **Re-derive closed files explicitly, and only after success.** Invalidating a closed file before the open-file race
+   dropped the rebuild entirely (inlay hints vanished for the whole file after a rename). Invalidating without re-deriving
+   leaves the file out of Find Usages and the usage counts until the next full scan.
+3a. **Derive the post-rename text from the staged edit, not from the disk at commit.** At commit the file may hold the text
+   from before the rename or already the text after it, depending on how the client applies the edit, so reading it risks
+   applying the edit twice.
 4. **Return null from `prepareRename` for multi-attribute positions.** The standard gesture cannot express a mid-rename picker,
    so the custom request/selection pair is used instead.
 5. **Operators depend on the binding's syntax.** One shared forbidden list would block legitimate Cucumber literals or allow
