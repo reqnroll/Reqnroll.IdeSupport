@@ -30,7 +30,7 @@ public sealed class BindingMatchService : IBindingMatchService
 
     /// <summary>Creates the service.</summary>
     /// <param name="documentGenerations">The generations a stored match set's stamp is compared with.</param>
-    /// <param name="logger">Receives a line for every write the stamp rule would reject.</param>
+    /// <param name="logger">Receives a line for every write the stamp rule rejects.</param>
     public BindingMatchService(IDocumentGenerations documentGenerations, IIdeSupportLogger logger)
     {
         _documentGenerations = documentGenerations ?? throw new ArgumentNullException(nameof(documentGenerations));
@@ -95,7 +95,9 @@ public sealed class BindingMatchService : IBindingMatchService
 
     /// <summary>Caches the given match set under its key, evicting any pre-baseline "Unknown" placeholder for the same document once a project-keyed entry arrives.</summary>
     /// <remarks>
-    /// The write rule is applied and reported but not enforced: the set is stored whatever the outcome.
+    /// The write rule is enforced: a set that is superseded or stale is dropped and the entry already
+    /// stored under the key is left untouched. The outcome is returned so the writer can skip the work
+    /// that would otherwise follow a successful write.
     /// </remarks>
     public StoreOutcome Store(FeatureBindingMatchSet matchSet)
     {
@@ -113,19 +115,22 @@ public sealed class BindingMatchService : IBindingMatchService
             _cache.TryGetValue(matchSet.Key, out previous);
             outcome = Evaluate(matchSet, previous, currentGeneration);
 
-            if (previous != null)
-                RemoveFromReverseIndex(matchSet.Key, previous);
-
-            _cache[matchSet.Key] = matchSet;
-            AddToIndexes(matchSet.Key, matchSet);
-
-            // When a project-keyed entry arrives, evict any Unknown placeholder for the same document
-            // so the transition from pre-baseline to post-baseline state is clean.
-            if (matchSet.Key.Owner.IsKnown)
+            if (outcome == StoreOutcome.Accepted)
             {
-                var unknownKey = MatchSetKey.ForUnknownProject(matchSet.Key.DocumentId);
-                if (_cache.TryRemove(unknownKey, out var unknownPlaceholder))
-                    RemoveFromReverseIndex(unknownKey, unknownPlaceholder);
+                if (previous != null)
+                    RemoveFromReverseIndex(matchSet.Key, previous);
+
+                _cache[matchSet.Key] = matchSet;
+                AddToIndexes(matchSet.Key, matchSet);
+
+                // When a project-keyed entry arrives, evict any Unknown placeholder for the same document
+                // so the transition from pre-baseline to post-baseline state is clean.
+                if (matchSet.Key.Owner.IsKnown)
+                {
+                    var unknownKey = MatchSetKey.ForUnknownProject(matchSet.Key.DocumentId);
+                    if (_cache.TryRemove(unknownKey, out var unknownPlaceholder))
+                        RemoveFromReverseIndex(unknownKey, unknownPlaceholder);
+                }
             }
         }
         finally
@@ -169,10 +174,10 @@ public sealed class BindingMatchService : IBindingMatchService
         if (outcome != StoreOutcome.Accepted)
         {
             _logger.LogVerbose(
-                $"MatchStore: would reject {outcome} write for {incoming.Key.DocumentId} " +
+                $"MatchStore: rejected {outcome} write for {incoming.Key.DocumentId} " +
                 $"owner='{(incoming.Key.Owner.IsKnown ? incoming.Key.Owner.ProjectFile : "<Unknown>")}' " +
                 $"incoming={incoming.Stamp} stored={(stored != null ? stored.Stamp.ToString() : "<none>")} " +
-                $"documentVersion={(incoming.DocumentVersion?.ToString() ?? "null")} currentGeneration={currentGeneration}; stored anyway");
+                $"documentVersion={(incoming.DocumentVersion?.ToString() ?? "null")} currentGeneration={currentGeneration}; dropped");
         }
 
         // Project inputs are read monotonically, so newer text can never have been derived from an

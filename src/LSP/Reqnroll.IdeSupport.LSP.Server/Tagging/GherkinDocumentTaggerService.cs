@@ -112,7 +112,13 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // Keyed by (uri, primaryOwner); see the owner resolution above.
         var matchSet = FeatureBindingMatchSet.FromTags(
             uri.ToString(), snapshot.Version, stamp, tags, owner);
-        _bindingMatchService.Store(matchSet);
+        if (_bindingMatchService.Store(matchSet) != StoreOutcome.Accepted)
+        {
+            // The store dropped this derivation: the document moved on (a newer parse is already
+            // scheduled) or a newer one is stored. Either way the work that follows a stored match set
+            // belongs to that newer derivation, so leave the semantic token cache to it.
+            return Task.FromResult(tags);
+        }
 
         // Evict the semantic token cache for this URI. The cache is keyed on (uri, documentVersion);
         // it must be invalidated here because binding discovery can update the tags for a document
@@ -157,7 +163,11 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
 
         var matchSet = FeatureBindingMatchSet.FromTags(
             uri.ToString(), documentVersion: null, stamp, tags, owner);
-        _bindingMatchService.Store(matchSet);
+        if (_bindingMatchService.Store(matchSet) != StoreOutcome.Accepted)
+        {
+            _logger.LogVerbose($"ScanClosedFile: result for {uri} [{project.ProjectName}] was out of date; dropped.");
+            return Task.CompletedTask;
+        }
 
         _logger.LogVerbose($"ScanClosedFile: stored {matchSet.Steps.Count} step(s) for {uri} [{project.ProjectName}]");
         return Task.CompletedTask;

@@ -27,7 +27,7 @@ public record ProjectBindingRegistry
     private const string DataTableDefaultTypeName = TypeShortcuts.ReqnrollTableType;
     private const string DocStringDefaultTypeName = TypeShortcuts.StringType;
     /// <summary>Sentinel registry used before any bindings have been discovered for a project.</summary>
-    public static ProjectBindingRegistry Invalid = new(ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty);
+    public static readonly ProjectBindingRegistry Invalid = new(ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty);
 
     private static ProjectBindingImplementationEqualityComparer _equalityComparerForProjectBindingImplementations = new();
     private static int _versionCounter;

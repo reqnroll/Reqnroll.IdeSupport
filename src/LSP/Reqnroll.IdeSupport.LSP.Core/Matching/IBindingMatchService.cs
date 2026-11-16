@@ -15,12 +15,14 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// </remarks>
 public interface IBindingMatchService
 {
-    /// <summary>Stores (replacing any prior entry for the same <see cref="FeatureBindingMatchSet.Key"/>).
+    /// <summary>Stores (replacing any prior entry for the same <see cref="FeatureBindingMatchSet.Key"/>)
+    /// unless the write rule rejects the set's stamp, in which case the stored entry is left as it is.
     /// If the incoming key has a known <see cref="ProjectOwner"/>, evicts any
     /// <see cref="ProjectOwner.Unknown"/> placeholder for the same document.</summary>
     /// <returns>
-    /// What the write rule concluded about the set's stamp (see <see cref="StoreOutcome"/>). Every
-    /// write is stored whatever the outcome; callers must not branch on it yet.
+    /// <see cref="StoreOutcome.Accepted"/> when the set was stored; otherwise why it was dropped. A caller
+    /// that gets a rejection must not run the work that depends on the set having been stored
+    /// (cache invalidations, notifications): whatever made the write stale also schedules a newer one.
     /// </returns>
     /// <param name="matchSet">The match set to store.</param>
     StoreOutcome Store(FeatureBindingMatchSet matchSet);

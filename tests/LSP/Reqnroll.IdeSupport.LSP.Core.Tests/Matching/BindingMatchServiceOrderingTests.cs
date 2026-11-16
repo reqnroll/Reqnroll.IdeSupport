@@ -1,3 +1,5 @@
+using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Matching;
@@ -17,7 +19,7 @@ public class BindingMatchServiceOrderingTests
     private static ProjectBindingRegistry EmptyRegistry() =>
         new(Array.Empty<ProjectStepDefinitionBinding>(), Array.Empty<ProjectHookBinding>(), 0);
 
-    [Fact(Skip = "Stale derived-state write is accepted until the versioned-derived-state store guard is enforced")]
+    [Fact]
     public void Closed_file_set_built_against_an_older_registry_does_not_replace_one_built_against_a_newer_registry()
     {
         var older = EmptyRegistry();
@@ -25,8 +27,10 @@ public class BindingMatchServiceOrderingTests
         newer.Version.Should().BeGreaterThan(older.Version);
         var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
 
-        sut.Store(new FeatureBindingMatchSet(DocumentId, Owner, documentVersion: null, newer.Version, Array.Empty<StepBindingMatch>()));
-        sut.Store(new FeatureBindingMatchSet(DocumentId, Owner, documentVersion: null, older.Version, Array.Empty<StepBindingMatch>()));
+        sut.Store(new FeatureBindingMatchSet(DocumentId, Owner, documentVersion: null, newer.Version, Array.Empty<StepBindingMatch>()))
+            .Should().Be(StoreOutcome.Accepted);
+        sut.Store(new FeatureBindingMatchSet(DocumentId, Owner, documentVersion: null, older.Version, Array.Empty<StepBindingMatch>()))
+            .Should().Be(StoreOutcome.RejectedStale);
 
         sut.TryGet(new MatchSetKey(DocumentId, Owner), out var cached).Should().BeTrue();
         cached.RegistryVersion.Should().Be(newer.Version, "the set built against the newer registry must win");

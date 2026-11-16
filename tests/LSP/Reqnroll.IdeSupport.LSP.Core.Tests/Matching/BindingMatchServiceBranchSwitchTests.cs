@@ -139,12 +139,16 @@ public class BindingMatchServiceBranchSwitchTests
             GivenBinding("my step", "MyStep", "Steps.cs"),
             GivenBinding("another step", "Another", "Steps.cs", line: 9));
         var stepsOnB = RegistryWith(GivenBinding("my step", "MyStep", "Moved.cs"));
+        // Switching back rediscovers the first branch's bindings: a new registry, with a newer version.
+        var stepsOnAAgain = RegistryWith(
+            GivenBinding("my step", "MyStep", "Steps.cs"),
+            GivenBinding("another step", "Another", "Steps.cs", line: 9));
         const string twoSteps = "Feature: F\nScenario: S\n    Given my step\n    And another step\n";
 
         var switched = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         switched.Store(Match(Uri, twoSteps, stepsOnA, version: 1));
         switched.Store(Match(Uri, twoSteps, stepsOnB, version: 1));
-        switched.Store(Match(Uri, twoSteps, stepsOnA, version: 1));
+        switched.Store(Match(Uri, twoSteps, stepsOnAAgain, version: 1));
 
         var fresh = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         fresh.Store(Match(Uri, twoSteps, stepsOnA, version: 1));
@@ -164,8 +168,9 @@ public class BindingMatchServiceBranchSwitchTests
         // (see BindingMatchService._locationIndex), and an entry is only replaced when the same
         // BindingId is stored under the *same file*; a move leaves the old file's entry behind, and
         // because the id still has usages (at the new location) it does not resolve to zero.
-        var onA = RegistryWith(GivenBinding("my step", "MyStep", "Steps.cs"));
         var onB = RegistryWith(GivenBinding("my step", "MyStep", "Moved.cs"));
+        // Switching back rediscovers the first branch's bindings: a new registry, with a newer version.
+        var onA = RegistryWith(GivenBinding("my step", "MyStep", "Steps.cs"));
 
         var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(Match(Uri, Feature, onB, version: 1));
