@@ -8,7 +8,6 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
-using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -22,7 +21,6 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
 {
     private readonly IIdeSupportTagParser            _tagParser;
     private readonly IProjectBindingRegistryLookup _registryLookup;
-    private readonly ISemanticTokensService         _semanticTokenService;
     private readonly IBindingMatchService          _bindingMatchService;
     private readonly IIdeSupportLogger               _logger;
     private readonly IDocumentBufferService        _documentBufferService;
@@ -36,7 +34,6 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         IDocumentBufferService        documentBufferService,
         IIdeSupportTagParser            tagParser,
         IProjectBindingRegistryLookup registryLookup,
-        ISemanticTokensService         semanticTokenService,
         IBindingMatchService          bindingMatchService,
         ILspWorkspaceScopeManager     scopeManager,
         IIdeSupportLogger               logger,
@@ -47,7 +44,6 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         _documentBufferService = documentBufferService;
         _tagParser             = tagParser;
         _registryLookup        = registryLookup;
-        _semanticTokenService  = semanticTokenService;
         _bindingMatchService   = bindingMatchService;
         _scopeManager          = scopeManager;
         _logger                = logger;
@@ -103,7 +99,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // The buffer may have been removed by didClose while the parse ran: the close
         // path has already invalidated and rescanned this document from disk, so drop the result
         // rather than overwrite that closed-file match set with one for a document no longer open.
-        if (!_documentBufferService.UpdateTags(uri, buffer.Generation, tags))
+        if (!_documentBufferService.UpdateTags(uri, stamp, tags))
         {
             _logger.LogVerbose($"Document {uri} was closed or changed during parsing; discarding parse result.");
             return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
@@ -112,19 +108,9 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // Keyed by (uri, primaryOwner); see the owner resolution above.
         var matchSet = FeatureBindingMatchSet.FromTags(
             uri.ToString(), snapshot.Version, stamp, tags, owner);
-        if (_bindingMatchService.Store(matchSet) != StoreOutcome.Accepted)
-        {
-            // The store dropped this derivation: the document moved on (a newer parse is already
-            // scheduled) or a newer one is stored. Either way the work that follows a stored match set
-            // belongs to that newer derivation, so leave the semantic token cache to it.
-            return Task.FromResult(tags);
-        }
-
-        // Evict the semantic token cache for this URI. The cache is keyed on (uri, documentVersion);
-        // it must be invalidated here because binding discovery can update the tags for a document
-        // whose version has not changed. Failure to evict would cause the client to receive
-        // stale (pre-binding) token data indefinitely.
-        _semanticTokenService.InvalidateCache(uri);
+        // The store drops a derivation that is out of date and logs why; the tags above carry their own
+        // stamp, so the semantic token cache keys on it and needs no eviction here.
+        _bindingMatchService.Store(matchSet);
 
         return Task.FromResult(tags);
     }

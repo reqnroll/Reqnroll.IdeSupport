@@ -38,7 +38,7 @@ public sealed class GherkinDocumentTaggerProjectLanguageTests : IDisposable
         Directory.CreateDirectory(_root);
         _parser = new RecordingTagParser(TaggerTestParser.Create(_logger));
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
-        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<long>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
+        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<DerivationStamp>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
             .Returns(true);
     }
 
@@ -71,7 +71,7 @@ public sealed class GherkinDocumentTaggerProjectLanguageTests : IDisposable
 
     private GherkinDocumentTaggerService CreateSut() =>
         new(_bufferService, _parser, _registryLookup,
-            Substitute.For<ISemanticTokensService>(), _bindingMatchService, _scopeManager, _logger, _fileSystem,
+            _bindingMatchService, _scopeManager, _logger, _fileSystem,
             new DocumentGenerations(), new ProjectConfigGenerations());
 
     private void OpenBuffer(DocumentUri uri, string text)

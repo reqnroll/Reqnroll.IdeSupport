@@ -1,3 +1,4 @@
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 
@@ -35,7 +36,7 @@ public class DocumentBufferServiceGenerationTests
         var sut = new DocumentBufferService();
         sut.Update(Uri, 2, "Feature: F\n", generation: 5);
 
-        sut.UpdateTags(Uri, 5, Array.Empty<IdeSupportTag>()).Should().BeTrue();
+        sut.UpdateTags(Uri, new DerivationStamp(5, 0, 0), Array.Empty<IdeSupportTag>()).Should().BeTrue();
 
         sut.TryGet(Uri, out var buffer).Should().BeTrue();
         buffer!.Generation.Should().Be(5);
@@ -87,7 +88,7 @@ public class DocumentBufferServiceGenerationTests
         sut.Update(Uri, 2, "Feature: old\n", generation: 5);
         sut.Update(Uri, 3, "Feature: new\n", generation: 6);
 
-        sut.UpdateTags(Uri, 5, new List<IdeSupportTag>()).Should().BeFalse();
+        sut.UpdateTags(Uri, new DerivationStamp(5, 0, 0), new List<IdeSupportTag>()).Should().BeFalse();
 
         sut.TryGet(Uri, out var buffer).Should().BeTrue();
         buffer!.Generation.Should().Be(6);
@@ -102,9 +103,50 @@ public class DocumentBufferServiceGenerationTests
         sut.Update(Uri, 3, "Feature: new\n", generation: 6);
         var tags = new List<IdeSupportTag>();
 
-        sut.UpdateTags(Uri, 6, tags).Should().BeTrue();
+        sut.UpdateTags(Uri, new DerivationStamp(6, 0, 0), tags).Should().BeTrue();
 
         sut.TryGet(Uri, out var buffer).Should().BeTrue();
         buffer!.Tags.Should().BeSameAs(tags);
+    }
+
+    [Fact]
+    public void UpdateTags_keeps_the_stamp_of_the_inputs_the_tags_were_derived_from()
+    {
+        var sut = new DocumentBufferService();
+        sut.Update(Uri, 1, "Feature: F\n", generation: 5);
+        var stamp = new DerivationStamp(5, 2, 17);
+
+        sut.UpdateTags(Uri, stamp, new List<IdeSupportTag>()).Should().BeTrue();
+
+        sut.TryGet(Uri, out var buffer).Should().BeTrue();
+        buffer!.TagsStamp.Should().Be(stamp);
+    }
+
+    [Fact]
+    public void Replacing_the_text_discards_the_tags_stamp_with_the_tags()
+    {
+        var sut = new DocumentBufferService();
+        sut.Update(Uri, 1, "Feature: F\n", generation: 5);
+        sut.UpdateTags(Uri, new DerivationStamp(5, 2, 17), new List<IdeSupportTag>());
+
+        sut.Update(Uri, 2, "Feature: G\n", generation: 6);
+
+        sut.TryGet(Uri, out var buffer).Should().BeTrue();
+        buffer!.Tags.Should().BeNull();
+        buffer.TagsStamp.Should().Be(default(DerivationStamp));
+    }
+
+    [Fact]
+    public void A_stamp_for_superseded_text_leaves_the_buffers_tags_and_stamp_alone()
+    {
+        var sut = new DocumentBufferService();
+        sut.Update(Uri, 1, "Feature: F\n", generation: 6);
+        var current = new DerivationStamp(6, 0, 3);
+        sut.UpdateTags(Uri, current, new List<IdeSupportTag>());
+
+        sut.UpdateTags(Uri, new DerivationStamp(5, 0, 9), new List<IdeSupportTag>()).Should().BeFalse();
+
+        sut.TryGet(Uri, out var buffer).Should().BeTrue();
+        buffer!.TagsStamp.Should().Be(current);
     }
 }

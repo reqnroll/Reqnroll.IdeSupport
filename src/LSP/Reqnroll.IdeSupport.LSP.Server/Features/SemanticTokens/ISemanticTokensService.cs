@@ -15,8 +15,10 @@ public interface ISemanticTokensService
     SemanticTokensLegend Legend { get; }
 
     /// <summary>
-    /// Returns the cached encoded token data for the requested document version,
-    /// or <see langword="null"/> when no data is available yet.
+    /// Returns the encoded token data for the document's current tags, cached under the stamp of the
+    /// inputs those tags were derived from, or an empty token set when the document has no tags yet.
+    /// <paramref name="version"/> is the client version the request was made for; it is not part of
+    /// the cache key.
     /// </summary>
     Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensAsync(DocumentUri uri, int version, CancellationToken cancellationToken = default);
 
@@ -41,12 +43,4 @@ public interface ISemanticTokensService
         DocumentUri uri, int version,
         global::OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Evicts any cached token result for <paramref name="uri"/>, forcing the next
-    /// <see cref="GetSemanticTokensAsync"/> call to re-encode from the current tags.
-    /// Call this whenever the document's tags are updated without a version bump
-    /// (e.g. after binding discovery completes for an already-open file).
-    /// </summary>
-    void InvalidateCache(DocumentUri uri);
 }

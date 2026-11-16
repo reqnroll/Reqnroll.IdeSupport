@@ -2,6 +2,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -12,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 
 /// <summary>
 /// Maps <see cref="IdeSupportTag"/> instances to LSP semantic token integer tuples
-/// on demand and caches the encoded result per document version.
+/// on demand and caches the encoded result per <see cref="DerivationStamp"/> of the tags.
 /// Encoding is deferred until the client sends a semantic tokens request.
 /// The token type legend and the tag→token mapping are the fixed Reqnroll definitions
 /// in <see cref="ReqnrollSemanticTokens"/> (identical for every IDE client).
@@ -23,8 +24,8 @@ public sealed class SemanticTokensService : ISemanticTokensService
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IIdeSupportLogger         _logger;
 
-    // key: (uri, version)  value: encoded token data
-    private readonly ConcurrentDictionary<(DocumentUri, int), global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens> _cache = new();
+    // key: (uri, stamp of the tags the data was encoded from)  value: encoded token data
+    private readonly ConcurrentDictionary<(DocumentUri, DerivationStamp), global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens> _cache = new();
 
     /// <summary>
     /// Shared empty token set — returned instead of null so that OmniSharp's
@@ -48,28 +49,30 @@ public sealed class SemanticTokensService : ISemanticTokensService
     }
 
     // ── ISemanticTokensService ─────────────────────────────────────────────────
-    /// <summary>Returns the semantic tokens for the given document/version, computing and caching them on a cache miss.</summary>
+    /// <summary>Returns the semantic tokens for the document's current tags, computing and caching them on a cache miss.</summary>
     public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensAsync(
         DocumentUri uri, int version, CancellationToken cancellationToken = default)
     {
-        if (_cache.TryGetValue((uri, version), out var tokens))
-        {
-            _logger.LogVerbose($"SemanticTokensService: cache hit for {uri} v{version}");
-            return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
-        }
-
-        // Cache miss – encode from the tags already stored in the document buffer.
+        // The buffer is one immutable snapshot: its tags and the stamp they carry always belong together.
         if (!_documentBufferService.TryGet(uri, out var buffer) || buffer?.Tags is not { } tags || tags.Count == 0)
         {
             _logger.LogVerbose($"SemanticTokensService: no tags available for {uri} v{version}");
             return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(EmptyTokens);
         }
 
+        var stamp = buffer.TagsStamp;
+        if (_cache.TryGetValue((uri, stamp), out var tokens))
+        {
+            _logger.LogVerbose($"SemanticTokensService: cache hit for {uri} {stamp}");
+            return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
+        }
+
+        // Cache miss – encode from the tags already stored in the document buffer.
         var encoded = Encode(tags);
-        tokens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens { Data = [.. encoded], ResultId = $"{uri}@{version}" };
-        _cache[(uri, version)] = tokens;
-        PurgePriorVersions(uri, version);
-        _logger.LogInfo($"SemanticTokensService: encoded {encoded.Count / 5} tokens for {uri} v{version}");
+        tokens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens { Data = [.. encoded], ResultId = ResultIdFor(uri, stamp) };
+        _cache[(uri, stamp)] = tokens;
+        PurgeOlderStamps(uri, stamp);
+        _logger.LogInfo($"SemanticTokensService: encoded {encoded.Count / 5} tokens for {uri} v{version} {stamp}");
         return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
     }
 
@@ -93,31 +96,18 @@ public sealed class SemanticTokensService : ISemanticTokensService
         var tokens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens
         {
             Data = [.. encoded],
-            // Must NOT collide with the full-document result id ($"{uri}@{version}") that
+            // Must NOT collide with the full-document result id (ResultIdFor) that
             // GetSemanticTokensAsync stamps and caches: this result carries only a subset of the
             // document's tokens, so a semanticTokens/full/delta request quoting it as
             // previousResultId would be diffed against the wrong baseline. The delta handler
             // ignores previousResultId today, which is the only reason the shared id was
             // harmless; including the range bounds keeps it unambiguous regardless.
-            ResultId = $"{uri}@{version}#{range.Start.Line}-{endLine}"
+            ResultId = $"{ResultIdFor(uri, buffer.TagsStamp)}#{range.Start.Line}-{endLine}"
         };
         _logger.LogInfo(
             $"SemanticTokensService: encoded {encoded.Count / 5} range token(s) for {uri} v{version} " +
             $"(lines {range.Start.Line}-{endLine})");
         return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
-    }
-
-    /// <summary>
-    /// Evicts the cached token result for <paramref name="uri"/> so that the next
-    /// <see cref="GetSemanticTokensAsync"/> call re-encodes from the current tags.
-    /// Must be called whenever <see cref="IDocumentBufferService.UpdateTags"/> stores
-    /// a new tag set for a document whose version has not changed (e.g. after binding
-    /// discovery completes for an already-open file).
-    /// </summary>
-    public void InvalidateCache(DocumentUri uri)
-    {
-        foreach (var key in _cache.Keys.Where(k => k.Item1 == uri))
-            _cache.TryRemove(key, out _);
     }
 
     // ── Encoding ──────────────────────────────────────────────────────────────
@@ -405,12 +395,15 @@ public sealed class SemanticTokensService : ISemanticTokensService
     }
 
     // ── Cache housekeeping ────────────────────────────────────────────────────
-    private void PurgePriorVersions(DocumentUri uri, int currentVersion)
+    private void PurgeOlderStamps(DocumentUri uri, DerivationStamp current)
     {
         foreach (var key in _cache.Keys)
         {
-            if (key.Item1 == uri && key.Item2 < currentVersion)
+            if (key.Item1 == uri && key.Item2 < current)
                 _cache.TryRemove(key, out _);
         }
     }
+
+    private static string ResultIdFor(DocumentUri uri, DerivationStamp stamp) =>
+        $"{uri}@{stamp.ContentGeneration}.{stamp.ConfigGeneration}.{stamp.RegistryVersion}";
 }

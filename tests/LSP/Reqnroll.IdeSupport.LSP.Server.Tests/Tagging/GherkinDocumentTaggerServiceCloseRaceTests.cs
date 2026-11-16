@@ -27,7 +27,6 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
     private readonly IDocumentBufferService        _bufferService        = new DocumentBufferService();
     private readonly IIdeSupportTagParser            _tagParser            = Substitute.For<IIdeSupportTagParser>();
     private readonly IProjectBindingRegistryLookup _registryLookup       = Substitute.For<IProjectBindingRegistryLookup>();
-    private readonly ISemanticTokensService         _semanticTokenService = Substitute.For<ISemanticTokensService>();
     private readonly IBindingMatchService          _bindingMatchService  = Substitute.For<IBindingMatchService>();
     private readonly ILspWorkspaceScopeManager     _scopeManager         = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger               _logger               = Substitute.For<IIdeSupportLogger>();
@@ -57,7 +56,7 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
     }
 
     private GherkinDocumentTaggerService CreateSut() =>
-        new(_bufferService, _tagParser, _registryLookup, _semanticTokenService,
+        new(_bufferService, _tagParser, _registryLookup,
             _bindingMatchService, _scopeManager, _logger, new FileSystemForIDE(),
             new DocumentGenerations(), new ProjectConfigGenerations());
 
@@ -95,7 +94,6 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
         await ParseThenCloseMidParseAsync(CreateSut(), uri, version: 3);
 
         _bindingMatchService.DidNotReceive().Store(Arg.Any<FeatureBindingMatchSet>());
-        _semanticTokenService.DidNotReceive().InvalidateCache(Arg.Any<DocumentUri>());
     }
 
     [Fact]
@@ -158,6 +156,5 @@ public class GherkinDocumentTaggerServiceCloseRaceTests
         buffer!.Generation.Should().Be(2);
         buffer.Tags.Should().BeNull("tags computed from the older text must not land on the newer buffer");
         _bindingMatchService.DidNotReceive().Store(Arg.Any<FeatureBindingMatchSet>());
-        _semanticTokenService.DidNotReceive().InvalidateCache(Arg.Any<DocumentUri>());
     }
 }

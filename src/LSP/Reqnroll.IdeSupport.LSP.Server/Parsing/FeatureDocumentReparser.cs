@@ -31,8 +31,8 @@ public sealed class FeatureDocumentReparser : IFeatureDocumentReparser
     /// <inheritdoc/>
     public async Task ReparseOpenDocumentAsync(DocumentUri uri, int? version, CancellationToken cancellationToken)
     {
-        // ParseAsync stores updated tags, recomputes/stores the binding match set, and
-        // invalidates the semantic token cache internally before this notification fires.
+        // ParseAsync stores updated tags (with the stamp of the inputs they were derived from) and
+        // recomputes/stores the binding match set before this notification fires.
         await _taggerService.ParseAsync(uri, version).ConfigureAwait(false);
         await _mediator.Publish(
             new MatchCacheChangedNotification(uri, version ?? 0),

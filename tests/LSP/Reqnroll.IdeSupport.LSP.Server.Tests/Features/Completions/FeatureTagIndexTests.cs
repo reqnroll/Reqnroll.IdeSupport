@@ -33,6 +33,7 @@ public class FeatureTagIndexTests : IDisposable
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ILspTelemetryService _telemetry = Substitute.For<ILspTelemetryService>();
+    private readonly DocumentGenerations _generations = new();
 
     public FeatureTagIndexTests()
     {
@@ -53,7 +54,7 @@ public class FeatureTagIndexTests : IDisposable
 
         var tagParser = new IdeSupportTagParser(_logger, telemetry);
         return new FeatureTagIndex(
-            _scopeManager, _bufferService, tagParser, new FileSystemForIDE(), _logger, _telemetry);
+            _scopeManager, _bufferService, tagParser, new FileSystemForIDE(), _generations, _logger, _telemetry);
     }
 
     /// <summary>Registers a real project rooted at <paramref name="folder"/> as the sole owner of <paramref name="uri"/>.</summary>
@@ -85,7 +86,7 @@ public class FeatureTagIndexTests : IDisposable
     /// landed (<c>buffer.Tags</c> populated); <c>false</c> mirrors the window right after an edit,
     /// where <c>DocumentBufferService.Update</c> has reset <c>Tags</c> to null.
     /// </summary>
-    private void SetupBuffer(DocumentUri uri, int version, string text, bool parsed = true)
+    private void SetupBuffer(DocumentUri uri, int? version, string text, bool parsed = true, long generation = 0)
     {
         IReadOnlyCollection<IdeSupportTag>? tags = null;
         if (parsed)
@@ -96,7 +97,7 @@ public class FeatureTagIndexTests : IDisposable
             tags = parser.Parse(new LspTextSnapshot(string.Empty, 0, text), ProjectBindingRegistry.Invalid, "en-US");
         }
 
-        var buffer = new DocumentBuffer(uri, version, text, tags);
+        var buffer = new DocumentBuffer(uri, version, text, tags, Generation: generation);
         DocumentBuffer? outBuffer;
         _bufferService.TryGet(uri, out outBuffer).Returns(x => { x[1] = buffer; return true; });
     }
@@ -131,6 +132,53 @@ public class FeatureTagIndexTests : IDisposable
         beforeConfig.Select(t => t.Sample).Should().NotContain("@wip",
             "the file is not understood under the english default");
         afterConfig.Select(t => t.Sample).Should().Contain("@wip");
+    }
+
+    // ── Content generation ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Open_buffer_counts_are_cached_by_content_generation_even_without_a_client_version()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Open.feature"));
+        RegisterOwner(uri, _root, hasBaseline: true, indexedFiles: new[] { uri.GetFileSystemPath() });
+        var provider = CreateProvider();
+
+        SetupBuffer(uri, version: null, FeatureWithTags("@first"), generation: 4);
+        var first = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        // Same generation, different tags: the entry for generation 4 is reused.
+        SetupBuffer(uri, version: null, FeatureWithTags("@second"), generation: 4);
+        var sameGeneration = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        SetupBuffer(uri, version: null, FeatureWithTags("@second"), generation: 5);
+        var nextGeneration = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        first.Select(t => t.Sample).Should().Contain("@first");
+        sameGeneration.Select(t => t.Sample).Should().Contain("@first").And.NotContain("@second");
+        nextGeneration.Select(t => t.Sample).Should().Contain("@second").And.NotContain("@first");
+    }
+
+    [Fact]
+    public async Task Closed_file_counts_are_recomputed_when_its_generation_changes_though_the_write_time_did_not()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        RegisterOwner(uri, _root, hasBaseline: false);
+        var path = WriteFeature(_root, "A.feature", FeatureWithTags("@before"));
+        var written = File.GetLastWriteTimeUtc(path);
+        var provider = CreateProvider();
+        var before = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        // An edit that leaves the write time as it was, as a rename within the timestamp resolution can.
+        File.WriteAllText(path, FeatureWithTags("@after"));
+        File.SetLastWriteTimeUtc(path, written);
+        var untouched = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        _generations.Bump(DocumentUri.FromFileSystemPath(path).ToString());
+        var afterBump = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        before.Select(t => t.Sample).Should().Contain("@before");
+        untouched.Select(t => t.Sample).Should().Contain("@before", "nothing says the file changed");
+        afterBump.Select(t => t.Sample).Should().Contain("@after").And.NotContain("@before");
     }
 
     // ── Disk indexing (pre-baseline fallback) ────────────────────────────────
@@ -229,23 +277,23 @@ public class FeatureTagIndexTests : IDisposable
     }
 
     [Fact]
-    public async Task An_open_buffer_is_cached_by_version_only()
+    public async Task An_open_buffer_is_cached_by_content_generation_only()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
         RegisterOwner(uri, _root, hasBaseline: false);
         WriteFeature(_root, "Target.feature", FeatureWithTags("@smoke"));
-        SetupBuffer(uri, version: 1, text: FeatureWithTags("@wip"));
+        SetupBuffer(uri, version: 1, text: FeatureWithTags("@wip"), generation: 1);
 
         var provider = CreateProvider();
         var first = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         first.Select(t => t.Sample).Should().Contain("@wip");
 
-        // Same version, same buffer content — served from the version-keyed cache.
+        // Same generation, same buffer content — served from the generation-keyed cache.
         var second = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         second.Select(t => t.Sample).Should().Contain("@wip");
 
-        // A newer version with different content must be re-extracted.
-        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"));
+        // A newer generation with different content must be re-extracted.
+        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"), generation: 2);
         var third = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         third.Select(t => t.Sample).Should().BeEquivalentTo("@slow");
     }
@@ -258,18 +306,18 @@ public class FeatureTagIndexTests : IDisposable
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
         RegisterOwner(uri, _root, hasBaseline: false);
         WriteFeature(_root, "Target.feature", FeatureWithTags("@disk"));
-        SetupBuffer(uri, version: 1, text: FeatureWithTags("@wip"));
+        SetupBuffer(uri, version: 1, text: FeatureWithTags("@wip"), generation: 1);
 
         var provider = CreateProvider();
         (await provider.GetTagCandidatesAsync(uri, CancellationToken.None))
             .Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@wip" });
 
-        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"), parsed: false);
+        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"), parsed: false, generation: 2);
         var pending = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         pending.Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@wip" },
             "the unparsed edit is ignored for now rather than reparsed on the completion path");
 
-        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"));
+        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"), generation: 2);
         var landed = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         landed.Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@slow" }, "the parse landed, so the new version is counted");
     }

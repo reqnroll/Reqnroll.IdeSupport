@@ -22,7 +22,6 @@ public class GherkinDocumentTaggerServiceTests
     private readonly IDocumentBufferService        _bufferService       = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportTagParser            _tagParser           = Substitute.For<IIdeSupportTagParser>();
     private readonly IProjectBindingRegistryLookup _registryLookup      = Substitute.For<IProjectBindingRegistryLookup>();
-    private readonly ISemanticTokensService         _semanticTokenService = Substitute.For<ISemanticTokensService>();
     private readonly IBindingMatchService          _bindingMatchService  = Substitute.For<IBindingMatchService>();
     private readonly ILspWorkspaceScopeManager     _scopeManager         = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger               _logger               = Substitute.For<IIdeSupportLogger>();
@@ -40,12 +39,12 @@ public class GherkinDocumentTaggerServiceTests
         // Default: no primary owner resolved.
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>()).Returns((LspReqnrollProject?)null);
         // Default: the buffer is still open when the parse stores its tags.
-        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<long>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
+        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<DerivationStamp>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
                       .Returns(true);
     }
 
     private GherkinDocumentTaggerService CreateSut() =>
-        new(_bufferService, _tagParser, _registryLookup, _semanticTokenService,
+        new(_bufferService, _tagParser, _registryLookup,
             _bindingMatchService, _scopeManager, _logger, _fileSystem, _documentGenerations, _configGenerations);
 
     private static LspReqnrollProject MakeProject(string folder = "/workspace")
@@ -125,7 +124,6 @@ public class GherkinDocumentTaggerServiceTests
             Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>());
         _bindingMatchService.Received(1).Store(
             Arg.Is<FeatureBindingMatchSet>(s => s.DocumentId == FeatureUri.ToString()));
-        _semanticTokenService.Received(1).InvalidateCache(FeatureUri);
     }
 
     [Fact]
