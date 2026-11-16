@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace Reqnroll.IdeSupport.TestReporter.MTP;
+namespace Reqnroll.IdeSupport.TestReporter.Session;
 
 /// <summary>One session breadcrumb, as written by the LSP server's <c>TestOutcomeSessionBreadcrumb</c>.</summary>
 internal sealed record SessionBreadcrumb(string Endpoint, string? WorkspaceRoot);

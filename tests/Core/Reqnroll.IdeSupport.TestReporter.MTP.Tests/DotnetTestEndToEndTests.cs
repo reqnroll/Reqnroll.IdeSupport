@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Reqnroll.IdeSupport.TestReporter.Session;
 
 namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 

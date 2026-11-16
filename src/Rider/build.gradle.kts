@@ -316,8 +316,10 @@ val publishServer by tasks.registering(Exec::class) {
 // with that Rider release; the range at the top of this file is derived from it. Without -PwithBackend=true
 // the build is the frontend-only plugin that works across the whole range.
 //
-// Pre-built by CI and passed in with -PbackendBuildDir (a directory holding the module's DLL), in
-// which case compileBackend is skipped, mirroring -PlspServerBuildDir above.
+// Pre-built by CI and passed in with -PbackendBuildDir (a directory holding the module's DLLs), in
+// which case compileBackend is skipped, mirroring -PlspServerBuildDir above. The module references
+// Reqnroll.IdeSupport.TestReporter.Common and compiles the TestReporter.Session shared project, so their
+// sources are inputs too, and TestReporter.Common.dll ships next to the module's own DLL.
 val backendDir = layout.projectDirectory.dir("dotnet")
 val backendAssemblyName = "Reqnroll.IdeSupport.Rider.Backend"
 val backendProject = File(backendDir.asFile, "$backendAssemblyName/$backendAssemblyName.csproj")
@@ -330,7 +332,11 @@ val compileBackend by tasks.registering(Exec::class) {
         "is set or -PwithBackend=false."
     onlyIf { withBackend && externalBackendBuildDir == null }
 
-    inputs.files(fileTree(backendDir) { exclude("**/bin/**", "**/obj/**") })
+    inputs.files(
+        fileTree(backendDir) { exclude("**/bin/**", "**/obj/**") },
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.Common")) { exclude("**/bin/**", "**/obj/**") },
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.Session")),
+    )
     inputs.property("riderSdkVersion", riderSdkVersion)
     outputs.dir(backendOutputDir)
 
@@ -399,6 +405,7 @@ val publishMtpReporter by tasks.registering(Exec::class) {
     inputs.files(
         fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.MTP")) { exclude("**/bin/**", "**/obj/**") },
         fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.Common")) { exclude("**/bin/**", "**/obj/**") },
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.Session")),
     )
     outputs.dir(mtpReporterOutputDir)
 
@@ -458,7 +465,10 @@ tasks.withType<PrepareSandboxTask>().configureEach {
 
     if (withBackend) {
         val externalBackendDir = externalBackendBuildDir
-        val backendFiles = listOf("$backendAssemblyName.dll", "$backendAssemblyName.pdb")
+        val backendFiles = listOf(
+            "$backendAssemblyName.dll", "$backendAssemblyName.pdb",
+            "Reqnroll.IdeSupport.TestReporter.Common.dll", "Reqnroll.IdeSupport.TestReporter.Common.pdb",
+        )
         if (externalBackendDir == null) {
             dependsOn(compileBackend)
             from(backendOutputDir) {
@@ -584,4 +594,12 @@ val generateTelemetryBuildConfig by tasks.registering {
 
 kotlin.sourceSets.named("main") {
     kotlin.srcDir(generateTelemetryBuildConfig)
+}
+
+// META-INF/reqnroll-backend.xml binds .feature editors to the backend daemon (for its test gutter marks). plugin.xml
+// includes it with a fallback, so only a build that bundles the backend module packages it.
+if (withBackend) {
+    sourceSets.named("main") {
+        resources.srcDir("src/main/resources-backend")
+    }
 }

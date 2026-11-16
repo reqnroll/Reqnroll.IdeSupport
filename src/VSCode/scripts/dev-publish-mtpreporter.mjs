@@ -19,8 +19,12 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..');
 const CORE_DIR = path.join(REPO_ROOT, 'src', 'Core');
 const REPORTER_DIR = path.join(CORE_DIR, 'Reqnroll.IdeSupport.TestReporter.MTP');
-// The bundle is generated from the reporter's own sources AND the shared Common sources.
-const SOURCE_DIRS = [REPORTER_DIR, path.join(CORE_DIR, 'Reqnroll.IdeSupport.TestReporter.Common')];
+// The bundle is generated from the reporter's own sources AND the shared Common and Session sources.
+const SOURCE_DIRS = [
+  REPORTER_DIR,
+  path.join(CORE_DIR, 'Reqnroll.IdeSupport.TestReporter.Common'),
+  path.join(CORE_DIR, 'Reqnroll.IdeSupport.TestReporter.Session'),
+];
 const REPORTER_PROJECT = path.join(REPORTER_DIR, 'Reqnroll.IdeSupport.TestReporter.MTP.csproj');
 const BUNDLE_DIR = path.join(REPORTER_DIR, 'bin', 'Release', 'bundle');
 // PublishReporterBundle touches this on every publish; the copied bundle files keep their

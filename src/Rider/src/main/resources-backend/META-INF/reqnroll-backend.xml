@@ -1,0 +1,12 @@
+<!-- Included by plugin.xml, and packaged only in builds that bundle the backend module (-PwithBackend=true). -->
+<idea-plugin>
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- Bind .feature editors to the backend's REQNROLL_FEATURE document and show the backend's markup (Razor's
+         pattern). Without these, a frontend PSI language keeps the editor frontend-only, so the backend daemon never
+         runs on .feature files and FeatureTestGutterStage's unit-test gutter marks never appear. -->
+    <rd.languageAssociation backendLanguage="REQNROLL_FEATURE" frontendLanguage="Gherkin" />
+    <backend.markup.adapterFactory
+        language="Gherkin"
+        implementationClass="com.jetbrains.rdclient.daemon.FrontendMarkupAdapterFactory" />
+  </extensions>
+</idea-plugin>

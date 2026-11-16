@@ -293,6 +293,7 @@ Sizes are rough estimates in working days and have not been validated.
 | **8** | **Rename and navigation**: `renameHandler`; navigation investigation with go/no-go | Rename Step appears under Refactor and honours keymaps; navigation decision recorded | 2 + spike |
 | **9** | **Cleanup and docs**: remove dead workarounds, including the controllers behind the `NativeLsp*` version gates and the gates themselves ([§4.1](#41-release-policy-newest-rider-only)); update `client-rider.md` §7 and §8 (and its compatibility paragraph), `ide-clients.md`, `outline-and-folding.md`, Open Questions D3, feature pages, CHANGELOG | Doc comments no longer say "no PSI"; no code path or doc depends on a Rider older than the current release | 2–3 |
 | **10** | **Run and Debug through Rider's Unit Tests** (backend build; replaces the earlier "Debug launch" track). See [Phase 10 design](#phase-10-run-and-debug-through-riders-unit-tests). Decided: option A, a daemon stage that adds Rider's own test highlighting (by reflection) on scenarios | Each scenario has Rider's native Run/Debug gutter mark with outcome icons. Runs show in the Unit Tests window. Debug stops on `.feature` breakpoints. Scenarios the backend cannot map keep the inline `dotnet test` lens | 5–8 + spike |
+|  | *Status: production code built and unit-tested on `feature/453-rider-test-gutter` (Feature, scenario and outline-row marks; Rule lines keep the lens; Run lens hidden elsewhere when the backend is installed). Not yet run live. See [Production](#phase-10-run-and-debug-through-riders-unit-tests).* | | |
 
 Phases 3, 5, 6 and 8 are independent of each other once Phase 2 is in, so they can be reviewed as
 separate PRs in any order. Phase 2 is the only large risk: it changes the language of every `.feature`
@@ -436,6 +437,63 @@ a `[DaemonStage]` of our own runs on `.feature` files and adds Rider's own `Unit
   - Element lookup under the unit-testing read lock.
   - Whether the early unresponsiveness recurs.
 
+**Production (2026-11-13, branch `feature/453-rider-test-gutter`, stacked on the PSI branch).** Built and
+unit-tested; **not yet run in a live Rider.**
+- **Mapping is SDK-free and unit-tested** (`GeneratedTestLines`, linked into the backend test project):
+  - The test class maps to the `Feature` line: the first line that is not blank, a comment, a tag or the
+    `# language:` header. That needs no keywords, so it works in every dialect.
+  - A test method maps to its first `#line N`.
+  - **Outline rows.** Each row maps to an Examples body row by its pickle index. Reqnroll passes the index as the
+    second-to-last positional argument of `DataRow` / `TestCase` / `InlineData`, and it ends an MSTest row's
+    display name.
+    - MSTest row elements have no location of their own (Rider's MSTest explorer never reports one), so for them
+      the display name is the fallback.
+    - Rows are numbered consecutively in document order, so a row's position is its index minus the outline's
+      lowest.
+    - The Examples rows are found without keywords: the body rows of the tables after the outline's last step,
+      skipping that step's own table or doc string, and stopping after as many rows as the outline has.
+- **Rule lines get no mark.** Rider has no test element for a Rule (the generator emits Rule scenarios as methods of
+  the feature class). The inline Run lens keeps Rule lines, through `dotnet test`.
+- **Locking.** The repository is queried under `UT.ReadLock()` and the result copied before the PSI is read, as
+  Rider's `UnitTestPsiManager` does.
+- **Refresh.** `FeatureTestGutterRefresher` listens to `IUnitTestElementStore.CollectionChanged`. After one second of
+  quiet it re-runs the daemon on the `.feature` documents the stage has analysed, so a file opened before discovery
+  finished gets its marks.
+- **Missing type.** If `UnitTestElementHighlighting` or its constructor is missing, the stage logs one warning and
+  adds no marks.
+- **Lens stand-down** (decided: hide when the backend is installed). `BackendTestGutterMarks` checks that the backend
+  assembly is in the installed plugin; if it is, the inline Run lens keeps only Rule lines. The registry key
+  `reqnroll.feature.showRunLensWithGutterMarks` brings back the lens on Feature and Scenario lines.
+- **Frontend-only builds are unchanged.** The `rd.languageAssociation` and `backend.markup.adapterFactory`
+  registrations live in `META-INF/reqnroll-backend.xml`. `plugin.xml` pulls it in with an `xi:include` that has a
+  fallback, and only `-PwithBackend=true` builds package the file.
+- **Failed-step marks after a gutter run.** Injecting the test logger through runsettings (an
+  `IRunSettingsPostProcessor`, which the SDK offers) was ruled out. Rider's MSTest, NUnit, xUnit and VSTest
+  adapters host the frameworks' executors directly with their own framework handle, and none of them load a
+  runsettings `<Logger>`. Instead:
+  - The backend's `FeatureTestResultReporter` listens to Rider's test-run and result events. After each run it
+    sends the results of tests generated from `.feature` files to the server's outcome listener, in the wire
+    format the VSTest logger uses, with the output carrying Reqnroll's step trace. It finds the listener through
+    the session breadcrumbs, matched by the solution directory. It skips test assemblies that have the MTP
+    reporter built in, since that reporter already sends. The reporter's stub alone is no sign of that: the
+    IDE extensions put it into every test project.
+  - `GutterRunOutcomes` (frontend) starts the listener on every server start, so the breadcrumb exists. On the
+    `changed` push it applies outcomes that changed to the failed-step marks and the Run lens results.
+- **Live-checked 2026-11-14 (Rider 2026.2.3.1, MSTest on VSTest, Quickstart sample):** a scenario run from
+  its gutter mark reached the server as one `RiderTestRunner` result. Rider's captured output carried the
+  Reqnroll step trace, so the server recorded all five steps with the failing one as `Error`, and the frontend
+  re-read the outcome right after the push.
+- **Still to check live:**
+  - Outline-row marks for each framework.
+  - NUnit and xUnit at all.
+  - Debug stopping on a `.feature` breakpoint.
+  - The refresh after discovery.
+  - Whether the early unresponsiveness recurs.
+  - Failed-step marks after a gutter run with NUnit, xUnit and MTP projects, and for outline rows (whether row
+    display names match across runs).
+  - Multi-target projects, which may produce one element per target framework. Only the first gets the line's
+    mark, and outcomes are looked up under the first target's output only.
+
 ## 7. Rollback
 
 - Phases 2–8 each ship as one PR with a revert path. Phase 2's `ParserDefinition` registration is a
@@ -503,9 +561,10 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 3a. An owner and a response time for each new Rider release, including the EAP build ahead of it (see
    breakpoints plan §7.2). The support window itself is decided by decision 7. Without an owner, users who
    upgrade Rider lose the plugin until someone publishes for the new release.
-4. The inline Run lens: no longer a one-release transition setting (Phase 7 is dropped). It stays as the
-   fallback where Phase 10 adds no mark. Whether to remove it once Phase 10 covers Outline rows, Rule, NUnit and
-   xUnit is still open.
+4. ~~The inline Run lens~~ — **decided 2026-11-13: hide it where the backend is installed**, except on Rule lines
+   (Rider has no Rule test element). The registry key `reqnroll.feature.showRunLensWithGutterMarks` shows it
+   everywhere again, for a Rider release that breaks the marks. Per-scenario stand-down was rejected: the
+   frontend cannot learn which scenarios the backend marked without an RD model or reading backend markup.
 5. Whether navigation (Phase 8) is in scope or only Rename and the `Commenter`.
 6. ~~Phase 10: option A or option B~~ — **decided 2026-11-13: option A** in its daemon-stage form. The
    reflective dependency on Rider's internal `UnitTestElementHighlighting` is accepted. Each backend build
