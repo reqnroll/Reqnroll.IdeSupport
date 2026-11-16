@@ -48,4 +48,12 @@ public interface IFeatureDocumentReparser
     /// buffer for <paramref name="uri"/> at all.
     /// </summary>
     Task ReparseIfOpenAsync(DocumentUri uri, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Rewrites the match sets of <paramref name="uri"/>, which has just been closed, from the file on
+    /// disk and publishes <see cref="ClosedFileMatchCacheChangedNotification"/>, so the step usage code
+    /// lenses that counted the file's editor text are refreshed. Published whether or not the rescan
+    /// found a file: the cache entries were already dropped, so the counts changed either way.
+    /// </summary>
+    Task RescanClosedDocumentAsync(DocumentUri uri, CancellationToken cancellationToken);
 }

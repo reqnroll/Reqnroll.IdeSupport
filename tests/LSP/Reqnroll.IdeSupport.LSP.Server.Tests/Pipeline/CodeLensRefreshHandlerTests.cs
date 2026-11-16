@@ -95,4 +95,47 @@ public class CodeLensRefreshHandlerTests : IDisposable
             CustomLspMethodNames.ReqnrollRefreshCodeLens,
             Arg.Is<RefreshCodeLensParams>(p => !p.IsFullReplacement));
     }
+
+    [Fact]
+    public async Task Handle_refreshes_lenses_after_a_closed_file_was_rescanned_for_visual_studio()
+    {
+        var sent = new TaskCompletionSource();
+        _languageServer.When(l => l.SendNotification(Arg.Any<string>(), Arg.Any<object>()))
+            .Do(_ => sent.TrySetResult());
+
+        await CreateSut(new ClientIdeContext("visualstudio"))
+            .Handle(new ClosedFileMatchCacheChangedNotification(DocumentUri.From("file:///f.feature")), CancellationToken.None);
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRefreshCodeLens,
+            Arg.Is<RefreshCodeLensParams>(p => !p.IsFullReplacement));
+    }
+
+    [Fact]
+    public async Task Handle_refreshes_lenses_after_a_closed_file_was_rescanned_for_other_clients()
+    {
+        var sent = new TaskCompletionSource();
+        _languageServer.Client.When(c => c.SendRequest(Arg.Any<string>())).Do(_ => sent.TrySetResult());
+
+        await CreateSut(new ClientIdeContext("vscode"))
+            .Handle(new ClosedFileMatchCacheChangedNotification(DocumentUri.From("file:///f.feature")), CancellationToken.None);
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        _languageServer.Client.Received(1).SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
+    }
+
+    [Fact]
+    public async Task A_burst_of_closed_file_and_open_file_notifications_sends_one_refresh()
+    {
+        var handler = CreateSut(new ClientIdeContext("visualstudio"));
+
+        await handler.Handle(new ClosedFileMatchCacheChangedNotification(DocumentUri.From("file:///a.feature")), CancellationToken.None);
+        await handler.Handle(new ClosedFileMatchCacheChangedNotification(DocumentUri.From("file:///b.feature")), CancellationToken.None);
+        await handler.Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///c.feature"), 1), CancellationToken.None);
+        await Task.Delay(900);
+
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRefreshCodeLens, Arg.Any<RefreshCodeLensParams>());
+    }
 }

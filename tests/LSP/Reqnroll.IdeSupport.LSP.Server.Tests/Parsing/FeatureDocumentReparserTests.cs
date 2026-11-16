@@ -157,4 +157,41 @@ public class FeatureDocumentReparserTests
             Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 2),
             Arg.Any<CancellationToken>());
     }
+
+    // ── RescanClosedDocumentAsync ────────────────────────────────────────────
+
+    [Fact]
+    public async Task RescanClosedDocumentAsync_rescans_from_disk_then_publishes_the_closed_file_notification()
+    {
+        await CreateSut().RescanClosedDocumentAsync(FeatureUri, CancellationToken.None);
+
+        Received.InOrder(() =>
+        {
+            _ = _taggerService.RescanClosedFileAsync(FeatureUri);
+            _ = _mediator.Publish(
+                Arg.Is<ClosedFileMatchCacheChangedNotification>(n => n.Uri == FeatureUri),
+                Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task RescanClosedDocumentAsync_publishes_even_when_the_rescan_found_nothing_to_store()
+    {
+        // The close already dropped the file's cache entries; a missing file only means nothing replaces them.
+        _taggerService.RescanClosedFileAsync(FeatureUri).Returns(Task.CompletedTask);
+
+        await CreateSut().RescanClosedDocumentAsync(FeatureUri, CancellationToken.None);
+
+        await _mediator.Received(1).Publish(
+            Arg.Any<ClosedFileMatchCacheChangedNotification>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RescanClosedDocumentAsync_does_not_publish_the_open_document_notification()
+    {
+        await CreateSut().RescanClosedDocumentAsync(FeatureUri, CancellationToken.None);
+
+        await _mediator.DidNotReceive().Publish(
+            Arg.Any<MatchCacheChangedNotification>(), Arg.Any<CancellationToken>());
+    }
 }
