@@ -17,7 +17,7 @@ using JetBrains.ReSharper.UnitTestFramework.Session;
 using JetBrains.Util;
 using JetBrains.Util.Logging;
 using Reqnroll.IdeSupport.TestReporter.Common;
-using Reqnroll.IdeSupport.TestReporter.MTP;
+using Reqnroll.IdeSupport.TestReporter.Session;
 
 namespace Reqnroll.IdeSupport.Rider.Backend.UnitTesting;
 

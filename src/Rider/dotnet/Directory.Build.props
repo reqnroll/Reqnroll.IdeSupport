@@ -11,5 +11,8 @@
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
     <NoPackageAnalysis>true</NoPackageAnalysis>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <!-- Strong-named with the key every other shipped assembly in the repository uses. -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 </Project>

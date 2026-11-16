@@ -5,14 +5,13 @@
     <RootNamespace>Reqnroll.IdeSupport.Rider.Backend</RootNamespace>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <!-- Rider's own test results reach the LSP server over the protocol the VSTest logger and the MTP reporter
+       use (TestReporter.Common), and find the server the way the MTP reporter does (the TestReporter.Session
+       shared project). The plugin's Gradle build ships TestReporter.Common.dll next to this assembly. -->
   <ItemGroup>
-    <!-- Shared with the VSTest logger and the MTP reporter, so Rider's own test results reach the LSP server
-         over the same protocol and find it the same way. -->
-    <Compile Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Common\NdjsonWriter.cs" Link="Shared\NdjsonWriter.cs" />
-    <Compile Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Common\OutcomeSink.cs" Link="Shared\OutcomeSink.cs" />
-    <Compile Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.MTP\SessionBreadcrumbMatcher.cs" Link="Shared\SessionBreadcrumbMatcher.cs" />
-    <Compile Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.MTP\SessionsDirectory.cs" Link="Shared\SessionsDirectory.cs" />
+    <ProjectReference Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Common\Reqnroll.IdeSupport.TestReporter.Common.csproj" />
   </ItemGroup>
+  <Import Project="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Session\Reqnroll.IdeSupport.TestReporter.Session.projitems" Label="Shared" />
   <ItemGroup>
     <PackageReference Include="JetBrains.Rider.SDK" Version="$(RiderSdkVersion)" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />

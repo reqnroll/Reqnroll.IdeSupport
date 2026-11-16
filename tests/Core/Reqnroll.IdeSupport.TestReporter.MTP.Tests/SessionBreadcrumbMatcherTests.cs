@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.TestReporter.MTP;
+using Reqnroll.IdeSupport.TestReporter.Session;
 
 namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 

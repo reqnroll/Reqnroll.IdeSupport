@@ -65,7 +65,7 @@ public sealed class TestOutcomeSessionBreadcrumb : IDisposable
     /// Uses <see cref="ReqnrollLogPaths.ResolveApplicationDirectory"/>, not <c>ResolveLogDirectory</c>
     /// — these breadcrumbs are discovery state for the MTP reporter, not logs, and this
     /// location must keep agreeing with the reporter side's independent
-    /// <c>Reqnroll.IdeSupport.TestReporter.MTP.SessionsDirectory.Resolve</c>, which was never changed
+    /// <c>Reqnroll.IdeSupport.TestReporter.Session.SessionsDirectory.Resolve</c>, which was never changed
     /// by that issue. Mirrors <see cref="Reqnroll.IdeSupport.Common.Logging.TelemetryDebugLog.DefaultPath"/>'s
     /// pattern: never let path resolution take the pipeline down.
     /// </summary>

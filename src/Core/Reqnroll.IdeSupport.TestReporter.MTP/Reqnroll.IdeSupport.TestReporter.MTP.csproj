@@ -46,6 +46,9 @@
     <ProjectReference Include="..\Reqnroll.IdeSupport.TestReporter.Common\Reqnroll.IdeSupport.TestReporter.Common.csproj" />
   </ItemGroup>
 
+  <!-- Finding the LSP server's session breadcrumbs, shared as source with the Rider backend. -->
+  <Import Project="..\Reqnroll.IdeSupport.TestReporter.Session\Reqnroll.IdeSupport.TestReporter.Session.projitems" Label="Shared" />
+
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Reqnroll.IdeSupport.TestReporter.MTP.Tests, PublicKey=002400000480000094000000060200000024000052534131000400000100010059bb085601a8b65a8a7b00f34e6d85df230f1e4913d3c0eaadcd13c1fd9cd15c3f01567c49d5f41f617dbda6f544ea3e2d5b5a042f307a7c8d21a079254509ba543efaefce96fac977abd0a76206b721abc33f84ee45ae5383cf50eeb8e234595656fd4af916e1dcde644ce20bb9a68bd72bc7957b759560524c63ca294585ca</_Parameter1>
@@ -55,7 +58,8 @@
   <!-- ================================================================
        Issue #741: the injectable source bundle.
 
-       Every top-level .cs file of this project and of Reqnroll.IdeSupport.TestReporter.Common is
+       Every top-level .cs file of this project, of Reqnroll.IdeSupport.TestReporter.Common and of the
+       Reqnroll.IdeSupport.TestReporter.Session shared project is
        rewritten by GenerateMtpReporterSources into obj\ReporterSource\ and shipped as Content under
        ReporterSource\, next to build\Reqnroll.IdeSupport.TestReporter.MTP.targets. Content (not a
        custom copy step) so it flows to this project's own output, to `dotnet publish` output (the
@@ -65,6 +69,7 @@
   <ItemGroup>
     <MtpReporterTemplateSource Include="*.cs" />
     <MtpReporterTemplateSource Include="..\Reqnroll.IdeSupport.TestReporter.Common\*.cs" />
+    <MtpReporterTemplateSource Include="..\Reqnroll.IdeSupport.TestReporter.Session\*.cs" />
     <None Remove="build\**" />
     <Content Include="build\Reqnroll.IdeSupport.TestReporter.MTP.targets"
              Link="Reqnroll.IdeSupport.TestReporter.MTP.targets"

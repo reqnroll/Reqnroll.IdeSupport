@@ -8,6 +8,7 @@ using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Extensions.TestHost;
 using Microsoft.Testing.Platform.Services;
 using Reqnroll.IdeSupport.TestReporter.Common;
+using Reqnroll.IdeSupport.TestReporter.Session;
 
 namespace Reqnroll.IdeSupport.TestReporter.MTP;
 

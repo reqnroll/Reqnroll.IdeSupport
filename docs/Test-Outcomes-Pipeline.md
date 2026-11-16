@@ -206,9 +206,10 @@ classDiagram
 |---|---|---|
 | `ReqnrollIdeTestLogger` | `src/Core/Reqnroll.IdeSupport.TestLogger` | VSTest logger; turns vstest events into NDJSON. Inert without an `Endpoint`. |
 | `ReqnrollMtpReporter` | `src/Core/Reqnroll.IdeSupport.TestReporter.MTP` | MTP session handler and data consumer; same wire format; finds the server through breadcrumbs. |
-| `FeatureTestResultReporter`, `RiderTestRunReport` | `src/Rider/dotnet/…Rider.Backend/UnitTesting` | Rider backend: sends the results of runs Rider starts itself; same wire format; links the shared sources below. |
-| `OutcomeSink`, `NdjsonWriter` | `…TestReporter.Common` | Hand-written JSON writer and fire-and-forget TCP/file sink shared by the reporters. |
-| `SessionBreadcrumbMatcher`, `WorkspaceRootLocator`, `SessionsDirectory` | `…TestReporter.MTP` | Reporter-side breadcrumb discovery (deepest workspace match wins). |
+| `FeatureTestResultReporter`, `RiderTestRunReport` | `src/Rider/dotnet/…Rider.Backend/UnitTesting` | Rider backend: sends the results of runs Rider starts itself; same wire format; references `…TestReporter.Common` and imports the `…TestReporter.Session` shared project. |
+| `OutcomeSink`, `NdjsonWriter` | `…TestReporter.Common` | Hand-written JSON writer and fire-and-forget TCP/file sink shared by the reporters (an assembly: netstandard2.0, no package references). |
+| `SessionBreadcrumbMatcher`, `SessionsDirectory` | `…TestReporter.Session` (shared project) | Reporter-side breadcrumb discovery (deepest workspace match wins). Compiled as source into the MTP reporter (and its source bundle) and the Rider backend; not in `…TestReporter.Common` because it needs System.Text.Json. |
+| `WorkspaceRootLocator` | `…TestReporter.MTP` | The MTP reporter's own workspace root, matched against the breadcrumbs. |
 | `Reqnroll.IdeSupport.TestReporter.MTP.targets` | `…TestReporter.MTP/build` | MSBuild gate and source injection for the MTP reporter. |
 | `TestOutcomeTcpListener` | `src/LSP/…LSP.Server/Features/TestOutcomes` | Loopback receiver; feeds the store; debounced `changed` push. |
 | `RegisterTestRunHandler`, `GetTestOutcomeHandler` | same | The `registerRun` and `getOutcome` requests. |
