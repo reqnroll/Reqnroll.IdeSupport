@@ -131,6 +131,22 @@ public static class BenchmarkRunner
         summaries.Add((PerfTargets.GetTestOutcomeNotFound,
             await scenarios.GetTestOutcomeNotFoundAsync().ConfigureAwait(false)));
 
+        // A scenario that throws or records no samples is reported as skipped with the reason, so
+        // one broken scenario cannot hide the rest of the table.
+        var skippedAtRuntime = new List<SkippedBatchScenario>();
+        async Task RunOrSkipAsync(PerfTarget target, Func<Task<LatencySummary>> run)
+        {
+            try
+            {
+                summaries.Add((target, await run().ConfigureAwait(false)));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  SKIPPED {target.Operation}: {ex.GetType().Name}: {ex.Message}");
+                skippedAtRuntime.Add(new SkippedBatchScenario(target, $"{ex.GetType().Name}: {ex.Message}"));
+            }
+        }
+
         // Batch scenarios (coarse wall-clock). Cold start spins up fresh servers, so it is opt-out
         // via --no-batch for quick interactive-only runs.
         List<(double initMs, double parseMs)>? coldStartPhases = null;
@@ -144,8 +160,8 @@ public static class BenchmarkRunner
                     phases: coldStartPhases).ConfigureAwait(false)));
 
             Console.WriteLine("Running reconciliation/push batch scenarios (watched-files reconfig, refresh pushes)...");
-            summaries.Add((PerfTargets.WatchedFilesReconfig,
-                await BatchScenarios.WatchedFilesReconfigAsync(harness, corpusRoot, features[0]).ConfigureAwait(false)));
+            await RunOrSkipAsync(PerfTargets.WatchedFilesReconfig,
+                () => BatchScenarios.WatchedFilesReconfigAsync(harness, corpusRoot, features[0])).ConfigureAwait(false);
             summaries.Add((PerfTargets.SemanticTokensRefresh,
                 await BatchScenarios.SemanticTokensRefreshAsync(harness, features).ConfigureAwait(false)));
             summaries.Add((PerfTargets.InlayHintRefresh,
@@ -207,8 +223,8 @@ public static class BenchmarkRunner
         if (includeBatch)
         {
             Console.WriteLine("Running rename apply-commit scenario (registry reparse on confirmed apply, issue #671)...");
-            summaries.Add((PerfTargets.RenameApplyCommit,
-                await BatchScenarios.RenameApplyCommitAsync(harness, corpusRoot, features[0]).ConfigureAwait(false)));
+            await RunOrSkipAsync(PerfTargets.RenameApplyCommit,
+                () => BatchScenarios.RenameApplyCommitAsync(harness, corpusRoot, features[0])).ConfigureAwait(false);
         }
         if (includeBatch && corpusAssembly is not null)
         {
@@ -224,8 +240,8 @@ public static class BenchmarkRunner
                     .ConfigureAwait(false)));
 
             Console.WriteLine("Running workspace-wide batch scenarios (step rename, find unused step definitions)...");
-            summaries.Add((PerfTargets.StepRename,
-                await BatchScenarios.StepRenameAsync(harness, features).ConfigureAwait(false)));
+            await RunOrSkipAsync(PerfTargets.StepRename,
+                () => BatchScenarios.StepRenameAsync(harness, features)).ConfigureAwait(false);
             summaries.Add((PerfTargets.FindUnusedStepDefinitions,
                 await BatchScenarios.FindUnusedStepDefinitionsAsync(harness).ConfigureAwait(false)));
         }
@@ -260,9 +276,17 @@ public static class BenchmarkRunner
 
             Console.WriteLine("Running dispatch-fairness scenario (rename under a concurrent didChange " +
                                "storm, issue #671 R8)...");
-            contentionChecks.Add(await new RenameSerialLaneContentionScenario(
-                harness, restoredFiles, probe, new RenameSerialLaneContentionOptions())
-                .RunAsync().ConfigureAwait(false));
+            try
+            {
+                contentionChecks.Add(await new RenameSerialLaneContentionScenario(
+                    harness, restoredFiles, probe, new RenameSerialLaneContentionOptions())
+                    .RunAsync().ConfigureAwait(false));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  SKIPPED {RenameSerialLaneContentionScenario.Operation}: " +
+                                  $"{ex.GetType().Name}: {ex.Message}");
+            }
 
             if (seededOutcome is not null)
             {
@@ -284,7 +308,7 @@ public static class BenchmarkRunner
                                $"{manifest.Fingerprint.StepDefinitionPatternCount} patterns, " +
                                $"{manifest.Fingerprint.StepCount} steps",
             Results: results,
-            Skipped: skipped,
+            Skipped: skipped.Concat(skippedAtRuntime).ToList(),
             Transport: transport,
             ContentionChecks: contentionChecks.Count > 0 ? contentionChecks : null);
 

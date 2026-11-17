@@ -581,6 +581,16 @@ public sealed record OpenFeature(DocumentUri Uri, string Text)
         }
     }
 
+    /// <summary>
+    /// A rename <c>newName</c> that reconciles cleanly against the corpus's regex binding: the
+    /// original text with <paramref name="label"/> and a letter for <paramref name="rep"/> appended
+    /// as plain words. No parentheses — in a regex binding they read as an extra capture group,
+    /// which the server rejects as a parameter-count mismatch — and no digits that could be taken
+    /// for a parameter value.
+    /// </summary>
+    public string RenameNameWithSuffix(string label, int rep) =>
+        $"{FirstStepExpression} {label} {(char)('a' + rep % 26)}";
+
     /// <summary>A small range spanning the first scenario's step block (for range formatting / inlay hints).</summary>
     public Range FirstScenarioRange
     {

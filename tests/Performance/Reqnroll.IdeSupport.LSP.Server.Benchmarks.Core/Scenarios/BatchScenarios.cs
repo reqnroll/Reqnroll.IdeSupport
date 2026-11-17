@@ -151,7 +151,7 @@ public static class BatchScenarios
             // wording: NewNameReconciler only accepts a new name whose parameter placeholders
             // line up with the binding's, so a hard-coded "precondition renamed {rep} is met"
             // (a word inserted before the {int}) is rejected on every corpus step.
-            await harness.RequestRenameAsync(f.Uri, line, character, $"{f.FirstStepExpression} (renamed {rep})")
+            await harness.RequestRenameAsync(f.Uri, line, character, f.RenameNameWithSuffix("renamed", rep))
                 .ConfigureAwait(false);
             recorder.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         }
@@ -344,17 +344,44 @@ public static class BatchScenarios
         BenchmarkLspHarness harness, string corpusRoot, OpenFeature signalFeature, int repetitions = 5)
     {
         var recorder = new LatencyRecorder(PerfTargets.WatchedFilesReconfig.Operation);
-        var configUri = DocumentUri.FromFileSystemPath(Path.Combine(corpusRoot, "reqnroll.json"));
+        var configPath = Path.Combine(corpusRoot, "reqnroll.json");
+        var configUri = DocumentUri.FromFileSystemPath(configPath);
 
-        for (var rep = 0; rep < repetitions; rep++)
+        // The server only reconciles when the resolved configuration really changed — a change
+        // event for an identical file is a no-op that publishes nothing — so each repetition
+        // rewrites the feature language to a value the server has not just seen. The checked-in
+        // file is restored afterwards, and the server told, so later scenarios start from the
+        // original configuration.
+        var original = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
+        try
         {
-            var start = Stopwatch.GetTimestamp();
+            for (var rep = 0; rep < repetitions; rep++)
+            {
+                var language = rep % 2 == 0 ? "de" : "en";
+                await File.WriteAllTextAsync(configPath, WithFeatureLanguage(original, language)).ConfigureAwait(false);
+
+                var start = Stopwatch.GetTimestamp();
+                harness.SendConfigFileChanged(configUri);
+                var ms = await harness.WaitForDiagnosticsAsync(signalFeature.Uri, start).ConfigureAwait(false);
+                if (ms is not null) recorder.Add(ms.Value);
+            }
+        }
+        finally
+        {
+            await File.WriteAllTextAsync(configPath, original).ConfigureAwait(false);
+            var restoreStart = Stopwatch.GetTimestamp();
             harness.SendConfigFileChanged(configUri);
-            var ms = await harness.WaitForDiagnosticsAsync(signalFeature.Uri, start).ConfigureAwait(false);
-            if (ms is not null) recorder.Add(ms.Value);
+            await harness.WaitForDiagnosticsAsync(signalFeature.Uri, restoreStart).ConfigureAwait(false);
         }
 
         return recorder.Summarize();
+    }
+
+    private static string WithFeatureLanguage(string configJson, string language)
+    {
+        var root = Newtonsoft.Json.Linq.JObject.Parse(configJson);
+        root["language"] = new Newtonsoft.Json.Linq.JObject { ["feature"] = language };
+        return root.ToString();
     }
 
     // Both refresh handlers debounce match-cache changes into a single request 500ms after the
