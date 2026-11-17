@@ -39,7 +39,6 @@
     "feature"
   ],
   "activationEvents": [
-    "onLanguage:reqnroll",
     "workspaceContains:**/*.feature"
   ],
   "contributes": {
