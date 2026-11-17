@@ -103,9 +103,9 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // The buffer may have been removed by didClose while the parse ran: the close
         // path has already invalidated and rescanned this document from disk, so drop the result
         // rather than overwrite that closed-file match set with one for a document no longer open.
-        if (!_documentBufferService.UpdateTags(uri, tags))
+        if (!_documentBufferService.UpdateTags(uri, buffer.Generation, tags))
         {
-            _logger.LogVerbose($"Document {uri} was closed during parsing; discarding parse result.");
+            _logger.LogVerbose($"Document {uri} was closed or changed during parsing; discarding parse result.");
             return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
         }
 

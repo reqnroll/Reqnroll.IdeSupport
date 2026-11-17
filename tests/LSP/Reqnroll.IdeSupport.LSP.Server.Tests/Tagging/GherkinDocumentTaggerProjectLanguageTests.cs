@@ -38,7 +38,7 @@ public sealed class GherkinDocumentTaggerProjectLanguageTests : IDisposable
         Directory.CreateDirectory(_root);
         _parser = new RecordingTagParser(TaggerTestParser.Create(_logger));
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
-        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
+        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<long>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
             .Returns(true);
     }
 

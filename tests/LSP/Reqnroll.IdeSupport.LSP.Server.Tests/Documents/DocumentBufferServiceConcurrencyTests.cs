@@ -56,8 +56,8 @@ public class DocumentBufferServiceConcurrencyTests
             var tagsB = new List<IdeSupportTag>();
 
             using var gate = new Barrier(2);
-            var t1 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, tagsA); });
-            var t2 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, tagsB); });
+            var t1 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, 0, tagsA); });
+            var t2 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, 0, tagsB); });
             await Task.WhenAll(t1, t2);
 
             // Whichever write "won", TryGet must observe a complete, self-consistent buffer:
@@ -90,7 +90,7 @@ public class DocumentBufferServiceConcurrencyTests
             sut.Update(uri, 1, "Feature: X\n");
 
             using var gate = new Barrier(2);
-            var t1 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, new List<IdeSupportTag>()); });
+            var t1 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, 0, new List<IdeSupportTag>()); });
             var t2 = Task.Run(() => { gate.SignalAndWait(); sut.Remove(uri); });
             await Task.WhenAll(t1, t2);
 

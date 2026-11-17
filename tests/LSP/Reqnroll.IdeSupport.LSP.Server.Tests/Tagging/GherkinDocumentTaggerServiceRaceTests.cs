@@ -227,9 +227,9 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
 
         public void Update(DocumentUri uri, int? version, string text, long generation = 0) => inner.Update(uri, version, text, generation);
 
-        public bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
+        public bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags)
         {
-            var updated = inner.UpdateTags(uri, tags);
+            var updated = inner.UpdateTags(uri, generation, tags);
             var hook = AfterNextUpdateTags;
             AfterNextUpdateTags = null;
             if (updated) hook?.Invoke();

@@ -35,7 +35,7 @@ public class DocumentBufferServiceGenerationTests
         var sut = new DocumentBufferService();
         sut.Update(Uri, 2, "Feature: F\n", generation: 5);
 
-        sut.UpdateTags(Uri, Array.Empty<IdeSupportTag>()).Should().BeTrue();
+        sut.UpdateTags(Uri, 5, Array.Empty<IdeSupportTag>()).Should().BeTrue();
 
         sut.TryGet(Uri, out var buffer).Should().BeTrue();
         buffer!.Generation.Should().Be(5);
@@ -77,5 +77,34 @@ public class DocumentBufferServiceGenerationTests
 
         sut.TryGet(Uri, out var buffer).Should().BeTrue();
         buffer!.Text.Should().Be("Feature: Reopened\n");
+    }
+
+    [Fact]
+    public void UpdateTags_for_a_superseded_generation_is_rejected_and_leaves_the_newer_buffer_untouched()
+    {
+        // A parse of generation 5 text finishes after Update replaced the buffer with generation 6.
+        var sut = new DocumentBufferService();
+        sut.Update(Uri, 2, "Feature: old\n", generation: 5);
+        sut.Update(Uri, 3, "Feature: new\n", generation: 6);
+
+        sut.UpdateTags(Uri, 5, new List<IdeSupportTag>()).Should().BeFalse();
+
+        sut.TryGet(Uri, out var buffer).Should().BeTrue();
+        buffer!.Generation.Should().Be(6);
+        buffer.Tags.Should().BeNull("the older parse's tags must not be attached to the newer text");
+    }
+
+    [Fact]
+    public void UpdateTags_for_the_current_generation_after_a_newer_update_is_accepted()
+    {
+        var sut = new DocumentBufferService();
+        sut.Update(Uri, 2, "Feature: old\n", generation: 5);
+        sut.Update(Uri, 3, "Feature: new\n", generation: 6);
+        var tags = new List<IdeSupportTag>();
+
+        sut.UpdateTags(Uri, 6, tags).Should().BeTrue();
+
+        sut.TryGet(Uri, out var buffer).Should().BeTrue();
+        buffer!.Tags.Should().BeSameAs(tags);
     }
 }
