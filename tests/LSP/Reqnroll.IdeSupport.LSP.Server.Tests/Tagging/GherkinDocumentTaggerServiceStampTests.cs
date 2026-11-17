@@ -73,6 +73,13 @@ public class GherkinDocumentTaggerServiceStampTests
         return set.Stamp;
     }
 
+    /// <summary>Moves the document's content generation to <paramref name="generation"/>, as that many edits would.</summary>
+    private void DocumentIsAtGeneration(long generation)
+    {
+        while (_documentGenerations.Current(_uri.ToString()) < generation)
+            _documentGenerations.Bump(_uri.ToString());
+    }
+
     /// <summary>Makes reading the project's configuration (which yields the feature language) bump its config generation.</summary>
     private void BumpConfigGenerationWhenConfigurationIsRead()
         => _configProvider.GetConfiguration().Returns(_ =>
@@ -89,6 +96,7 @@ public class GherkinDocumentTaggerServiceStampTests
         _scopeManager.ResolvePrimaryOwner(_uri).Returns(_project);
         _configGenerations.Bump(_owner);
         _configGenerations.Bump(_owner);
+        DocumentIsAtGeneration(7);
         _bufferService.Update(_uri, 1, Text, generation: 7);
 
         await CreateSut().ParseAsync(_uri, 1);
@@ -100,6 +108,7 @@ public class GherkinDocumentTaggerServiceStampTests
     public async Task ParseAsync_without_a_known_owner_stamps_config_generation_zero()
     {
         _scopeManager.ResolvePrimaryOwner(_uri).Returns((LspReqnrollProject?)null);
+        DocumentIsAtGeneration(3);
         _bufferService.Update(_uri, 1, Text, generation: 3);
 
         await CreateSut().ParseAsync(_uri, 1);
@@ -111,6 +120,7 @@ public class GherkinDocumentTaggerServiceStampTests
     public async Task ParseAsync_reads_the_config_generation_before_the_feature_language()
     {
         _scopeManager.ResolvePrimaryOwner(_uri).Returns(_project);
+        DocumentIsAtGeneration(1);
         _bufferService.Update(_uri, 1, Text, generation: 1);
         BumpConfigGenerationWhenConfigurationIsRead();
 
@@ -125,6 +135,7 @@ public class GherkinDocumentTaggerServiceStampTests
     public async Task ScanClosedFileAsync_stamps_the_given_content_generation_the_projects_config_generation_and_the_registry_version()
     {
         _configGenerations.Bump(_owner);
+        DocumentIsAtGeneration(5);
 
         await CreateSut().ScanClosedFileAsync(_uri, Text, _project, contentGeneration: 5);
 
@@ -135,6 +146,7 @@ public class GherkinDocumentTaggerServiceStampTests
     public async Task ScanClosedFileAsync_reads_the_config_generation_before_the_feature_language()
     {
         BumpConfigGenerationWhenConfigurationIsRead();
+        DocumentIsAtGeneration(5);
 
         await CreateSut().ScanClosedFileAsync(_uri, Text, _project, contentGeneration: 5);
 
@@ -156,7 +168,11 @@ public class GherkinDocumentTaggerServiceStampTests
 
         await CreateSut(fileSystem).RescanClosedFileAsync(_uri);
 
-        StoredStamp(_owner).ContentGeneration.Should().Be(1, "the stamp must not be newer than the text it was built from");
+        // Had the generation been read after the text it would be 2, equal to the document's current
+        // one, and the write would be accepted: the old text would be stored as if it were current.
+        _matchService.TryGet(new MatchSetKey(_uri.ToString(), _owner), out _).Should().BeFalse(
+            "the stamp must not be newer than the text it was built from, so the write is superseded");
+        _matchService.GetStoreStats().RejectedSuperseded.Should().Be(1);
     }
 
     [Fact]
@@ -173,6 +189,7 @@ public class GherkinDocumentTaggerServiceStampTests
             },
             new LspIdeScope(_logger));
         _scopeManager.ResolveOwners(_uri).Returns(new[] { _project, second });
+        DocumentIsAtGeneration(4);
 
         await CreateSut().ScanClosedFileForAllOwnersAsync(_uri, Text, contentGeneration: 4);
 

@@ -30,9 +30,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Tagging;
 /// </summary>
 public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
 {
-    private const string NotYetEnforced =
-        "Stale derived-state write is accepted until the versioned-derived-state store guard is enforced";
-
     private const string OneScenario =
         "Feature: F\n\nScenario: One\n    Given a step\n";
 
@@ -48,7 +45,10 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     private readonly IIdeSupportLogger             _logger         = Substitute.For<IIdeSupportLogger>();
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly ILspWorkspaceScopeManager     _scopeManager   = Substitute.For<ILspWorkspaceScopeManager>();
-    private readonly BindingMatchService           _matchService   = new(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
+    private readonly IDocumentGenerations          _generations    = new DocumentGenerations();
+    private readonly IProjectConfigGenerations     _configGenerations = new ProjectConfigGenerations();
+    private readonly ISemanticTokensService        _semanticTokens = Substitute.For<ISemanticTokensService>();
+    private readonly BindingMatchService           _matchService;
     private readonly HookedBufferService           _bufferService  = new(new DocumentBufferService());
     private readonly HookedTagParser               _tagParser;
 
@@ -60,6 +60,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     public GherkinDocumentTaggerServiceRaceTests()
     {
         Directory.CreateDirectory(_root);
+        _matchService = new BindingMatchService(_generations, _logger);
         _tagParser = new HookedTagParser(TaggerTestParser.Create(_logger));
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
 
@@ -87,9 +88,16 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     }
 
     private GherkinDocumentTaggerService CreateSut() =>
-        new(_bufferService, _tagParser, _registryLookup, Substitute.For<ISemanticTokensService>(),
-            _matchService, _scopeManager, _logger, new FileSystemForIDE(),
-            new DocumentGenerations(), new ProjectConfigGenerations());
+        new(_bufferService, _tagParser, _registryLookup, _semanticTokens,
+            _matchService, _scopeManager, _logger, new FileSystemForIDE(), _generations, _configGenerations);
+
+    /// <summary>What the handler that drives a closed-file scan does: read the generation, then the text.</summary>
+    private Task ScanClosed(GherkinDocumentTaggerService sut, string text) =>
+        sut.ScanClosedFileAsync(_uri, text, _project, _generations.Current(_uri.ToString()));
+
+    /// <summary>What didOpen / didChange do to the buffer: bump the generation, then replace the text under it.</summary>
+    private void ChangeBuffer(int version, string text) =>
+        _bufferService.Update(_uri, version, text, _generations.Bump(_uri.ToString()));
 
     private FeatureBindingMatchSet Cached()
     {
@@ -100,33 +108,34 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
 
     // R1: ScanClosedFileAsync's "is it open?" guard is check-then-act. A didOpen and its parse can land
     // after the guard and before the closed scan's Store.
-    [Fact(Skip = NotYetEnforced)]
+    [Fact]
     public async Task Closed_scan_storing_after_the_file_was_opened_and_parsed_keeps_the_open_documents_match_set()
     {
         var sut = CreateSut();
         _tagParser.OnNextParse = snapshot =>
         {
             snapshot.Version.Should().Be(0, "the hook must fire inside the closed-file scan");
-            _bufferService.Update(_uri, 5, OneScenario); // didOpen
+            ChangeBuffer(5, OneScenario); // didOpen
             sut.ParseAsync(_uri, 5).GetAwaiter().GetResult(); // its parse completes first
         };
 
-        await sut.ScanClosedFileAsync(_uri, OneScenario, _project, 0);
+        await ScanClosed(sut, OneScenario);
 
         Cached().DocumentVersion.Should().Be(5, "the open document's parse is newer than the closed-file scan");
     }
 
     // R2: a parse whose UpdateTags succeeded before didClose stores after the close has invalidated and
     // rescanned the file from disk.
-    [Fact(Skip = NotYetEnforced)]
+    [Fact]
     public async Task Parse_storing_after_close_and_rescan_keeps_the_disk_based_match_set()
     {
         await File.WriteAllTextAsync(_featurePath, OneScenario);
         var sut = CreateSut();
-        _bufferService.Update(_uri, 3, TwoScenarios); // unsaved edits, discarded on close
+        ChangeBuffer(3, TwoScenarios); // unsaved edits, discarded on close
         _bufferService.AfterNextUpdateTags = () =>
         {
             // What TextDocumentSyncHandler's didClose does, landing between UpdateTags and Store.
+            _generations.Bump(_uri.ToString());
             _bufferService.Remove(_uri);
             _matchService.InvalidateAllForDocument(_uri.ToString());
             sut.RescanClosedFileAsync(_uri).GetAwaiter().GetResult();
@@ -141,15 +150,15 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
 
     // R4a: didChange replaces the buffer inline while the previous version's parse is still running; that
     // parse then attaches its tags to the newer buffer.
-    [Fact(Skip = "Older tags are attached to a newer buffer until UpdateTags checks the content generation")]
+    [Fact]
     public async Task Parse_of_an_older_buffer_does_not_attach_its_tags_to_the_newer_buffer()
     {
         var sut = CreateSut();
-        _bufferService.Update(_uri, 1, OneScenario);
+        ChangeBuffer(1, OneScenario);
         _tagParser.OnNextParse = snapshot =>
         {
             snapshot.Version.Should().Be(1);
-            _bufferService.Update(_uri, 2, TwoScenarios); // didChange lands after the version check
+            ChangeBuffer(2, TwoScenarios); // didChange lands after the version check
         };
 
         var olderTags = await sut.ParseAsync(_uri, 1);
@@ -161,7 +170,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
 
     // R5 (late write): a closed scan that read the file before a rename edited it stores after the rename
     // has invalidated the file and its post-rename rescan has stored.
-    [Fact(Skip = NotYetEnforced)]
+    [Fact]
     public async Task Closed_scan_of_pre_rename_text_storing_after_the_post_rename_rescan_keeps_the_new_text()
     {
         await File.WriteAllTextAsync(_featurePath, OneScenario);
@@ -170,18 +179,19 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
         {
             // The rename lands mid-scan: new text on disk, invalidation, re-derivation from disk.
             File.WriteAllText(_featurePath, TwoScenarios);
+            _generations.Bump(_uri.ToString());
             _matchService.InvalidateAllForDocument(_uri.ToString());
             sut.RescanClosedFileAsync(_uri).GetAwaiter().GetResult();
         };
 
-        await sut.ScanClosedFileAsync(_uri, OneScenario, _project, 0);
+        await ScanClosed(sut, OneScenario);
 
         Cached().Scenarios.Should().HaveCount(2, "the scan of the pre-rename text is older than the rescan");
     }
 
     // R6: a reqnroll.json change re-derives the project's files with the same text and the same registry.
     // A scan that read the old feature language can store after one that read the new one.
-    [Fact(Skip = NotYetEnforced)]
+    [Fact]
     public async Task Closed_scan_with_the_old_feature_language_storing_last_keeps_the_new_language_result()
     {
         var configuration = new IdeSupportConfiguration(); // English
@@ -196,13 +206,47 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
         {
             // reqnroll.json switches the project to French while the English scan is still parsing,
             // and the reconcile's scan with the new language completes first.
+            _configGenerations.Bump(_owner);
             configuration = new IdeSupportConfiguration { DefaultFeatureLanguage = "fr" };
-            sut.ScanClosedFileAsync(_uri, FrenchFeature, _project, 0).GetAwaiter().GetResult();
+            ScanClosed(sut, FrenchFeature).GetAwaiter().GetResult();
         };
 
-        await sut.ScanClosedFileAsync(_uri, FrenchFeature, _project, 0);
+        await ScanClosed(sut, FrenchFeature);
 
         Cached().Scenarios.Should().HaveCount(1, "only the scan with the new (French) language understands the file");
+    }
+
+    // A parse whose match set the store dropped must not run the follow-up work of a stored one: the
+    // newer derivation that superseded it does that work itself.
+    [Fact]
+    public async Task Parse_whose_match_set_was_dropped_does_not_invalidate_the_semantic_token_cache()
+    {
+        await File.WriteAllTextAsync(_featurePath, OneScenario);
+        var sut = CreateSut();
+        ChangeBuffer(3, TwoScenarios);
+        _bufferService.AfterNextUpdateTags = () =>
+        {
+            _generations.Bump(_uri.ToString());
+            _bufferService.Remove(_uri);
+            _matchService.InvalidateAllForDocument(_uri.ToString());
+            sut.RescanClosedFileAsync(_uri).GetAwaiter().GetResult();
+        };
+
+        await sut.ParseAsync(_uri, 3);
+
+        _semanticTokens.DidNotReceive().InvalidateCache(Arg.Any<DocumentUri>());
+        _matchService.GetStoreStats().RejectedSuperseded.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Parse_whose_match_set_was_stored_invalidates_the_semantic_token_cache()
+    {
+        var sut = CreateSut();
+        ChangeBuffer(1, OneScenario);
+
+        await sut.ParseAsync(_uri, 1);
+
+        _semanticTokens.Received(1).InvalidateCache(_uri);
     }
 
     /// <summary>Tag parser that runs a one-shot hook before delegating, so a competing writer can run mid-parse.</summary>
@@ -225,7 +269,8 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     {
         public Action? AfterNextUpdateTags { get; set; }
 
-        public void Update(DocumentUri uri, int? version, string text, long generation = 0) => inner.Update(uri, version, text, generation);
+        public void Update(DocumentUri uri, int? version, string text, long generation = 0) =>
+            inner.Update(uri, version, text, generation);
 
         public bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags)
         {

@@ -6,8 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// and with the entry already stored under the same key.
 /// </summary>
 /// <remarks>
-/// The guard is observational for now: a rejected write is still stored. The outcome says what an
-/// enforcing store would have done.
+/// A rejected write is dropped, so the entry already stored under the key stays in place.
 /// </remarks>
 public enum StoreOutcome
 {
