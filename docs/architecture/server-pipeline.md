@@ -103,8 +103,9 @@ sequenceDiagram
 | Term | Meaning here |
 |---|---|
 | **Tag tree** | `IdeSupportTag[]`: structural classification (keywords, tags, descriptions, doc strings, tables, parse errors) fused with step match results (`DefinedStep`, `UndefinedStep`, `StepParameter`, `ScenarioOutlinePlaceholder`). |
-| **Document buffer** | Per-URI cache of the tag tree and the file's effective Gherkin dialect. |
-| **Match set** | `FeatureBindingMatchSet`: match results for a feature, kept in the binding match service. |
+| **Document buffer** | Per-URI cache of the tag tree and the file's effective Gherkin dialect. It also holds the content generation of its text and the stamp of its tags. |
+| **Match set** | `FeatureBindingMatchSet`: match results for a feature, kept in the binding match service. Carries the stamp of the inputs it was built from. |
+| **Stamp** | `DerivationStamp`: the versions of the text, project configuration and binding registry one derivation read. Guarded stores drop a write whose stamp is out of date. See [derived-state-versioning.md](derived-state-versioning.md). |
 | **Binding registry** | Per-project store of bindings. Replaced or patched by discovery. |
 | **Protocol handler** | An OmniSharp class in `Features/<Capability>` that handles an incoming LSP message. |
 | **Internal handler** | A MediatR notification handler in `Pipeline/` that performs downstream work. |
@@ -158,14 +159,15 @@ Protocol handlers (one class may serve several messages):
 Rename helpers that are not handlers: `WorkspaceEditBuilder` (annotated `DocumentChanges` for clients that advertise
 `changeAnnotationSupport`, else the legacy `Changes` map), `RenameChangeAnnotations` (annotation-id constants),
 `CSharpAttributeLiteralResolver`, `RenameBindingResolver`, `NewNameReconciler`, and `RenamePostApplyCoordinator`
-(pushes a real `workspace/applyEdit` for clients with `AppliesRenameResponseEditNatively` and invalidates the match
-cache of closed `.feature` files the edit touched). See [../features/rename.md](../features/rename.md).
+(pushes a real `workspace/applyEdit` for clients with `AppliesRenameResponseEditNatively`, then re-derives the match
+sets of closed `.feature` files the edit touched from their post-rename text). See [../features/rename.md](../features/rename.md).
 
 Internal notifications:
 
 | Notification | Produced by | Consumed by |
 |---|---|---|
 | `MatchCacheChangedNotification` | `TextDocumentSyncHandler` after parse and match; `BindingRegistryChangedHandler` after re-matching an open file | `DiagnosticsPublishHandler` (push diagnostics); `SemanticTokensPushHandler` (Visual Studio only) |
+| `ClosedFileMatchCacheChangedNotification` | `FeatureDocumentReparser.RescanClosedDocumentAsync`, after `didClose` rewrites a closed file's match sets from disk | `CodeLensRefreshHandler` (refresh the step usage lenses; debounced together with `MatchCacheChangedNotification`) |
 | `BindingRegistryChangedNotification` | `BindingRegistryProviderRouter`, relaying `ConnectorBindingRegistryProvider.BindingRegistryChanged` (raised by Roslyn patching a `.cs` file and by the Connector refresh after a build) | `BindingRegistryChangedHandler`; `CSharpDiagnosticsRegistryChangedHandler` |
 
 ## 6. Behaviour and contracts
@@ -194,7 +196,15 @@ republishes `MatchCacheChangedNotification` for each.
 an invalid binding never matches a step, that edit also correctly refreshes "undefined step" diagnostics in `.feature`
 files.
 
-### 6.3 C# syntax-tree cache
+### 6.3 Stale results are dropped, not overwritten
+
+Several writers fill the match cache and the buffer's tags at once: the parse after an edit, the closed-file scans after
+a registry change, the rescan after `didClose`, the rename commit. Each records a stamp of the text, configuration and
+registry it read, and a guarded store drops a write whose stamp is out of date. A tag set from a newer registry has a
+newer stamp, so the semantic-token cache misses on its own and nothing evicts it. The rules, the invariants they depend
+on and the limits are in [derived-state-versioning.md](derived-state-versioning.md).
+
+### 6.4 C# syntax-tree cache
 
 `ICSharpSyntaxTreeCache` serves the C#-facing consumers that read files the server does not buffer:
 `ScenarioTestTargetResolver` (the generated `.feature.cs`) and `CSharpAttributeLiteralResolver` (rename). It has no
@@ -206,7 +216,7 @@ invalidation event; it validates on read, in two modes:
 
 It is bounded by a small most-recently-used cap, since disk-only files have no "close" event to hook.
 
-### 6.4 Error handling and atomicity
+### 6.5 Error handling and atomicity
 
 - If the Gherkin parser throws, the handler stores an empty AST with a single parse-error diagnostic covering the
   file and returns an empty token list. The buffer is never left partially updated.

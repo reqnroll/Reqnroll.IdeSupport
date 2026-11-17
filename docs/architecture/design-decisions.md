@@ -106,3 +106,25 @@ Effective gate per client in the final release (every term must allow transmissi
 
 Accepted cost: the clients differ in consent model, so the privacy docs (#1248) must state each client's behaviour.
 Related: #1239, #758, #851, #862, #583, #1194. See [telemetry.md](telemetry.md).
+
+## 8. Derived state carries the versions of its inputs; no CQRS restructuring
+
+**Chosen:** every piece of per-document derived state (match set, tags, semantic-token cache entry) records a stamp of the
+text, configuration and registry it was built from, and guarded stores drop a write older than what they hold.
+**Rejected:** restructuring the handlers as commands and queries; fixing each stale-write path with its own ordering code;
+comparing only the client's document version; an immutable snapshot of the whole match cache.
+
+Why:
+
+- The protocol and the MediatR pipeline already separate commands from queries. The actual defect was that the last
+  writer won rather than the newest, which versioned read models fix without moving any handler.
+- A per-path fix leaves the next writer free to reintroduce the race.
+- The client's version does not exist for closed files and restarts when a file is reopened, so the server owns a
+  per-document counter that outlives the open buffer.
+- A snapshot of the whole cache would only help readers that add up over many documents, and those already end in a
+  debounced code lens refresh.
+
+Accepted cost: a write that is wrongly dropped leaves an entry stale until something else re-derives it, so the rule is
+only safe while every content, registry and configuration change triggers a re-derivation. Closed files edited outside
+the editor are not observed, so they are still picked up only at the next registry replacement.
+See [derived-state-versioning.md](derived-state-versioning.md).

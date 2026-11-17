@@ -118,6 +118,7 @@ Naming convention: `*.Tests` are unit tests; `*.Specs` are integration/BDD tests
 |---|---|
 | [server-protocol.md](architecture/server-protocol.md) | How the server uses LSP: capability registration, `--ide` and behaviours, custom methods, priority and debounce |
 | [server-pipeline.md](architecture/server-pipeline.md) | The parse-and-match pass, internal events, handlers, the C# syntax-tree cache |
+| [derived-state-versioning.md](architecture/derived-state-versioning.md) | Stamps on derived state, the write rule that drops stale results, and the caches keyed on stamps |
 | [workspace-and-membership.md](architecture/workspace-and-membership.md) | Projects, the `path → {projects}` index, linked, excluded and shared files, dialects |
 | [binding-discovery.md](architecture/binding-discovery.md) | Roslyn and reflection discovery, the Connector, error and scope parity |
 | [ide-clients.md](architecture/ide-clients.md) | What every client does, and the per-feature cross-IDE matrix |
