@@ -398,6 +398,22 @@ public class TextDocumentSyncHandlerTests
     }
 
     [Fact]
+    public async Task The_buffer_records_the_generation_each_open_and_change_bumped_to()
+    {
+        var sut = CreateSut();
+
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+        _bufferService.TryGet(FeatureUri, out var opened).Should().BeTrue();
+        opened!.Generation.Should().Be(1);
+
+        await sut.Handle(ChangeParams(FeatureUri, 2, "Feature: New\n"), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+        _bufferService.TryGet(FeatureUri, out var changed).Should().BeTrue();
+        changed!.Generation.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Handle_DidClose_bumps_the_feature_documents_generation_and_it_survives_the_close()
     {
         var sut = CreateSut();

@@ -1,6 +1,7 @@
 ﻿using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 
 
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -26,6 +27,8 @@ public class GherkinDocumentTaggerServiceTests
     private readonly ILspWorkspaceScopeManager     _scopeManager         = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger               _logger               = Substitute.For<IIdeSupportLogger>();
     private readonly IFileSystemForIDE             _fileSystem           = new FileSystemForIDE();
+    private readonly IDocumentGenerations          _documentGenerations  = new DocumentGenerations();
+    private readonly IProjectConfigGenerations     _configGenerations    = new ProjectConfigGenerations();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
@@ -43,7 +46,7 @@ public class GherkinDocumentTaggerServiceTests
 
     private GherkinDocumentTaggerService CreateSut() =>
         new(_bufferService, _tagParser, _registryLookup, _semanticTokenService,
-            _bindingMatchService, _scopeManager, _logger, _fileSystem);
+            _bindingMatchService, _scopeManager, _logger, _fileSystem, _documentGenerations, _configGenerations);
 
     private static LspReqnrollProject MakeProject(string folder = "/workspace")
     {
@@ -204,7 +207,7 @@ public class GherkinDocumentTaggerServiceTests
             return true;
         });
 
-        await CreateSut().ScanClosedFileAsync(FeatureUri, "Feature: Open\n", project);
+        await CreateSut().ScanClosedFileAsync(FeatureUri, "Feature: Open\n", project, contentGeneration: 0);
 
         _tagParser.DidNotReceive().Parse(
             Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
@@ -230,7 +233,7 @@ public class GherkinDocumentTaggerServiceTests
                       Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
                   .Returns(expectedTags);
 
-        await CreateSut().ScanClosedFileAsync(FeatureUri, "Feature: Closed\n", project);
+        await CreateSut().ScanClosedFileAsync(FeatureUri, "Feature: Closed\n", project, contentGeneration: 0);
 
         _bindingMatchService.Received(1).Store(
             Arg.Is<FeatureBindingMatchSet>(s =>

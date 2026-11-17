@@ -28,6 +28,8 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly ILspWorkspaceScopeManager     _scopeManager;
     private readonly IFileSystemForIDE             _fileSystem;
+    private readonly IDocumentGenerations          _documentGenerations;
+    private readonly IProjectConfigGenerations     _configGenerations;
 
     /// <summary>Creates the tagger service with its collaborating document, registry, and match-set dependencies.</summary>
     public GherkinDocumentTaggerService(
@@ -38,7 +40,9 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         IBindingMatchService          bindingMatchService,
         ILspWorkspaceScopeManager     scopeManager,
         IIdeSupportLogger               logger,
-        IFileSystemForIDE             fileSystem)
+        IFileSystemForIDE             fileSystem,
+        IDocumentGenerations          documentGenerations,
+        IProjectConfigGenerations     configGenerations)
     {
         _documentBufferService = documentBufferService;
         _tagParser             = tagParser;
@@ -48,15 +52,17 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         _scopeManager          = scopeManager;
         _logger                = logger;
         _fileSystem            = fileSystem;
+        _documentGenerations   = documentGenerations;
+        _configGenerations     = configGenerations;
     }
 
     /// <inheritdoc/>
     public Task<IReadOnlyCollection<IdeSupportTag>> ParseAsync(DocumentUri uri, int? version)
     {
-        if (!_documentBufferService.TryGet(uri, out var buffer))
+        if (!_documentBufferService.TryGet(uri, out var buffer) || buffer is null)
             return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
 
-        var snapshot = buffer?.ToGherkinTextSnapshot();
+        var snapshot = buffer.ToGherkinTextSnapshot();
 
         if (snapshot == null)
             return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
@@ -73,7 +79,23 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // gracefully skips step-matching in that case.
         var registry     = _registryLookup.GetRegistryForUri(uri);
         var primaryOwner = _scopeManager.ResolvePrimaryOwner(uri);
-        var tags         = _tagParser.Parse(snapshot, registry, ProjectFeatureLanguage.For(primaryOwner));
+
+        // If the primary owner is not yet known (no baseline received), the match set is stored
+        // with ProjectOwner.Unknown so diagnostics can still work during startup. Store evicts the
+        // Unknown entry once a project-keyed entry arrives for the same document.
+        var owner = primaryOwner is not null
+            ? new ProjectOwner(primaryOwner.ProjectFullName, primaryOwner.TargetFrameworkMoniker)
+            : ProjectOwner.Unknown;
+
+        // The stamp records each input's version as read before the input itself: the buffer's
+        // generation came with the snapshot, the configuration generation is read before the
+        // feature language, and the registry is the instance the tags are matched against.
+        var stamp = new DerivationStamp(
+            buffer.Generation,
+            primaryOwner is not null ? _configGenerations.Current(owner) : 0,
+            registry.Version);
+
+        var tags = _tagParser.Parse(snapshot, registry, ProjectFeatureLanguage.For(primaryOwner));
         _logger.LogInfo($"Parsed {tags.Count} tags from document {uri}");
 
         // Store the new tags first so semantic-token encoding (which re-reads them) and the
@@ -87,16 +109,9 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
             return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
         }
 
-        // Build the match set keyed by (uri, primaryOwner). If the primary owner is not yet
-        // known (no baseline received), store with ProjectOwner.Unknown so diagnostics can
-        // still work during startup. The Store call will evict the Unknown entry once a
-        // project-keyed entry arrives for the same document.
-        var owner = primaryOwner is not null
-            ? new ProjectOwner(primaryOwner.ProjectFullName, primaryOwner.TargetFrameworkMoniker)
-            : ProjectOwner.Unknown;
-
+        // Keyed by (uri, primaryOwner); see the owner resolution above.
         var matchSet = FeatureBindingMatchSet.FromTags(
-            uri.ToString(), snapshot.Version, registry.Version, tags, owner);
+            uri.ToString(), snapshot.Version, stamp, tags, owner);
         _bindingMatchService.Store(matchSet);
 
         // Evict the semantic token cache for this URI. The cache is keyed on (uri, documentVersion);
@@ -109,7 +124,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     }
 
     /// <inheritdoc/>
-    public Task ScanClosedFileAsync(DocumentUri uri, string text, LspReqnrollProject project)
+    public Task ScanClosedFileAsync(DocumentUri uri, string text, LspReqnrollProject project, long contentGeneration)
     {
         // Deterministic open-document guard. The handler that drives closed-file scans takes an
         // open-URI snapshot before this runs, but that snapshot is racy: a file (especially one
@@ -134,11 +149,14 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
             ? provider.Current
             : _registryLookup.GetRegistryForUri(uri);   // fallback: router (should not happen after baseline)
 
+        // The configuration generation is read before the feature language; see ParseAsync.
+        var owner = new ProjectOwner(project.ProjectFullName, project.TargetFrameworkMoniker);
+        var stamp = new DerivationStamp(contentGeneration, _configGenerations.Current(owner), registry.Version);
+
         var tags = _tagParser.Parse(snapshot, registry, ProjectFeatureLanguage.For(project));
 
-        var owner    = new ProjectOwner(project.ProjectFullName, project.TargetFrameworkMoniker);
         var matchSet = FeatureBindingMatchSet.FromTags(
-            uri.ToString(), documentVersion: null, registry.Version, tags, owner);
+            uri.ToString(), documentVersion: null, stamp, tags, owner);
         _bindingMatchService.Store(matchSet);
 
         _logger.LogVerbose($"ScanClosedFile: stored {matchSet.Steps.Count} step(s) for {uri} [{project.ProjectName}]");
@@ -155,6 +173,9 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
             return;
         }
 
+        // Read before the text, so the stamp is never newer than the content it describes.
+        var contentGeneration = _documentGenerations.Current(uri.ToString());
+
         string text;
         try
         {
@@ -166,11 +187,11 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
             return;
         }
 
-        await ScanClosedFileForAllOwnersAsync(uri, text).ConfigureAwait(false);
+        await ScanClosedFileForAllOwnersAsync(uri, text, contentGeneration).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task ScanClosedFileForAllOwnersAsync(DocumentUri uri, string text)
+    public async Task ScanClosedFileForAllOwnersAsync(DocumentUri uri, string text, long contentGeneration)
     {
         // A feature file can be linked into more than one project; repopulate the match set for
         // each owner so (uri, project)-keyed lookups stay complete after the buffer is gone.
@@ -182,6 +203,6 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         }
 
         foreach (var project in owners)
-            await ScanClosedFileAsync(uri, text, project).ConfigureAwait(false);
+            await ScanClosedFileAsync(uri, text, project, contentGeneration).ConfigureAwait(false);
     }
 }

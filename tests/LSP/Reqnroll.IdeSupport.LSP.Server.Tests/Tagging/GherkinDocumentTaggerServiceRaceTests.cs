@@ -88,7 +88,8 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
 
     private GherkinDocumentTaggerService CreateSut() =>
         new(_bufferService, _tagParser, _registryLookup, Substitute.For<ISemanticTokensService>(),
-            _matchService, _scopeManager, _logger, new FileSystemForIDE());
+            _matchService, _scopeManager, _logger, new FileSystemForIDE(),
+            new DocumentGenerations(), new ProjectConfigGenerations());
 
     private FeatureBindingMatchSet Cached()
     {
@@ -110,7 +111,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
             sut.ParseAsync(_uri, 5).GetAwaiter().GetResult(); // its parse completes first
         };
 
-        await sut.ScanClosedFileAsync(_uri, OneScenario, _project);
+        await sut.ScanClosedFileAsync(_uri, OneScenario, _project, 0);
 
         Cached().DocumentVersion.Should().Be(5, "the open document's parse is newer than the closed-file scan");
     }
@@ -173,7 +174,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
             sut.RescanClosedFileAsync(_uri).GetAwaiter().GetResult();
         };
 
-        await sut.ScanClosedFileAsync(_uri, OneScenario, _project);
+        await sut.ScanClosedFileAsync(_uri, OneScenario, _project, 0);
 
         Cached().Scenarios.Should().HaveCount(2, "the scan of the pre-rename text is older than the rescan");
     }
@@ -196,10 +197,10 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
             // reqnroll.json switches the project to French while the English scan is still parsing,
             // and the reconcile's scan with the new language completes first.
             configuration = new IdeSupportConfiguration { DefaultFeatureLanguage = "fr" };
-            sut.ScanClosedFileAsync(_uri, FrenchFeature, _project).GetAwaiter().GetResult();
+            sut.ScanClosedFileAsync(_uri, FrenchFeature, _project, 0).GetAwaiter().GetResult();
         };
 
-        await sut.ScanClosedFileAsync(_uri, FrenchFeature, _project);
+        await sut.ScanClosedFileAsync(_uri, FrenchFeature, _project, 0);
 
         Cached().Scenarios.Should().HaveCount(1, "only the scan with the new (French) language understands the file");
     }
@@ -224,7 +225,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     {
         public Action? AfterNextUpdateTags { get; set; }
 
-        public void Update(DocumentUri uri, int? version, string text) => inner.Update(uri, version, text);
+        public void Update(DocumentUri uri, int? version, string text, long generation = 0) => inner.Update(uri, version, text, generation);
 
         public bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
         {

@@ -407,7 +407,7 @@ public class RenamePostApplyCoordinatorTests
         await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: true);
 
         _matchService.Received(1).InvalidateAllForDocument(file.Uri.ToString());
-        await _taggerService.Received(1).ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename);
+        await _taggerService.Received(1).ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename, 1);
     }
 
     // A client may save the edited file before it confirms the rename. The post-rename text is computed
@@ -423,7 +423,7 @@ public class RenamePostApplyCoordinatorTests
         await File.WriteAllTextAsync(file.FilePath, AfterRename); // the client applied and saved the rename
         await sut.CompletePendingCommitAsync(file.Uri, applied: true, CancellationToken.None);
 
-        await _taggerService.Received(1).ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename);
+        await _taggerService.Received(1).ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename, Arg.Any<long>());
     }
 
     [Fact]
@@ -439,7 +439,7 @@ public class RenamePostApplyCoordinatorTests
         Received.InOrder(() =>
         {
             _ = _csharpDiscoveryService.UpdateFromSourceAsync(CsUri, "class C {}", false, Arg.Any<CancellationToken>());
-            _ = _taggerService.ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename);
+            _ = _taggerService.ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename, Arg.Any<long>());
         });
     }
 
@@ -451,7 +451,7 @@ public class RenamePostApplyCoordinatorTests
         await StageThenCompleteAsync(CreateSut(isVisualStudio: false), FeatureUri, BuilderWithOneEdit(FeatureUri), applied: true);
 
         _matchService.Received(1).InvalidateAllForDocument(FeatureUri.ToString());
-        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!, default);
     }
 
     [Fact]
@@ -465,7 +465,7 @@ public class RenamePostApplyCoordinatorTests
         await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, builder, applied: true);
 
         _matchService.Received(1).InvalidateAllForDocument(file.Uri.ToString());
-        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!, default);
     }
 
     [Fact]
@@ -478,7 +478,7 @@ public class RenamePostApplyCoordinatorTests
 
         await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: true);
 
-        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!, default);
     }
 
     [Fact]
@@ -489,7 +489,7 @@ public class RenamePostApplyCoordinatorTests
 
         await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: false);
 
-        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!, default);
     }
 
     // End to end through the real tagger and match store: the closed file stays in the cache, and its
@@ -519,7 +519,8 @@ public class RenamePostApplyCoordinatorTests
         var fileSystem    = new FileSystemForIDE();
         var tagger = new GherkinDocumentTaggerService(
             bufferService, Tagging.TaggerTestParser.Create(_logger), registryLookup,
-            Substitute.For<ISemanticTokensService>(), matchService, scopeManager, _logger, fileSystem);
+            Substitute.For<ISemanticTokensService>(), matchService, scopeManager, _logger, fileSystem,
+            _documentGenerations, new ProjectConfigGenerations());
         await tagger.RescanClosedFileAsync(file.Uri); // the cache before the rename
 
         var builder = new WorkspaceEditBuilder(supportsChangeAnnotations: false);
