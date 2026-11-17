@@ -75,8 +75,11 @@ public sealed class StepCodeLensHandler
         // work, so a .feature request is not counted here, and a .cs file yields one
         // measurement per lens kind that serves it (this one plus HookMatchCountCodeLensHandler).
         var (cacheDocs, cacheSteps) = _matchService.GetCacheStats();
+        var writes = _matchService.GetStoreStats();
         using var _perf = _recorder.Measure(
-            LspStandardMethodNames.TextDocumentCodeLens, uri, detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps}");
+            LspStandardMethodNames.TextDocumentCodeLens, uri,
+            detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps} " +
+                    $"accepted={writes.AcceptedWrites} rejectedSuperseded={writes.RejectedSuperseded} rejectedStale={writes.RejectedStale}");
 
         var filePath = uri.GetFileSystemPath();
         if (string.IsNullOrEmpty(filePath))

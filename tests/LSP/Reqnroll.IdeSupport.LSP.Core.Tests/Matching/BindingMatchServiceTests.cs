@@ -252,7 +252,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void Store_then_TryGet_returns_the_set()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var set = BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step")));
 
         sut.Store(set);
@@ -264,7 +264,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void TryGet_unknown_document_returns_false_and_Empty()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
 
         sut.TryGet(MatchSetKey.ForUnknownProject("file:///nope.feature"), out var found).Should().BeFalse();
         found.Should().BeSameAs(FeatureBindingMatchSet.Empty);
@@ -273,7 +273,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void Store_replaces_the_prior_set_for_the_same_key()
     {
-        var sut    = new BindingMatchService();
+        var sut    = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var first  = BuildSet(DefinedFeature,   RegistryWith(GivenBinding("my step")), version: 1);
         var second = BuildSet(UndefinedFeature, RegistryWith(GivenBinding("my step")), version: 2);
 
@@ -288,7 +288,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void InvalidateAllForDocument_drops_the_document_entry()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step"))));
 
         sut.InvalidateAllForDocument(Uri);
@@ -299,7 +299,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void InvalidateAll_clears_every_entry()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step"))));
 
         sut.InvalidateAll();
@@ -312,7 +312,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void Store_with_known_owner_evicts_Unknown_placeholder_for_same_document()
     {
-        var sut         = new BindingMatchService();
+        var sut         = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var registry    = RegistryWith(GivenBinding("my step"));
         var placeholder = BuildSet(DefinedFeature, registry, version: 1); // owner = Unknown
         var projectSet  = BuildSet(DefinedFeature, registry, version: 1, owner: OwnerA);
@@ -329,7 +329,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void Two_projects_can_store_independent_match_sets_for_the_same_document()
     {
-        var sut      = new BindingMatchService();
+        var sut      = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var regA     = RegistryWith(GivenBinding("my step",  file: "A.cs", line: 1));
         var regB     = RegistryWith(GivenBinding("my step",  file: "B.cs", line: 1));
         var setA     = BuildSet(DefinedFeature, regA, owner: OwnerA);
@@ -347,7 +347,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void InvalidateAllForDocument_removes_all_owner_slots_for_that_uri()
     {
-        var sut  = new BindingMatchService();
+        var sut  = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var reg  = RegistryWith(GivenBinding("my step"));
         sut.Store(BuildSet(DefinedFeature, reg, owner: OwnerA));
         sut.Store(BuildSet(DefinedFeature, reg, owner: OwnerB));
@@ -361,7 +361,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void InvalidateAllForDocument_does_not_remove_other_documents()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var reg = RegistryWith(GivenBinding("my step"));
         sut.Store(BuildSet(DefinedFeature, reg, docUri: Uri,       owner: OwnerA));
         sut.Store(BuildSet(DefinedFeature, reg, docUri: SecondUri, owner: OwnerA));
@@ -374,7 +374,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void InvalidateAllForProject_removes_all_slots_for_that_project()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var reg = RegistryWith(GivenBinding("my step"));
         sut.Store(BuildSet(DefinedFeature, reg, docUri: Uri,       owner: OwnerA));
         sut.Store(BuildSet(DefinedFeature, reg, docUri: SecondUri, owner: OwnerA));
@@ -392,7 +392,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_returns_steps_bound_to_the_given_source_location()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5))));
 
         var usages = sut.FindUsages(new SourceLocation("Steps.cs", 5, 99));
@@ -403,7 +403,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_returns_nothing_for_an_unrelated_location()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5))));
 
         sut.FindUsages(new SourceLocation("Other.cs", 1, 1)).Should().BeEmpty();
@@ -412,7 +412,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_null_location_returns_empty()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step"))));
 
         sut.FindUsages(null!).Should().BeEmpty();
@@ -421,7 +421,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_each_result_carries_the_feature_document_id()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5))));
 
         var usage = sut.FindUsages(new SourceLocation("Steps.cs", 5, 1)).Single();
@@ -432,7 +432,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_finds_matches_across_multiple_documents()
     {
-        var sut      = new BindingMatchService();
+        var sut      = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var registry = RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5));
 
         sut.Store(BuildSet(DefinedFeature, registry, docUri: Uri));
@@ -448,7 +448,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void GetCacheStats_returns_document_count_and_total_step_count_across_the_cache()
     {
-        var sut      = new BindingMatchService();
+        var sut      = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var registry = RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5));
 
         // Two documents, one step each — DefinedFeature has a single "Given my step" scenario.
@@ -464,7 +464,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void GetCacheStats_on_empty_cache_returns_zero()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
 
         var (documentCount, totalStepCount) = sut.GetCacheStats();
 
@@ -475,7 +475,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_uses_case_insensitive_path_comparison_on_source_file()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5))));
 
         var usages = sut.FindUsages(new SourceLocation("STEPS.CS", 5, 1));
@@ -486,7 +486,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_does_not_return_undefined_steps()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(UndefinedFeature, RegistryWith(GivenBinding("my step"))));
 
         sut.FindUsages(new SourceLocation("Steps.cs", 5, 1)).Should().BeEmpty();
@@ -495,7 +495,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_with_project_filter_restricts_to_matching_owner()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: Uri,       owner: OwnerA));
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: SecondUri, owner: OwnerB));
@@ -509,7 +509,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_with_project_filter_includes_Unknown_entries()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         // Unknown entry — pre-baseline placeholder
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: Uri));
@@ -524,7 +524,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_with_null_filter_returns_all_projects()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: Uri,       owner: OwnerA));
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: SecondUri, owner: OwnerB));
@@ -588,7 +588,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_by_BindingId_returns_steps_bound_to_that_binding()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
 
@@ -600,7 +600,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_by_BindingId_returns_nothing_for_an_unrelated_binding()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
 
@@ -611,7 +611,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_by_BindingId_respects_project_filter_and_includes_Unknown_entries()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: Uri,       owner: OwnerA));
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: SecondUri, owner: OwnerB));
@@ -624,7 +624,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_by_BindingId_agrees_with_FindUsages_by_SourceLocation()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
 
@@ -639,7 +639,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void InvalidateAllForDocument_removes_only_that_documents_bindings_from_the_reverse_index()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var bindingA = GivenBinding("step a", method: "MethodA", file: "A.cs", line: 5);
         var bindingB = GivenBinding("step b", method: "MethodB", file: "B.cs", line: 5);
         sut.Store(BuildSet("Feature: F\nScenario: S\n    Given step a\n", RegistryWith(bindingA), docUri: Uri));
@@ -654,7 +654,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void Store_replacing_a_document_removes_its_old_bindings_from_the_reverse_index()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var oldBinding = GivenBinding("old step", method: "OldMethod", file: "Steps.cs", line: 5);
         var newBinding = GivenBinding("new step", method: "NewMethod", file: "Steps.cs", line: 20);
 
@@ -670,7 +670,7 @@ public class BindingMatchServiceTests
     [Fact]
     public void FindUsages_by_SourceLocation_resolves_a_click_up_to_two_lines_above_the_binding_start()
     {
-        var sut     = new BindingMatchService();
+        var sut     = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var binding = GivenBinding("my step", file: "Steps.cs", line: 10);
         sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
 
@@ -688,7 +688,7 @@ public class BindingMatchServiceTests
         var when  = new ProjectStepDefinitionBinding(ScenarioBlock.When,  new Regex("^second$"), null, impl, "second");
         const string feature = "Feature: F\nScenario: S\n    Given first\n    When second\n";
 
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(feature, RegistryWith(given, when)));
 
         sut.FindUsages(new SourceLocation("Steps.cs", 5, 1)).Should().HaveCount(2, "both attributes at the same location must resolve");
@@ -704,7 +704,7 @@ public class BindingMatchServiceTests
         var second = GivenBinding("step two", method: "Steps.Two", file: "Steps.cs", line: 14);
         const string feature = "Feature: F\nScenario: S\n    Given step one\n    Given step two\n";
 
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(feature, RegistryWith(first, second)));
 
         sut.FindUsages(new SourceLocation("Steps.cs", 10, 1)).Should().ContainSingle().Which
@@ -731,7 +731,7 @@ public class BindingMatchServiceTests
         var feature = "Feature: F\nScenario: S\n" +
             string.Concat(Enumerable.Range(0, count).Select(i => $"    Given step number {i}\n"));
 
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(BuildSet(feature, RegistryWith(bindings)));
 
         AssertResolvesTo(sut, 0);
@@ -757,7 +757,7 @@ public class BindingMatchServiceTests
         // torn read, or lost update under contention -- FindUsages' own comment claims
         // "ConcurrentDictionary enumeration is safe under concurrent writes" but nothing exercised
         // that claim under real concurrency before this test.
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         const int documentCount = 30;
         var registry = RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5));
         var docUris = Enumerable.Range(0, documentCount).Select(i => $"file:///c:/proj/f{i}.feature").ToArray();

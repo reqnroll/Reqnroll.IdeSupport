@@ -515,7 +515,7 @@ public class RenamePostApplyCoordinatorTests
         registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
 
         var bufferService = new DocumentBufferService(); // empty: the file is closed
-        var matchService  = new BindingMatchService();
+        var matchService  = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var fileSystem    = new FileSystemForIDE();
         var tagger = new GherkinDocumentTaggerService(
             bufferService, Tagging.TaggerTestParser.Create(_logger), registryLookup,

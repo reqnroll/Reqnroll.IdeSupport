@@ -48,7 +48,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     private readonly IIdeSupportLogger             _logger         = Substitute.For<IIdeSupportLogger>();
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly ILspWorkspaceScopeManager     _scopeManager   = Substitute.For<ILspWorkspaceScopeManager>();
-    private readonly BindingMatchService           _matchService   = new();
+    private readonly BindingMatchService           _matchService   = new(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
     private readonly HookedBufferService           _bufferService  = new(new DocumentBufferService());
     private readonly HookedTagParser               _tagParser;
 

@@ -26,7 +26,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 public class DefinitionHandlerTests
 {
     // Use the real BindingMatchService to avoid NSubstitute out-param complexity.
-    private BindingMatchService            _matchService  = new();
+    private BindingMatchService            _matchService  = new(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
     private readonly IDocumentBufferService    _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly ILspWorkspaceScopeManager _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger           _logger        = Substitute.For<IIdeSupportLogger>();

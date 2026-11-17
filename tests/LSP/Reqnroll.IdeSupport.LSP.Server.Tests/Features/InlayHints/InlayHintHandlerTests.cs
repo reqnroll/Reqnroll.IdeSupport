@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.InlayHints;
 
 public class InlayHintHandlerTests
 {
-    private readonly BindingMatchService _matchService = new();
+    private readonly BindingMatchService _matchService = new(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IInlayHintService _hintService = new InlayHintService();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();

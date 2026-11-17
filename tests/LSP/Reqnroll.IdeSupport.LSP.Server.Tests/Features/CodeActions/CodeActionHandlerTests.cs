@@ -31,7 +31,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeActions;
 
 public class CodeActionHandlerTests
 {
-    private readonly BindingMatchService         _matchService  = new();
+    private readonly BindingMatchService         _matchService  = new(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
     private readonly IStepScaffoldService        _scaffoldService = new StepScaffoldService();
     private readonly ILspWorkspaceScopeManager   _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IDocumentBufferService      _bufferService = Substitute.For<IDocumentBufferService>();

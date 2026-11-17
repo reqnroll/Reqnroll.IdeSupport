@@ -18,7 +18,12 @@ public interface IBindingMatchService
     /// <summary>Stores (replacing any prior entry for the same <see cref="FeatureBindingMatchSet.Key"/>).
     /// If the incoming key has a known <see cref="ProjectOwner"/>, evicts any
     /// <see cref="ProjectOwner.Unknown"/> placeholder for the same document.</summary>
-    void Store(FeatureBindingMatchSet matchSet);
+    /// <returns>
+    /// What the write rule concluded about the set's stamp (see <see cref="StoreOutcome"/>). Every
+    /// write is stored whatever the outcome; callers must not branch on it yet.
+    /// </returns>
+    /// <param name="matchSet">The match set to store.</param>
+    StoreOutcome Store(FeatureBindingMatchSet matchSet);
 
     /// <summary>Returns the cached match set for the given key, or <see cref="FeatureBindingMatchSet.Empty"/>.</summary>
     bool TryGet(MatchSetKey key, out FeatureBindingMatchSet matchSet);
@@ -74,6 +79,9 @@ public interface IBindingMatchService
     /// sweep it's meant to be logged alongside. Not on any hot per-binding path.
     /// </summary>
     (int DocumentCount, int TotalStepCount) GetCacheStats();
+
+    /// <summary>Running totals of <see cref="Store"/> outcomes, for the same diagnostic log lines as <see cref="GetCacheStats"/>.</summary>
+    StoreStats GetStoreStats();
 
     /// <summary>
     /// Diagnostic: audits the invariant that the reverse index contains exactly the

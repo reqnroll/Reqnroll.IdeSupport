@@ -51,7 +51,7 @@ public class BindingMatchServiceBranchSwitchTests
     [Fact]
     public void D1_rematching_against_a_registry_without_the_binding_makes_the_step_undefined_and_drops_its_usage()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var before = RegistryWith(GivenBinding("my step", "MyStep", "Steps.cs"));
         sut.Store(Match(Uri, Feature, before, version: 1));
         sut.FindUsages(At("Steps.cs")).Should().ContainSingle("precondition: the step used the binding");
@@ -71,7 +71,7 @@ public class BindingMatchServiceBranchSwitchTests
     {
         // Documents the dependency the fix has to respect: usage counts only change when the
         // document is re-matched, so a registry change must trigger a re-match of closed features.
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var before = RegistryWith(GivenBinding("my step", "MyStep", "Steps.cs"));
         sut.Store(Match(Uri, Feature, before, version: 1));
         sut.Store(Match(OtherUri, Feature, before, version: 1));
@@ -85,7 +85,7 @@ public class BindingMatchServiceBranchSwitchTests
     [Fact]
     public void D1_rematching_every_document_clears_the_usage_for_all_of_them()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var before = RegistryWith(GivenBinding("my step", "MyStep", "Steps.cs"));
         sut.Store(Match(Uri, Feature, before, version: 1));
         sut.Store(Match(OtherUri, Feature, before, version: 1));
@@ -102,7 +102,7 @@ public class BindingMatchServiceBranchSwitchTests
     [Fact]
     public void D2_a_second_matching_binding_turns_a_defined_step_ambiguous()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var first = GivenBinding("my step", "First", "A.cs");
         sut.Store(Match(Uri, Feature, RegistryWith(first), version: 1));
 
@@ -117,7 +117,7 @@ public class BindingMatchServiceBranchSwitchTests
     [Fact]
     public void D2_removing_the_second_binding_again_restores_the_defined_state()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         var first = GivenBinding("my step", "First", "A.cs");
         var second = GivenBinding("my step", "Second", "B.cs");
         sut.Store(Match(Uri, Feature, RegistryWith(first, second), version: 1));
@@ -141,12 +141,12 @@ public class BindingMatchServiceBranchSwitchTests
         var stepsOnB = RegistryWith(GivenBinding("my step", "MyStep", "Moved.cs"));
         const string twoSteps = "Feature: F\nScenario: S\n    Given my step\n    And another step\n";
 
-        var switched = new BindingMatchService();
+        var switched = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         switched.Store(Match(Uri, twoSteps, stepsOnA, version: 1));
         switched.Store(Match(Uri, twoSteps, stepsOnB, version: 1));
         switched.Store(Match(Uri, twoSteps, stepsOnA, version: 1));
 
-        var fresh = new BindingMatchService();
+        var fresh = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         fresh.Store(Match(Uri, twoSteps, stepsOnA, version: 1));
 
         switched.FindUsages(At("Steps.cs")).Count.Should().Be(fresh.FindUsages(At("Steps.cs")).Count);
@@ -167,7 +167,7 @@ public class BindingMatchServiceBranchSwitchTests
         var onA = RegistryWith(GivenBinding("my step", "MyStep", "Steps.cs"));
         var onB = RegistryWith(GivenBinding("my step", "MyStep", "Moved.cs"));
 
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(Match(Uri, Feature, onB, version: 1));
         sut.Store(Match(Uri, Feature, onA, version: 1)); // switched back: Moved.cs no longer exists
 
@@ -187,7 +187,7 @@ public class BindingMatchServiceBranchSwitchTests
         var inA = RegistryWith(bindingInA);
         var inB = RegistryWith(GivenBinding("my step", "MyStep", "B/Steps.cs"));
 
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(Match(Uri, Feature, inA, version: 1, owner: Owner));
         sut.Store(Match(OtherUri, Feature, inB, version: 1, owner: OtherOwner));
 
@@ -201,7 +201,7 @@ public class BindingMatchServiceBranchSwitchTests
     [Fact]
     public void A4_lookup_by_file_is_case_insensitive()
     {
-        var sut = new BindingMatchService();
+        var sut = new BindingMatchService(new DocumentGenerations(), Substitute.For<IIdeSupportLogger>());
         sut.Store(Match(Uri, Feature, RegistryWith(GivenBinding("my step", "MyStep", "C:/Proj/Steps.cs")), version: 1));
 
         sut.FindUsages(At("c:/proj/steps.cs")).Should().ContainSingle();
