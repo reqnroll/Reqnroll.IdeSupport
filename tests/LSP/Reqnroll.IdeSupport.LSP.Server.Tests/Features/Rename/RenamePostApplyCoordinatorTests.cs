@@ -3,14 +3,20 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Configuration.Model;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
+using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Rename;
@@ -24,6 +30,7 @@ public class RenamePostApplyCoordinatorTests
     private readonly ICSharpFileTextCache           _csharpFileTextCache   = Substitute.For<ICSharpFileTextCache>();
     private readonly IIdeSupportLogger              _logger                = Substitute.For<IIdeSupportLogger>();
     private readonly IDocumentGenerations           _documentGenerations   = new DocumentGenerations();
+    private readonly IGherkinDocumentTaggerService  _taggerService         = Substitute.For<IGherkinDocumentTaggerService>();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
@@ -37,7 +44,9 @@ public class RenamePostApplyCoordinatorTests
             _csharpDiscoveryService,
             _csharpFileTextCache,
             _logger,
-            _documentGenerations);
+            _documentGenerations,
+            _taggerService,
+            new FileSystemForIDE());
 
     private void SetupApplyEditRequest(bool applied)
     {
@@ -304,50 +313,6 @@ public class RenamePostApplyCoordinatorTests
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
-    // ── Closed feature files stay in the match cache ─────────────────────
-
-    // A closed feature file edited by a rename gets no didChange, so nothing else re-derives it: it must
-    // be rescanned from its post-rename text, not just dropped from the cache until the next project scan.
-    [Fact(Skip = "A rename only invalidates closed feature files until they are rescanned after the edit")]
-    public async Task Confirmed_apply_repopulates_a_closed_feature_files_match_set_from_its_new_text_Async()
-    {
-        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "rnr-rename-" + Guid.NewGuid().ToString("N")));
-        try
-        {
-            var featurePath = Path.Combine(root.FullName, "closed.feature");
-            var featureUri  = DocumentUri.FromFileSystemPath(featurePath);
-            var owner       = new ProjectOwner(Path.Combine(root.FullName, "My.csproj"), "net10.0");
-            var parser      = Tagging.TaggerTestParser.Create(_logger);
-
-            const string beforeRename = "Feature: F\n\nScenario: One\n    Given old step\n";
-            const string afterRename  = "Feature: F\n\nScenario: One\n    Given new step\n\nScenario: Two\n    Given new step\n";
-
-            var matchService = new BindingMatchService();
-            matchService.Store(FeatureBindingMatchSet.FromTags(
-                featureUri.ToString(), null, 0,
-                parser.Parse(new LspTextSnapshot(featureUri.ToString(), 0, beforeRename),
-                             ProjectBindingRegistry.Invalid, IdeSupportConfiguration.FallbackFeatureLanguage),
-                owner));
-
-            // The client has applied the rename to the closed file.
-            await File.WriteAllTextAsync(featurePath, afterRename);
-
-            var sut = new RenamePostApplyCoordinator(
-                _languageServer, new ClientIdeContext("vscode"), matchService, new DocumentBufferService(),
-                _csharpDiscoveryService, _csharpFileTextCache, _logger, _documentGenerations);
-
-            await StageThenCompleteAsync(sut, featureUri, BuilderWithOneEdit(featureUri), applied: true);
-
-            matchService.TryGet(new MatchSetKey(featureUri.ToString(), owner), out var cached)
-                .Should().BeTrue("the closed file must stay visible to Find Usages and usage counts");
-            cached.Scenarios.Should().HaveCount(2, "the match set must describe the post-rename text");
-        }
-        finally
-        {
-            root.Delete(recursive: true);
-        }
-    }
-
     // ── Document generation ──────────────────────────────────────────────
 
     [Fact]
@@ -387,5 +352,187 @@ public class RenamePostApplyCoordinatorTests
         await StageThenCompleteAsync(CreateSut(isVisualStudio: false), FeatureUri, BuilderWithOneEdit(FeatureUri), applied: false);
 
         _documentGenerations.Current(FeatureUri.ToString()).Should().Be(0);
+    }
+
+    // ── Closed feature files are re-derived from their post-rename text ──
+
+    private const string BeforeRename = "Feature: F\n\nScenario: One\n    Given old step\n";
+
+    // Replaces "old" (line 3, characters 10-13) with a longer word, so applying the edit a second time
+    // to the already-renamed text would visibly corrupt it.
+    private static WorkspaceEditBuilder RenameOldToBrandNew(DocumentUri uri)
+    {
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations: false);
+        builder.Add(uri, new LspRange(new Position(3, 10), new Position(3, 13)), "brand new");
+        return builder;
+    }
+
+    private const string AfterRename = "Feature: F\n\nScenario: One\n    Given brand new step\n";
+
+    /// <summary>Creates a closed feature file with <see cref="BeforeRename"/> on disk in a fresh temp directory.</summary>
+    private sealed class ClosedFeatureFile : IDisposable
+    {
+        private readonly DirectoryInfo _dir =
+            Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "rnr-rename-" + Guid.NewGuid().ToString("N")));
+
+        public ClosedFeatureFile()
+        {
+            FilePath = Path.Combine(_dir.FullName, "closed.feature");
+            File.WriteAllText(FilePath, BeforeRename);
+            Uri = DocumentUri.FromFileSystemPath(FilePath);
+        }
+
+        public string FilePath { get; }
+        public DocumentUri Uri { get; }
+        public string Folder => _dir.FullName;
+
+        public void Dispose()
+        {
+            try { _dir.Delete(recursive: true); } catch (IOException) { }
+        }
+    }
+
+    private void MarkClosed(DocumentUri uri)
+    {
+        DocumentBuffer? ignored;
+        _documentBuffer.TryGet(uri, out ignored).Returns(false);
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_rederives_a_closed_feature_file_from_its_post_rename_text_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        MarkClosed(file.Uri);
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: true);
+
+        _matchService.Received(1).InvalidateAllForDocument(file.Uri.ToString());
+        await _taggerService.Received(1).ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename);
+    }
+
+    // A client may save the edited file before it confirms the rename. The post-rename text is computed
+    // when the rename is staged, so the edit is never applied to text that already contains it.
+    [Fact]
+    public async Task Confirmed_apply_uses_the_text_staged_before_the_client_saved_the_edit_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        MarkClosed(file.Uri);
+        var sut = CreateSut(isVisualStudio: false);
+
+        sut.StagePendingCommit(file.Uri, RenameOldToBrandNew(file.Uri), null, null);
+        await File.WriteAllTextAsync(file.FilePath, AfterRename); // the client applied and saved the rename
+        await sut.CompletePendingCommitAsync(file.Uri, applied: true, CancellationToken.None);
+
+        await _taggerService.Received(1).ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename);
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_refreshes_the_bindings_before_rederiving_closed_feature_files_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        MarkClosed(file.Uri);
+
+        await StageThenCompleteAsync(
+            CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: true,
+            csFileUri: CsUri, newCsText: "class C {}");
+
+        Received.InOrder(() =>
+        {
+            _ = _csharpDiscoveryService.UpdateFromSourceAsync(CsUri, "class C {}", false, Arg.Any<CancellationToken>());
+            _ = _taggerService.ScanClosedFileForAllOwnersAsync(file.Uri, AfterRename);
+        });
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_only_invalidates_a_closed_feature_file_it_could_not_read_Async()
+    {
+        MarkClosed(FeatureUri); // /workspace/test.feature does not exist on disk
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), FeatureUri, BuilderWithOneEdit(FeatureUri), applied: true);
+
+        _matchService.Received(1).InvalidateAllForDocument(FeatureUri.ToString());
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_only_invalidates_a_closed_feature_file_its_edits_do_not_fit_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        MarkClosed(file.Uri);
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations: false);
+        builder.Add(file.Uri, new LspRange(new Position(40, 0), new Position(40, 3)), "x"); // no line 40
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, builder, applied: true);
+
+        _matchService.Received(1).InvalidateAllForDocument(file.Uri.ToString());
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_does_not_rederive_an_open_feature_file_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        var buf = new DocumentBuffer(file.Uri, 1, BeforeRename);
+        DocumentBuffer? outBuf;
+        _documentBuffer.TryGet(file.Uri, out outBuf).Returns(x => { x[1] = buf; return true; });
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: true);
+
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+    }
+
+    [Fact]
+    public async Task Rejected_apply_does_not_rederive_a_closed_feature_file_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        MarkClosed(file.Uri);
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), file.Uri, RenameOldToBrandNew(file.Uri), applied: false);
+
+        await _taggerService.DidNotReceiveWithAnyArgs().ScanClosedFileForAllOwnersAsync(default!, default!);
+    }
+
+    // End to end through the real tagger and match store: the closed file stays in the cache, and its
+    // match set describes the renamed text, not the text on disk before the rename.
+    [Fact]
+    public async Task Confirmed_apply_leaves_a_closed_feature_files_match_set_describing_the_renamed_text_Async()
+    {
+        using var file = new ClosedFeatureFile();
+        var project = new LspReqnrollProject(
+            new ReqnrollProjectLoadedParams
+            {
+                WorkspaceFolder        = file.Folder,
+                ProjectFile            = Path.Combine(file.Folder, "My.csproj"),
+                ProjectFolder          = file.Folder,
+                OutputAssemblyPath     = Path.Combine(file.Folder, "bin", "My.dll"),
+                TargetFrameworkMoniker = "net10.0"
+            },
+            new LspIdeScope(_logger));
+        var owner = new ProjectOwner(project.ProjectFullName, project.TargetFrameworkMoniker);
+        var scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
+        scopeManager.ResolveOwners(file.Uri).Returns(new[] { project });
+        var registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
+        registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
+
+        var bufferService = new DocumentBufferService(); // empty: the file is closed
+        var matchService  = new BindingMatchService();
+        var fileSystem    = new FileSystemForIDE();
+        var tagger = new GherkinDocumentTaggerService(
+            bufferService, Tagging.TaggerTestParser.Create(_logger), registryLookup,
+            Substitute.For<ISemanticTokensService>(), matchService, scopeManager, _logger, fileSystem);
+        await tagger.RescanClosedFileAsync(file.Uri); // the cache before the rename
+
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations: false);
+        builder.Add(file.Uri, new LspRange(new Position(2, 10), new Position(2, 13)), "Renamed"); // "Scenario: One"
+        var sut = new RenamePostApplyCoordinator(
+            _languageServer, new ClientIdeContext("vscode"), matchService, bufferService,
+            _csharpDiscoveryService, _csharpFileTextCache, _logger, _documentGenerations, tagger, fileSystem);
+
+        await StageThenCompleteAsync(sut, file.Uri, builder, applied: true);
+
+        matchService.TryGet(new MatchSetKey(file.Uri.ToString(), owner), out var cached)
+            .Should().BeTrue("the closed file must stay visible to Find Usages and usage counts");
+        cached.Scenarios.Select(s => (s.ScenarioTag.Data as Gherkin.Ast.IHasDescription)?.Name)
+            .Should().Equal("Renamed");
     }
 }

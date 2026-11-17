@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -10,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Tagging;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
@@ -37,10 +40,16 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 internal sealed class RenamePostApplyCoordinator
 {
     /// <summary>The server-side cache work a single rename implies, held until the client confirms.</summary>
+    /// <param name="ClosedFeatureTexts">
+    /// The post-rename text of each feature file that was closed when the rename was staged, keyed by
+    /// <c>DocumentUri.ToString()</c>. Missing for a file whose text could not be read or whose edits
+    /// did not fit it; that file is only invalidated.
+    /// </param>
     private sealed record PendingCommit(
-        WorkspaceEditBuilder Builder,
-        DocumentUri?         CsFileUri,
-        string?              NewCsText);
+        WorkspaceEditBuilder                Builder,
+        DocumentUri?                        CsFileUri,
+        string?                             NewCsText,
+        IReadOnlyDictionary<string, string> ClosedFeatureTexts);
 
     private readonly ILanguageServerFacade          _languageServer;
     private readonly ClientIdeContext               _clientIdeContext;
@@ -50,6 +59,8 @@ internal sealed class RenamePostApplyCoordinator
     private readonly ICSharpFileTextCache           _csharpFileTextCache;
     private readonly IIdeSupportLogger              _logger;
     private readonly IDocumentGenerations           _documentGenerations;
+    private readonly IGherkinDocumentTaggerService  _taggerService;
+    private readonly IFileSystemForIDE              _fileSystem;
     private readonly IOperationDurationRecorder     _recorder;
 
     // Keyed by the rename request's own document URI (DocumentUri.ToString(), matching how every
@@ -68,6 +79,8 @@ internal sealed class RenamePostApplyCoordinator
         ICSharpFileTextCache           csharpFileTextCache,
         IIdeSupportLogger              logger,
         IDocumentGenerations           documentGenerations,
+        IGherkinDocumentTaggerService  taggerService,
+        IFileSystemForIDE              fileSystem,
         IOperationDurationRecorder?    recorder = null)
     {
         _recorder                = recorder ?? NullOperationDurationRecorder.Instance;
@@ -79,6 +92,8 @@ internal sealed class RenamePostApplyCoordinator
         _csharpFileTextCache     = csharpFileTextCache;
         _logger                  = logger;
         _documentGenerations     = documentGenerations;
+        _taggerService           = taggerService;
+        _fileSystem              = fileSystem;
     }
 
     /// <summary>
@@ -92,7 +107,8 @@ internal sealed class RenamePostApplyCoordinator
         DocumentUri?         csFileUri,
         string?              newCsText)
     {
-        _pendingCommits[renameUri.ToString()] = new PendingCommit(builder, csFileUri, newCsText);
+        _pendingCommits[renameUri.ToString()] =
+            new PendingCommit(builder, csFileUri, newCsText, ComputeClosedFeatureTexts(builder));
         _logger.LogVerbose($"RenamePostApplyCoordinator: staged pending commit for '{renameUri}'");
     }
 
@@ -116,8 +132,10 @@ internal sealed class RenamePostApplyCoordinator
             return;
         }
 
-        InvalidateClosedFeatureCaches(pending.Builder);
+        // Bindings first: re-deriving the closed feature files matches their renamed steps against
+        // the registry, which must already hold the renamed binding or those steps come out undefined.
         await RefreshCSharpRegistryAsync(pending.CsFileUri, pending.NewCsText, cancellationToken);
+        await RefreshClosedFeatureFilesAsync(pending).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -248,31 +266,91 @@ internal sealed class RenamePostApplyCoordinator
         => _documentBuffer.TryGet(uri, out var buffer) ? buffer?.Version : null;
 
     /// <summary>
-    /// Invalidates the match cache for CLOSED feature files that were modified by the rename.
-    /// When a feature file is closed at rename time, no didChange notification fires, so the
-    /// server's in-memory match cache would otherwise retain the old step text until the file is
-    /// re-opened and re-parsed. For OPEN files, applying the edit already triggers a real
-    /// textDocument/didChange, which reparses and correctly rebuilds the match cache through the
-    /// normal sync pipeline — invalidating here too would race with that rebuild. Losing that race
-    /// leaves the cache empty with nothing left to repopulate it, since the file's content isn't
-    /// changing again: confirmed live as inlay hints silently disappearing for the whole file
-    /// post-rename.
+    /// Computes the post-rename text of every feature file <paramref name="builder"/> edits that is
+    /// closed now, by applying the edits to the file's text on disk.
     /// </summary>
-    private void InvalidateClosedFeatureCaches(WorkspaceEditBuilder builder)
+    /// <remarks>
+    /// Done when the rename is staged, before the response reaches the client: the edits were built
+    /// against this same disk text, and the client hasn't applied them yet. At commit time the disk
+    /// can't be trusted either way. A client applies edits to a closed file in memory and may not
+    /// have saved them, so the disk can still hold the old text. Or it has saved them, and applying
+    /// the edits again would apply them twice.
+    /// </remarks>
+    private IReadOnlyDictionary<string, string> ComputeClosedFeatureTexts(WorkspaceEditBuilder builder)
     {
-        foreach (var changedUri in builder.TouchedUris)
+        var texts = new Dictionary<string, string>();
+        foreach (var (uri, edits) in builder.GetEditsByUri())
         {
-            var changedPath = changedUri.GetFileSystemPath();
-            if (!string.IsNullOrEmpty(changedPath) && changedPath.EndsWith(".feature", StringComparison.OrdinalIgnoreCase) &&
-                !_documentBuffer.TryGet(changedUri, out _))
+            var path = uri.GetFileSystemPath();
+            if (!IsFeatureFile(path) || _documentBuffer.TryGet(uri, out _))
+                continue;
+
+            string text;
+            try
             {
-                // The rename changed this closed file's text, and no didChange will report it.
-                _documentGenerations.Bump(changedUri.ToString());
-                _matchService.InvalidateAllForDocument(changedUri.ToString());
+                text = _fileSystem.File.ReadAllText(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning($"RenamePostApplyCoordinator: could not read closed '{uri}' to stage its post-rename text: {ex.Message}");
+                continue;
+            }
+
+            var newText = TextEditApplier.Apply(text, edits);
+            if (newText is null)
+            {
+                _logger.LogWarning($"RenamePostApplyCoordinator: the rename's edits do not fit closed '{uri}' as it is on disk; it will only be invalidated.");
+                continue;
+            }
+
+            texts[uri.ToString()] = newText;
+        }
+        return texts;
+    }
+
+    /// <summary>
+    /// Brings the match cache of CLOSED feature files the rename modified up to date: invalidates
+    /// each one, then re-derives it from its staged post-rename text.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When a feature file is closed at rename time, no didChange notification fires, so nothing
+    /// else re-derives it: invalidating alone would drop it from Find Usages, usage counts and later
+    /// renames until the next scan of its project.
+    /// </para>
+    /// <para>
+    /// OPEN files are skipped: applying the edit already triggers a real textDocument/didChange,
+    /// which reparses and rebuilds the match cache through the normal sync pipeline. Invalidating
+    /// here too would race with that rebuild, and losing that race leaves the cache empty with
+    /// nothing left to repopulate it, since the file's content isn't changing again (seen live as
+    /// inlay hints disappearing for the whole file after a rename).
+    /// </para>
+    /// </remarks>
+    private async Task RefreshClosedFeatureFilesAsync(PendingCommit pending)
+    {
+        foreach (var changedUri in pending.Builder.TouchedUris)
+        {
+            if (!IsFeatureFile(changedUri.GetFileSystemPath()) || _documentBuffer.TryGet(changedUri, out _))
+                continue;
+
+            // The rename changed this closed file's text, and no didChange will report it.
+            _documentGenerations.Bump(changedUri.ToString());
+            _matchService.InvalidateAllForDocument(changedUri.ToString());
+
+            if (pending.ClosedFeatureTexts.TryGetValue(changedUri.ToString(), out var newText))
+            {
+                await _taggerService.ScanClosedFileForAllOwnersAsync(changedUri, newText).ConfigureAwait(false);
+                _logger.LogVerbose($"RenamePostApplyCoordinator: re-derived closed '{changedUri}' from its post-rename text");
+            }
+            else
+            {
                 _logger.LogVerbose($"RenamePostApplyCoordinator: invalidated match cache for closed '{changedUri}'");
             }
         }
     }
+
+    private static bool IsFeatureFile([NotNullWhen(true)] string? path)
+        => !string.IsNullOrEmpty(path) && path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Self-refreshes the C# binding registry for the edited .cs file directly, rather than

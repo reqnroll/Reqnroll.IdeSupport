@@ -18,6 +18,7 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -63,6 +64,7 @@ public sealed class RenameHandler
         ClientIdeContext              clientIdeContext,
         IFileSystemForIDE             fileSystem,
         IDocumentGenerations          documentGenerations,
+        IGherkinDocumentTaggerService taggerService,
         ILspTelemetryService?         telemetryService = null,
         IOperationDurationRecorder?   recorder = null,
         ICSharpSyntaxTreeCache?       syntaxTreeCache = null)
@@ -85,7 +87,8 @@ public sealed class RenameHandler
         _nameReconciler  = new NewNameReconciler(logger);
         _postApplyCoordinator = new RenamePostApplyCoordinator(
             languageServer, clientIdeContext, matchService, documentBuffer,
-            csharpDiscoveryService, csharpFileTextCache, logger, documentGenerations, _recorder);
+            csharpDiscoveryService, csharpFileTextCache, logger, documentGenerations,
+            taggerService, fileSystem, _recorder);
     }
 
     // ── textDocument/prepareRename ──────────────────────────────────────────────

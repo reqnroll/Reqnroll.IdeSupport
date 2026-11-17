@@ -166,12 +166,18 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
             return;
         }
 
+        await ScanClosedFileForAllOwnersAsync(uri, text).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task ScanClosedFileForAllOwnersAsync(DocumentUri uri, string text)
+    {
         // A feature file can be linked into more than one project; repopulate the match set for
         // each owner so (uri, project)-keyed lookups stay complete after the buffer is gone.
         var owners = _scopeManager.ResolveOwners(uri);
         if (owners.Count == 0)
         {
-            _logger.LogVerbose($"RescanClosedFile: '{uri}' has no owning project; skipping.");
+            _logger.LogVerbose($"ScanClosedFileForAllOwners: '{uri}' has no owning project; skipping.");
             return;
         }
 
