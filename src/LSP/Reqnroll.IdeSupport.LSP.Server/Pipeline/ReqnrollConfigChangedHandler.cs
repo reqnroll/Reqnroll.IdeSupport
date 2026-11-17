@@ -3,6 +3,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -37,6 +39,7 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
     private readonly IFeatureDocumentReparser _reparser;
     private readonly IParseCoordinator _parseCoordinator;
     private readonly IIdeSupportLogger _logger;
+    private readonly IProjectConfigGenerations _configGenerations;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IMediator? _mediator;
 
@@ -46,6 +49,7 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         IFeatureDocumentReparser reparser,
         IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
+        IProjectConfigGenerations configGenerations,
         IOperationDurationRecorder? recorder = null,
         IMediator? mediator = null)
     {
@@ -54,6 +58,7 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         _reparser = reparser;
         _parseCoordinator = parseCoordinator;
         _logger = logger;
+        _configGenerations = configGenerations;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -67,6 +72,10 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         if (notification.Project is { } project && _mediator is not null)
         {
             _logger.LogInfo($"ReqnrollConfigChanged for project '{project.ProjectName}' — reconciling its feature files.");
+            // Bumped before the reconcile is published, so every derivation it triggers reads the
+            // new generation. The workspace-root path below needs no bump: it serves .editorconfig
+            // changes, which never change how a feature file is parsed.
+            _configGenerations.Bump(new ProjectOwner(project.ProjectFullName, project.TargetFrameworkMoniker));
             await _mediator.Publish(new BindingRegistryPatchedNotification(project), cancellationToken)
                 .ConfigureAwait(false);
             return;

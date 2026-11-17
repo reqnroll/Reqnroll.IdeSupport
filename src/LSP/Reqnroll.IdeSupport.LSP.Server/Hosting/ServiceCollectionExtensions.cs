@@ -13,6 +13,7 @@ using Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Core.Folding;
 using Reqnroll.IdeSupport.LSP.Core.Formatting;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.InlayHints;
 
 
@@ -23,6 +24,7 @@ using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Core.TestTargets;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
@@ -203,6 +205,11 @@ public static class ServiceCollectionExtensions
             // so the cache survives across requests and is shared by the tagger (writer) and
             // the Go to Definition / diagnostics consumers (readers).
             .AddSingleton<IBindingMatchService, BindingMatchService>()
+            // Per-document and per-project input generations: record which text and which
+            // configuration derived state was built from. Singletons because a generation must
+            // outlive the document's open lifetime and be shared by every handler that bumps it.
+            .AddSingleton<IDocumentGenerations, DocumentGenerations>()
+            .AddSingleton<IProjectConfigGenerations, ProjectConfigGenerations>()
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
             .AddSingleton<IFeatureDocumentReparser, FeatureDocumentReparser>()
             .AddSingleton<ISemanticTokensService, SemanticTokensService>()

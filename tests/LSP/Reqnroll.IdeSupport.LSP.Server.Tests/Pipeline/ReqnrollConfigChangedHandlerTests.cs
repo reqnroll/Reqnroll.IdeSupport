@@ -1,6 +1,7 @@
 using MediatR;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
@@ -24,12 +25,13 @@ public class ReqnrollConfigChangedHandlerTests
     private readonly IParseCoordinator _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IProjectConfigGenerations _configGenerations = new ProjectConfigGenerations();
 
     private static readonly DocumentUri InScopeUri = DocumentUri.FromFileSystemPath("/workspace/proj/a.feature");
     private static readonly DocumentUri OutOfScopeUri = DocumentUri.FromFileSystemPath("/workspace/other/b.feature");
 
     private ReqnrollConfigChangedHandler CreateSut() =>
-        new(_bufferService, _reparser, _parseCoordinator, _logger, mediator: _mediator);
+        new(_bufferService, _reparser, _parseCoordinator, _logger, _configGenerations, mediator: _mediator);
 
     private Task WaitForScheduledWorkAsync(DocumentUri uri) =>
         _parseCoordinator.WaitForReadyAsync(uri, CancellationToken.None);
@@ -182,5 +184,60 @@ public class ReqnrollConfigChangedHandlerTests
             Arg.Any<CancellationToken>());
         await _reparser.DidNotReceive().ReparseOpenDocumentAsync(
             Arg.Any<DocumentUri>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Config generation ────────────────────────────────────────────────
+
+    private static LspReqnrollProject CreateProject() => new(
+        new ReqnrollProjectLoadedParams
+        {
+            WorkspaceFolder = "/workspace",
+            ProjectFile = "/workspace/proj/My.csproj",
+            ProjectFolder = "/workspace/proj",
+            OutputAssemblyPath = "/workspace/proj/bin/My.dll",
+            TargetFrameworkMoniker = "net10.0"
+        },
+        Substitute.For<IIdeScope>());
+
+    private static ProjectOwner OwnerOf(LspReqnrollProject project) =>
+        new(project.ProjectFullName, project.TargetFrameworkMoniker);
+
+    [Fact]
+    public async Task Handle_bumps_the_changed_projects_config_generation_once()
+    {
+        var project = CreateProject();
+
+        await CreateSut().Handle(
+            new ReqnrollConfigChangedNotification("/workspace/proj", project), CancellationToken.None);
+
+        _configGenerations.Current(OwnerOf(project)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_bumps_the_config_generation_before_publishing_the_reconcile()
+    {
+        var project = CreateProject();
+        long generationAtPublish = -1;
+        _mediator.When(m => m.Publish(Arg.Any<BindingRegistryPatchedNotification>(), Arg.Any<CancellationToken>()))
+                 .Do(_ => generationAtPublish = _configGenerations.Current(OwnerOf(project)));
+
+        await CreateSut().Handle(
+            new ReqnrollConfigChangedNotification("/workspace/proj", project), CancellationToken.None);
+
+        generationAtPublish.Should().Be(1, "every derivation the reconcile triggers must read the new generation");
+    }
+
+    // The workspace-root path serves .editorconfig changes, which never change how a feature file parses.
+    [Fact]
+    public async Task Handle_without_a_project_does_not_bump_any_config_generation()
+    {
+        var generations = Substitute.For<IProjectConfigGenerations>();
+        _bufferService.Update(InScopeUri, version: 1, "Feature: F\n");
+
+        await new ReqnrollConfigChangedHandler(_bufferService, _reparser, _parseCoordinator, _logger, generations, mediator: _mediator)
+            .Handle(new ReqnrollConfigChangedNotification("/workspace/proj"), CancellationToken.None);
+        await WaitForScheduledWorkAsync(InScopeUri);
+
+        generations.DidNotReceiveWithAnyArgs().Bump(default);
     }
 }

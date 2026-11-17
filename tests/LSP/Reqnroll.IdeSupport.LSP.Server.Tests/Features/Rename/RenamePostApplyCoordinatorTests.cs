@@ -23,6 +23,7 @@ public class RenamePostApplyCoordinatorTests
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly ICSharpFileTextCache           _csharpFileTextCache   = Substitute.For<ICSharpFileTextCache>();
     private readonly IIdeSupportLogger              _logger                = Substitute.For<IIdeSupportLogger>();
+    private readonly IDocumentGenerations           _documentGenerations   = new DocumentGenerations();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
@@ -35,7 +36,8 @@ public class RenamePostApplyCoordinatorTests
             _documentBuffer,
             _csharpDiscoveryService,
             _csharpFileTextCache,
-            _logger);
+            _logger,
+            _documentGenerations);
 
     private void SetupApplyEditRequest(bool applied)
     {
@@ -332,7 +334,7 @@ public class RenamePostApplyCoordinatorTests
 
             var sut = new RenamePostApplyCoordinator(
                 _languageServer, new ClientIdeContext("vscode"), matchService, new DocumentBufferService(),
-                _csharpDiscoveryService, _csharpFileTextCache, _logger);
+                _csharpDiscoveryService, _csharpFileTextCache, _logger, _documentGenerations);
 
             await StageThenCompleteAsync(sut, featureUri, BuilderWithOneEdit(featureUri), applied: true);
 
@@ -344,5 +346,46 @@ public class RenamePostApplyCoordinatorTests
         {
             root.Delete(recursive: true);
         }
+    }
+
+    // ── Document generation ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Confirmed_apply_bumps_a_closed_feature_files_generation_before_invalidating_it_Async()
+    {
+        DocumentBuffer? ignored;
+        _documentBuffer.TryGet(FeatureUri, out ignored).Returns(false);
+        long generationAtInvalidate = -1;
+        _matchService.When(m => m.InvalidateAllForDocument(FeatureUri.ToString()))
+                     .Do(_ => generationAtInvalidate = _documentGenerations.Current(FeatureUri.ToString()));
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), FeatureUri, BuilderWithOneEdit(FeatureUri), applied: true);
+
+        _documentGenerations.Current(FeatureUri.ToString()).Should().Be(1);
+        generationAtInvalidate.Should().Be(1);
+    }
+
+    // An open file's edit arrives as a didChange, which bumps the generation itself.
+    [Fact]
+    public async Task Confirmed_apply_does_not_bump_an_open_feature_files_generation_Async()
+    {
+        var buf = new DocumentBuffer(FeatureUri, 1, "Feature: F\n");
+        DocumentBuffer? outBuf;
+        _documentBuffer.TryGet(FeatureUri, out outBuf).Returns(x => { x[1] = buf; return true; });
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), FeatureUri, BuilderWithOneEdit(FeatureUri), applied: true);
+
+        _documentGenerations.Current(FeatureUri.ToString()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Rejected_apply_does_not_bump_any_generation_Async()
+    {
+        DocumentBuffer? ignored;
+        _documentBuffer.TryGet(FeatureUri, out ignored).Returns(false);
+
+        await StageThenCompleteAsync(CreateSut(isVisualStudio: false), FeatureUri, BuilderWithOneEdit(FeatureUri), applied: false);
+
+        _documentGenerations.Current(FeatureUri.ToString()).Should().Be(0);
     }
 }
