@@ -114,6 +114,7 @@ No cache is told to evict. The tag set carries a newer stamp, so everything keye
 | `FeatureBindingMatchSet.Stamp` | `LSP.Core/Matching` | The stamp of the inputs the match set was built from. `DocumentVersion` stays for wire messages that need the client version. |
 | `BindingMatchService.Store` | `LSP.Core/Matching` | Applies the write rule inside its write lock and returns a `StoreOutcome`. `GetStoreStats` returns running totals. |
 | `DocumentBuffer.Generation`, `.TagsStamp` | `LSP.Server/Documents` | The generation the text carries, and the stamp of the tags attached to it. `Update` clears the tags and their stamp. |
+| `DocumentBufferService.Update` | `LSP.Server/Documents` | Stores the text with the generation it was bumped to. Ignores an update whose generation is lower than the buffer's, so two changes arriving out of order cannot put older text over newer. |
 | `DocumentBufferService.UpdateTags` | `LSP.Server/Documents` | Update-only. Attaches tags only if the stamp's content generation is the buffer's. |
 | `GherkinDocumentTaggerService` | `LSP.Server/Tagging` | Builds the stamp for `ParseAsync` and `ScanClosedFileAsync`, reading each input before using it. |
 | `SemanticTokensService` | `LSP.Server/Features/SemanticTokens` | Caches under `(uri, TagsStamp)`, drops entries with older stamps, and derives `ResultId` from the stamp. |
