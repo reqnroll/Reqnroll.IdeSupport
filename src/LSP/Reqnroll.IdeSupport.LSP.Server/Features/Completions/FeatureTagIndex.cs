@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 /// document. Per project it keeps a per-file cache of tag-usage counts: open
 /// documents are counted from the buffer's already-parsed tags on every request (best-effort: a
 /// tag typed while the background parse is still pending is offered a moment later), closed documents are parsed from disk
-/// once and reused while their write time is unchanged, and the per-project file set is
+/// once and reused while their write time and content generation are unchanged, and the per-project file set is
 /// re-checked against the membership index every request (so baseline deltas and disk changes
 /// show up without any event wiring).
 /// </summary>
@@ -38,6 +38,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
     private readonly IDocumentBufferService _bufferService;
     private readonly IIdeSupportTagParser _tagParser;
     private readonly IFileSystemForIDE _fileSystem;
+    private readonly IDocumentGenerations _documentGenerations;
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
 
@@ -50,6 +51,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
         IDocumentBufferService bufferService,
         IIdeSupportTagParser tagParser,
         IFileSystemForIDE fileSystem,
+        IDocumentGenerations documentGenerations,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService = null)
     {
@@ -57,6 +59,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
         _bufferService = bufferService;
         _tagParser = tagParser;
         _fileSystem = fileSystem;
+        _documentGenerations = documentGenerations;
         _logger = logger;
         _telemetryService = telemetryService;
 
@@ -196,7 +199,8 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
 
         // Open document: count the tags in the buffer's already-parsed Tags — the background
         // parse scheduler keeps them current, and completion must never add a parse of its own on
-        // top of it. Cache by buffer version so an unedited file costs one dictionary lookup.
+        // top of it. Cache by the buffer's content generation so an unedited file costs one dictionary
+        // lookup (the client's version is not used: it is optional, and restarts when a file is reopened).
         //
         // Accuracy here is deliberately best-effort: every edit resets buffer.Tags to null until
         // the scheduled parse lands, so while a parse is pending the file's last known counts are
@@ -208,7 +212,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
 
             if (buffer.Tags is not null)
             {
-                if (hasCached && buffer.Version.HasValue && cached!.Version == buffer.Version.Value
+                if (hasCached && cached!.FromBuffer && cached.Generation == buffer.Generation
                     && cached.Language == language)
                 {
                     stats.Cached();
@@ -217,8 +221,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
 
                 stats.CountedFromBuffer();
                 var counts = GherkinTagNameCollector.CollectCounts(buffer.Tags);
-                if (buffer.Version.HasValue)
-                    index.Files[filePath] = new FileTagEntry(buffer.Version.Value, null, language, counts);
+                index.Files[filePath] = new FileTagEntry(true, buffer.Generation, null, language, counts);
                 return counts;
             }
 
@@ -237,8 +240,13 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
             return null;
         }
 
+        // Read before the file, so the recorded generation is never newer than the text it describes.
+        // A rename or close bumps it, which re-reads a file whose write time did not visibly change.
+        var generation = _documentGenerations.Current(uri.ToString());
         var lastWrite = _fileSystem.File.GetLastWriteTimeUtc(filePath);
         if (index.Files.TryGetValue(filePath, out var cachedEntry) &&
+            !cachedEntry.FromBuffer &&
+            cachedEntry.Generation == generation &&
             cachedEntry.LastWriteTimeUtc == lastWrite &&
             cachedEntry.Language == language)
         {
@@ -251,7 +259,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
             stats.ParsedFromDisk();
             var text = await _fileSystem.File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false);
             var counts = CollectCounts(text, language);
-            index.Files[filePath] = new FileTagEntry(null, lastWrite, language, counts);
+            index.Files[filePath] = new FileTagEntry(false, generation, lastWrite, language, counts);
             return counts;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -317,9 +325,15 @@ public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
         public readonly ConcurrentDictionary<string, FileTagEntry> Files = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Cached tag counts for one feature file, valid while its identity anchor (buffer version or disk write time) and the feature language it was parsed with are unchanged.</summary>
+    /// <summary>
+    /// Cached tag counts for one feature file, valid while its content generation, its identity anchor
+    /// (for a closed file, the disk write time) and the feature language it was parsed with are unchanged.
+    /// <paramref name="FromBuffer"/> tells which kind of source the counts came from, so an entry built
+    /// from disk is never taken for one built from the open buffer.
+    /// </summary>
     private sealed record FileTagEntry(
-        int? Version,
+        bool FromBuffer,
+        long Generation,
         DateTime? LastWriteTimeUtc,
         string Language,
         IReadOnlyDictionary<string, int> Counts);

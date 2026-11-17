@@ -519,7 +519,7 @@ public class RenamePostApplyCoordinatorTests
         var fileSystem    = new FileSystemForIDE();
         var tagger = new GherkinDocumentTaggerService(
             bufferService, Tagging.TaggerTestParser.Create(_logger), registryLookup,
-            Substitute.For<ISemanticTokensService>(), matchService, scopeManager, _logger, fileSystem,
+            matchService, scopeManager, _logger, fileSystem,
             _documentGenerations, new ProjectConfigGenerations());
         await tagger.RescanClosedFileAsync(file.Uri); // the cache before the rename
 

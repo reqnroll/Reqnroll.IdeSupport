@@ -64,7 +64,7 @@ public class GherkinDocumentTaggerServiceStampTests
     }
 
     private GherkinDocumentTaggerService CreateSut(IFileSystemForIDE? fileSystem = null) =>
-        new(_bufferService, TaggerTestParser.Create(_logger), _registryLookup, Substitute.For<ISemanticTokensService>(),
+        new(_bufferService, TaggerTestParser.Create(_logger), _registryLookup,
             _matchService, _scopeManager, _logger, fileSystem ?? new FileSystemForIDE(), _documentGenerations, _configGenerations);
 
     private DerivationStamp StoredStamp(ProjectOwner owner)

@@ -47,7 +47,6 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     private readonly ILspWorkspaceScopeManager     _scopeManager   = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IDocumentGenerations          _generations    = new DocumentGenerations();
     private readonly IProjectConfigGenerations     _configGenerations = new ProjectConfigGenerations();
-    private readonly ISemanticTokensService        _semanticTokens = Substitute.For<ISemanticTokensService>();
     private readonly BindingMatchService           _matchService;
     private readonly HookedBufferService           _bufferService  = new(new DocumentBufferService());
     private readonly HookedTagParser               _tagParser;
@@ -88,7 +87,7 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
     }
 
     private GherkinDocumentTaggerService CreateSut() =>
-        new(_bufferService, _tagParser, _registryLookup, _semanticTokens,
+        new(_bufferService, _tagParser, _registryLookup,
             _matchService, _scopeManager, _logger, new FileSystemForIDE(), _generations, _configGenerations);
 
     /// <summary>What the handler that drives a closed-file scan does: read the generation, then the text.</summary>
@@ -216,37 +215,22 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
         Cached().Scenarios.Should().HaveCount(1, "only the scan with the new (French) language understands the file");
     }
 
-    // A parse whose match set the store dropped must not run the follow-up work of a stored one: the
-    // newer derivation that superseded it does that work itself.
+    // The tags a parse attaches to the buffer carry the stamp of the inputs they were derived from, so
+    // anything cached from them (semantic tokens) can tell a fresh tag set from a stale one by comparing
+    // stamps instead of being told to evict.
     [Fact]
-    public async Task Parse_whose_match_set_was_dropped_does_not_invalidate_the_semantic_token_cache()
-    {
-        await File.WriteAllTextAsync(_featurePath, OneScenario);
-        var sut = CreateSut();
-        ChangeBuffer(3, TwoScenarios);
-        _bufferService.AfterNextUpdateTags = () =>
-        {
-            _generations.Bump(_uri.ToString());
-            _bufferService.Remove(_uri);
-            _matchService.InvalidateAllForDocument(_uri.ToString());
-            sut.RescanClosedFileAsync(_uri).GetAwaiter().GetResult();
-        };
-
-        await sut.ParseAsync(_uri, 3);
-
-        _semanticTokens.DidNotReceive().InvalidateCache(Arg.Any<DocumentUri>());
-        _matchService.GetStoreStats().RejectedSuperseded.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task Parse_whose_match_set_was_stored_invalidates_the_semantic_token_cache()
+    public async Task Parse_records_the_stamp_of_its_inputs_on_the_buffer_with_the_tags()
     {
         var sut = CreateSut();
         ChangeBuffer(1, OneScenario);
+        _configGenerations.Bump(_owner);
 
         await sut.ParseAsync(_uri, 1);
 
-        _semanticTokens.Received(1).InvalidateCache(_uri);
+        _bufferService.TryGet(_uri, out var buffer).Should().BeTrue();
+        buffer!.Tags.Should().NotBeNull();
+        buffer.TagsStamp.ContentGeneration.Should().Be(buffer.Generation);
+        buffer.TagsStamp.ConfigGeneration.Should().Be(1);
     }
 
     /// <summary>Tag parser that runs a one-shot hook before delegating, so a competing writer can run mid-parse.</summary>
@@ -272,9 +256,9 @@ public sealed class GherkinDocumentTaggerServiceRaceTests : IDisposable
         public void Update(DocumentUri uri, int? version, string text, long generation = 0) =>
             inner.Update(uri, version, text, generation);
 
-        public bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags)
+        public bool UpdateTags(DocumentUri uri, DerivationStamp stamp, IReadOnlyCollection<IdeSupportTag> tags)
         {
-            var updated = inner.UpdateTags(uri, generation, tags);
+            var updated = inner.UpdateTags(uri, stamp, tags);
             var hook = AfterNextUpdateTags;
             AfterNextUpdateTags = null;
             if (updated) hook?.Invoke();

@@ -1,4 +1,5 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -9,12 +10,18 @@ namespace Reqnroll.IdeSupport.LSP.Server.Documents;
 /// buffer. Unlike <paramref name="Version"/>, which the client assigns and restarts on reopen, it
 /// orders this text against every other text the server has seen for the document, open or closed.
 /// </param>
+/// <param name="TagsStamp">
+/// The versions of the inputs <paramref name="Tags"/> were derived from (text, project configuration,
+/// binding registry). Meaningful only while <paramref name="Tags"/> is not null; two tag sets with the
+/// same stamp were derived from the same inputs.
+/// </param>
 public record DocumentBuffer(
     DocumentUri Uri,
     int? Version,
     string Text,
     IReadOnlyCollection<IdeSupportTag>? Tags = null,
-    long Generation = 0);
+    long Generation = 0,
+    DerivationStamp TagsStamp = default);
 
 /// <summary>Tracks the live text and tag state of documents opened in the editor.</summary>
 public interface IDocumentBufferService
@@ -29,10 +36,13 @@ public interface IDocumentBufferService
     /// <summary>
     /// Updates the cached Gherkin tags of an existing buffer. Never creates a buffer: returns
     /// <see langword="false"/> when the document is not (or no longer) open, or when the buffer
-    /// has moved past <paramref name="generation"/> (the tags were computed from superseded text).
+    /// has moved past the stamp's content generation (the tags were computed from superseded text).
     /// </summary>
-    /// <param name="generation">The content generation of the buffer the tags were computed from.</param>
-    bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags);
+    /// <param name="stamp">
+    /// The inputs the tags were derived from; its <see cref="DerivationStamp.ContentGeneration"/> is the
+    /// generation of the buffer the tags were computed from. Kept on the buffer alongside the tags.
+    /// </param>
+    bool UpdateTags(DocumentUri uri, DerivationStamp stamp, IReadOnlyCollection<IdeSupportTag> tags);
     /// <summary>Removes the buffer for the given document, typically when it is closed.</summary>
     void Remove(DocumentUri uri);
     /// <summary>Attempts to retrieve the current buffer for the given document.</summary>
@@ -60,7 +70,7 @@ public class DocumentBufferService : IDocumentBufferService
     }
 
     /// <inheritdoc/>
-    public bool UpdateTags(DocumentUri uri, long generation, IReadOnlyCollection<IdeSupportTag> tags)
+    public bool UpdateTags(DocumentUri uri, DerivationStamp stamp, IReadOnlyCollection<IdeSupportTag> tags)
     {
         // Update-only: a parse can finish after didClose has removed the buffer, and
         // re-creating it here would leave a ghost "open" document. TryUpdate only swaps in the
@@ -71,9 +81,9 @@ public class DocumentBufferService : IDocumentBufferService
         var key = uri.ToString();
         while (_buffers.TryGetValue(key, out var existing))
         {
-            if (existing.Generation != generation)
+            if (existing.Generation != stamp.ContentGeneration)
                 return false;
-            if (_buffers.TryUpdate(key, existing with { Tags = tags }, existing))
+            if (_buffers.TryUpdate(key, existing with { Tags = tags, TagsStamp = stamp }, existing))
                 return true;
         }
         return false;

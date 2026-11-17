@@ -1,6 +1,7 @@
 ﻿using Reqnroll.IdeSupport.Common.Classification;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
 
@@ -117,8 +118,88 @@ public class SemanticTokenServiceTests
         var second = await sut.GetSemanticTokensAsync(FeatureUri, 3);
 
         second.Should().BeSameAs(first);
-        // Buffer service should only be called once (second call hits cache)
-        _bufferService.Received(1).TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>());
+    }
+
+    // ── Cache key: the stamp of the tags ──────────────────────────────────────
+
+    private static IReadOnlyCollection<IdeSupportTag> OneKeywordTag(string text)
+    {
+        var snapshot = new TestGherkinSnapshot(text);
+        return new[] { new IdeSupportTag(IdeSupportTagTypes.StepKeyword, new GherkinRange(snapshot, 0, 7)) };
+    }
+
+    private static DocumentBuffer BufferWith(DerivationStamp stamp, string text = "Feature: Test\n") =>
+        new DocumentBuffer(FeatureUri, 1, text, OneKeywordTag(text), Generation: stamp.ContentGeneration, TagsStamp: stamp);
+
+    [Fact]
+    public async Task Tokens_are_served_from_the_cache_for_the_same_stamp_whatever_client_version_asks()
+    {
+        SetupBuffer(BufferWith(new DerivationStamp(4, 1, 10)));
+        var sut = CreateSut();
+
+        var first  = await sut.GetSemanticTokensAsync(FeatureUri, 3);
+        var second = await sut.GetSemanticTokensAsync(FeatureUri, 9);
+
+        second.Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public async Task Tokens_are_encoded_again_when_only_the_registry_version_changed()
+    {
+        var sut = CreateSut();
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 10)));
+        var before = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        // The same text and version, re-matched against a newer registry: a different tag set.
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 11)));
+        var after = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        after.Should().NotBeSameAs(before);
+        after!.ResultId.Should().NotBe(before!.ResultId);
+    }
+
+    [Fact]
+    public async Task Tokens_are_encoded_again_when_only_the_configuration_generation_changed()
+    {
+        var sut = CreateSut();
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 10)));
+        var before = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        SetupBuffer(BufferWith(new DerivationStamp(4, 1, 10)));
+        var after = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        after.Should().NotBeSameAs(before);
+    }
+
+    [Fact]
+    public async Task Cache_entries_for_older_stamps_of_the_document_are_dropped()
+    {
+        var sut = CreateSut();
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 10)));
+        var older = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 11)));
+        await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        // Asking for the older stamp again finds nothing cached, so it is encoded afresh.
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 10)));
+        var again = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        again.Should().NotBeSameAs(older);
+    }
+
+    [Fact]
+    public async Task Tokens_for_an_older_text_are_not_served_once_the_buffer_has_no_tags_for_the_new_one()
+    {
+        var sut = CreateSut();
+        SetupBuffer(BufferWith(new DerivationStamp(4, 0, 10)));
+        var cached = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+        cached!.Data.Should().NotBeEmpty();
+
+        // An edit clears the buffer's tags until the parse lands.
+        SetupBuffer(new DocumentBuffer(FeatureUri, 2, "Feature: Test\n", Tags: null, Generation: 5));
+        var duringParse = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+
+        duringParse!.Data.Should().BeEmpty("the cached tokens describe text the document no longer has");
     }
 
     // ── Multi-line DataTable tag ──────────────────────────────────────────────
