@@ -96,14 +96,13 @@ public sealed class RenameSerialLaneContentionScenario
         // changes from parameter-value changes, and a word inserted before the bound parameter
         // (e.g. "precondition renamed 0 is met") confuses that diff into rejecting the edit as a
         // parameter-value change rather than a wording change — see FirstStepExpression's remarks.
-        var original = _renameTarget.FirstStepExpression;
 
         for (var rep = 0; rep < _options.Repetitions; rep++)
         {
             // Solo baseline: rename with no concurrent Serial-lane traffic.
             var baselineStart = Stopwatch.GetTimestamp();
             await _harness.RequestRenameAsync(_renameTarget.Uri, line, character,
-                $"{original} (baseline {rep})").ConfigureAwait(false);
+                _renameTarget.RenameNameWithSuffix("baseline", rep)).ConfigureAwait(false);
             baseline.Add(Stopwatch.GetElapsedTime(baselineStart).TotalMilliseconds);
 
             // The typing storm: didChange fired across every OTHER open file, back to back, the
@@ -119,7 +118,7 @@ public sealed class RenameSerialLaneContentionScenario
             // the storm's own settle time into this number.
             var probeStart = Stopwatch.GetTimestamp();
             await _harness.RequestRenameAsync(_renameTarget.Uri, line, character,
-                $"{original} (under-load {rep})").ConfigureAwait(false);
+                _renameTarget.RenameNameWithSuffix("underload", rep)).ConfigureAwait(false);
             underLoad.Add(Stopwatch.GetElapsedTime(probeStart).TotalMilliseconds);
 
             // Let this repetition's storm (reparse/diagnostics/debounced refreshes) settle before
