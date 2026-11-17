@@ -236,7 +236,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // file would vanish from the cache until the next full registry replacement, so a rename
         // driven from a .cs file would silently skip closed feature files. Reading from disk also
         // makes the cached match set reflect the persisted content (e.g. if edits were discarded).
-        await _taggerService.RescanClosedFileAsync(uri).ConfigureAwait(false);
+        await _reparser.RescanClosedDocumentAsync(uri, cancellationToken).ConfigureAwait(false);
 
         // Clear any squiggles the IDE may have retained for this URI.
         // LSP spec: sending an empty diagnostics list for a URI clears all previously

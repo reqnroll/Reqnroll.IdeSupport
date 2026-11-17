@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -135,7 +136,17 @@ internal sealed class RenamePostApplyCoordinator
         // Bindings first: re-deriving the closed feature files matches their renamed steps against
         // the registry, which must already hold the renamed binding or those steps come out undefined.
         await RefreshCSharpRegistryAsync(pending.CsFileUri, pending.NewCsText, cancellationToken);
-        await RefreshClosedFeatureFilesAsync(pending).ConfigureAwait(false);
+        var rewritten = await RefreshClosedFeatureFilesAsync(pending).ConfigureAwait(false);
+
+        // The registry refresh above asks the client to refresh its step usage lenses, but it does so
+        // before the closed files are re-derived from their post-rename text. Ask once more now that
+        // their usages are in the cache; nothing else follows these writes.
+        if (rewritten > 0)
+        {
+            await CodeLensRefreshRequester
+                .RequestRefreshAsync(_languageServer, _clientIdeContext, _logger, projectName: string.Empty, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -326,12 +337,15 @@ internal sealed class RenamePostApplyCoordinator
     /// inlay hints disappearing for the whole file after a rename).
     /// </para>
     /// </remarks>
-    private async Task RefreshClosedFeatureFilesAsync(PendingCommit pending)
+    private async Task<int> RefreshClosedFeatureFilesAsync(PendingCommit pending)
     {
+        var rewritten = 0;
         foreach (var changedUri in pending.Builder.TouchedUris)
         {
             if (!IsFeatureFile(changedUri.GetFileSystemPath()) || _documentBuffer.TryGet(changedUri, out _))
                 continue;
+
+            rewritten++;
 
             // The rename changed this closed file's text, and no didChange will report it.
             var generation = _documentGenerations.Bump(changedUri.ToString());
@@ -348,6 +362,8 @@ internal sealed class RenamePostApplyCoordinator
                 _logger.LogVerbose($"RenamePostApplyCoordinator: invalidated match cache for closed '{changedUri}'");
             }
         }
+
+        return rewritten;
     }
 
     private static bool IsFeatureFile([NotNullWhen(true)] string? path)

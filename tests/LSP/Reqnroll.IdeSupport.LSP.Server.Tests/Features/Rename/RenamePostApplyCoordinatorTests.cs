@@ -5,6 +5,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Configuration.Model;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -13,6 +14,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
@@ -535,5 +537,89 @@ public class RenamePostApplyCoordinatorTests
             .Should().BeTrue("the closed file must stay visible to Find Usages and usage counts");
         cached.Scenarios.Select(s => (s.ScenarioTag.Data as Gherkin.Ast.IHasDescription)?.Name)
             .Should().Equal("Renamed");
+    }
+
+    // ── Step usage lenses after the closed files are re-derived ──────────────
+
+    private static readonly DocumentUri ClosedFeatureUri = DocumentUri.FromFileSystemPath("/workspace/closed.feature");
+
+    [Fact]
+    public async Task Confirmed_apply_that_rewrote_a_closed_feature_file_refreshes_the_usage_lenses_for_other_clients_Async()
+    {
+        var sut = CreateSut(isVisualStudio: false);
+        var builder = BuilderWithOneEdit(CsUri);
+        builder.Add(ClosedFeatureUri, new LspRange(new Position(0, 0), new Position(0, 1)), "x");
+
+        await StageThenCompleteAsync(sut, CsUri, builder, applied: true);
+
+        _languageServer.Client.Received(1).SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_that_rewrote_a_closed_feature_file_refreshes_the_usage_lenses_for_visual_studio_Async()
+    {
+        var sut = CreateSut(isVisualStudio: true);
+        var builder = BuilderWithOneEdit(CsUri);
+        builder.Add(ClosedFeatureUri, new LspRange(new Position(0, 0), new Position(0, 1)), "x");
+
+        await StageThenCompleteAsync(sut, CsUri, builder, applied: true);
+
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRefreshCodeLens, Arg.Any<RefreshCodeLensParams>());
+    }
+
+    [Fact]
+    public async Task The_refresh_is_requested_after_the_closed_feature_files_are_re_derived_Async()
+    {
+        using var file = new ClosedFeatureFile(); // on disk, so the post-rename text can be staged
+        var sut = CreateSut(isVisualStudio: false);
+        var builder = BuilderWithOneEdit(CsUri);
+        builder.Add(file.Uri, new LspRange(new Position(2, 10), new Position(2, 13)), "Renamed");
+
+        await StageThenCompleteAsync(sut, CsUri, builder, applied: true);
+
+        Received.InOrder(() =>
+        {
+            _ = _taggerService.ScanClosedFileForAllOwnersAsync(file.Uri, Arg.Any<string>(), Arg.Any<long>());
+            _ = _languageServer.Client.SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
+        });
+    }
+
+    [Fact]
+    public async Task Confirmed_apply_that_touched_no_closed_feature_file_does_not_request_a_lens_refresh_Async()
+    {
+        var sut = CreateSut(isVisualStudio: false);
+
+        await StageThenCompleteAsync(sut, CsUri, BuilderWithOneEdit(CsUri), applied: true);
+
+        _languageServer.Client.DidNotReceive().SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
+        _languageServer.DidNotReceiveWithAnyArgs().SendNotification(default!, default(object)!);
+    }
+
+    [Fact]
+    public async Task A_discarded_rename_does_not_request_a_lens_refresh_Async()
+    {
+        var sut = CreateSut(isVisualStudio: false);
+        var builder = BuilderWithOneEdit(CsUri);
+        builder.Add(ClosedFeatureUri, new LspRange(new Position(0, 0), new Position(0, 1)), "x");
+
+        await StageThenCompleteAsync(sut, CsUri, builder, applied: false);
+
+        _languageServer.Client.DidNotReceive().SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
+    }
+
+    [Fact]
+    public async Task A_feature_file_that_is_open_is_not_a_reason_to_request_a_lens_refresh_Async()
+    {
+        // An open file's own parse publishes MatchCacheChangedNotification, which refreshes the lenses.
+        DocumentBuffer? ignored;
+        _documentBuffer.TryGet(ClosedFeatureUri, out ignored).Returns(true);
+        var sut = CreateSut(isVisualStudio: false);
+        var builder = BuilderWithOneEdit(CsUri);
+        builder.Add(ClosedFeatureUri, new LspRange(new Position(0, 0), new Position(0, 1)), "x");
+
+        await StageThenCompleteAsync(sut, CsUri, builder, applied: true);
+
+        _languageServer.Client.DidNotReceive().SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
     }
 }

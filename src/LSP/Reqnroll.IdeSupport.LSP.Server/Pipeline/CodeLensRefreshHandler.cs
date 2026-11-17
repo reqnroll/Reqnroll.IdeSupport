@@ -26,7 +26,9 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// notification (see <see cref="IRefreshDebouncer"/>'s remarks), which would mean every
 /// notification scheduled its own independent refresh instead of debouncing.
 /// </remarks>
-public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
+public class CodeLensRefreshHandler :
+    INotificationHandler<MatchCacheChangedNotification>,
+    INotificationHandler<ClosedFileMatchCacheChangedNotification>
 {
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(500);
     private const string DebounceKey = nameof(CodeLensRefreshHandler);
@@ -56,6 +58,15 @@ public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNoti
     public Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
     {
         _logger.LogVerbose($"MatchCacheChanged: scheduling code lens refresh for {notification.Uri} v{notification.Version}");
+
+        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Handles an internal <see cref="ClosedFileMatchCacheChangedNotification"/> the same way: a closed file's usages changed, so the lenses over the step definitions it uses are stale.</summary>
+    public Task Handle(ClosedFileMatchCacheChangedNotification notification, CancellationToken cancellationToken)
+    {
+        _logger.LogVerbose($"ClosedFileMatchCacheChanged: scheduling code lens refresh for {notification.Uri}");
 
         _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
         return Task.CompletedTask;

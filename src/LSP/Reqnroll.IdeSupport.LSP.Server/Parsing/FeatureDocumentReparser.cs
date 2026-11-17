@@ -57,4 +57,12 @@ public sealed class FeatureDocumentReparser : IFeatureDocumentReparser
             new MatchCacheChangedNotification(uri, buffer?.Version ?? 0),
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <inheritdoc/>
+    public async Task RescanClosedDocumentAsync(DocumentUri uri, CancellationToken cancellationToken)
+    {
+        await _taggerService.RescanClosedFileAsync(uri).ConfigureAwait(false);
+        await _mediator.Publish(new ClosedFileMatchCacheChangedNotification(uri), cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

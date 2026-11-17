@@ -181,8 +181,8 @@ public class TextDocumentSyncHandlerTests
         await sut.Handle(request, CancellationToken.None);
 
         // Closing must repopulate the match cache from disk so Find Usages / Rename still see
-        // the (now closed) feature file.
-        await _taggerService.Received(1).RescanClosedFileAsync(FeatureUri);
+        // the (now closed) feature file, and refresh the usage lenses that counted its editor text.
+        await _reparser.Received(1).RescanClosedDocumentAsync(FeatureUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -278,7 +278,7 @@ public class TextDocumentSyncHandlerTests
         _csharpFileTextCache.TryGet(CsUri, out _).Should().BeFalse();
         // Closing a .cs file must not invalidate feature match state; bindings are retained until rebuild.
         _bindingMatchService.DidNotReceiveWithAnyArgs().InvalidateAllForDocument(default!);
-        await _taggerService.DidNotReceiveWithAnyArgs().RescanClosedFileAsync(default!);
+        await _reparser.DidNotReceiveWithAnyArgs().RescanClosedDocumentAsync(default!, default);
         // The server clears any binding-validation diagnostics it pushed for the
         // file, the same clear-on-close convention used for .feature files.
         _languageServer.Received(1).SendNotification(
