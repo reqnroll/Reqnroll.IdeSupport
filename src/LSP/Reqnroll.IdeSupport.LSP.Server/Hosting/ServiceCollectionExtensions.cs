@@ -214,6 +214,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IFeatureDocumentReparser, FeatureDocumentReparser>()
             .AddSingleton<ISemanticTokensService, SemanticTokensService>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
+            .AddSingleton<IPublishedDiagnosticsCache, PublishedDiagnosticsCache>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsPublisher, CSharpDiagnosticsPublisher>()
             .AddSingleton<IFoldingRangeService, FoldingRangeService>()
