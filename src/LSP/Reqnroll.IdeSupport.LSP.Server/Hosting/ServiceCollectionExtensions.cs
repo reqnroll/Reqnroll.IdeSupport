@@ -179,6 +179,9 @@ public static class ServiceCollectionExtensions
             // see IRefreshDebouncer's remarks for why a transient handler's own instance field
             // can't debounce anything.
             .AddSingleton<IRefreshDebouncer, RefreshDebouncer>()
+            // Per-document rate limit for the outputs Visual Studio processes on its UI thread (diagnostics and
+            // token pushes). A singleton for the same reason as the debouncer above.
+            .AddSingleton<IOutputThrottle, OutputThrottle>()
             // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
             // preserving correctness for pull handlers with no refresh capability —
             // see IParseCoordinator's remarks. Singleton for the same reason as

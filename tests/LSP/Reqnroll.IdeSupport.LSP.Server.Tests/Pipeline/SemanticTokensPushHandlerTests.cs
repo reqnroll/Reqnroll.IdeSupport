@@ -2,9 +2,11 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Concurrency;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
@@ -130,6 +132,60 @@ public class SemanticTokensPushHandlerTests
         await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
 
         _sent.Should().ContainSingle("the client already holds exactly these tokens");
+    }
+
+    private SemanticTokensPushHandler CreateThrottledSut(string? ide, ManualTimeProvider time) =>
+        new(_facade, _tokenService, new ClientIdeContext(ide), _logger,
+            pushedTokens: _pushed, throttle: new OutputThrottle(_logger, time));
+
+    [Fact]
+    public async Task For_visual_studio_the_first_push_is_immediate_and_a_burst_then_pushes_the_latest_tokens_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 6, 3, 0), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        foreach (var version in new[] { 1, 2, 3 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        _sent.Should().ContainSingle("only the first change is pushed at once").Which.Version.Should().Be(1);
+
+        time.Advance(OutputThrottleDefaults.Interval);
+
+        _sent.Should().HaveCount(2);
+        _sent[1].Version.Should().Be(3, "the last change of the burst is always pushed");
+        _sent[1].Data.Should().Equal(new[] { 2, 0, 9, 3, 0 }, "pushed against what the client received, which skipped version 2");
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_change_after_a_pause_is_pushed_at_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 9, 0, 0), version: 2);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(2));
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        time.ActiveTimerCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Non_visual_studio_clients_never_start_a_throttle_timer()
+    {
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("vscode", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        time.ActiveTimerCount.Should().Be(0);
+        _sent.Should().BeEmpty();
     }
 
     [Fact]

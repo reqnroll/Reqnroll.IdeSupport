@@ -11,11 +11,14 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Concurrency;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
@@ -82,6 +85,73 @@ public class DiagnosticsPublishHandlerTests
         _aggregator
             .Aggregate(Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<FeatureBindingMatchSet>())
             .Returns(diagnostics);
+    }
+
+    // ── Output throttling ─────────────────────────────────────────────────────
+
+    private DiagnosticsPublishHandler CreateThrottledSut(string? ide, ManualTimeProvider time) =>
+        new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger,
+            throttle: new OutputThrottle(_logger, time), clientIde: new ClientIdeContext(ide));
+
+    private int PublishesWithVersion(int version) =>
+        _facade.ReceivedCalls()
+            .SelectMany(c => c.GetArguments())
+            .OfType<PublishDiagnosticsParams>()
+            .Count(p => p.Version == version);
+
+    [Fact]
+    public async Task For_a_throttling_client_the_first_publish_is_immediate_and_a_burst_then_publishes_the_latest_state_once()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator();
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        foreach (var version in new[] { 1, 2, 3, 4, 5 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        PublishesWithVersion(1).Should().Be(1, "the first change after a pause is published at once");
+        PublishesWithVersion(5).Should().Be(0, "the rest of the burst waits for its turn");
+
+        time.Advance(OutputThrottleDefaults.Interval);
+
+        PublishesWithVersion(5).Should().Be(1, "the last change of the burst is always published");
+        PublishesWithVersion(2).Should().Be(0);
+        PublishesWithVersion(3).Should().Be(0);
+        PublishesWithVersion(4).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task For_a_throttling_client_a_later_change_after_a_pause_is_published_at_once()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator();
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(2));
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        PublishesWithVersion(2).Should().Be(1, "an edit after a pause costs no extra latency");
+    }
+
+    [Theory]
+    [InlineData("vscode")]
+    [InlineData("rider")]
+    [InlineData(null)]
+    public async Task For_a_client_that_does_not_ask_for_throttling_every_change_is_published_at_once(string? ide)
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator();
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut(ide, time);
+
+        foreach (var version in new[] { 1, 2, 3 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        _facade.Received(3).SendNotification("textDocument/publishDiagnostics", Arg.Any<PublishDiagnosticsParams>());
+        time.ActiveTimerCount.Should().Be(0);
     }
 
     // ── No-buffer guard ───────────────────────────────────────────────────────

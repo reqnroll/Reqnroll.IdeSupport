@@ -82,7 +82,15 @@ public sealed class LspServerHarness : IAsyncDisposable
     private readonly object _diagnosticsLock = new();
     private readonly Dictionary<string, PublishDiagnosticsParams> _diagnostics =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _diagnosticsPublishCounts = new(StringComparer.OrdinalIgnoreCase);
     private TaskCompletionSource<int> _diagnosticsSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>How many <c>textDocument/publishDiagnostics</c> notifications have arrived for a URI so far.</summary>
+    public int PublishedDiagnosticsCountFor(DocumentUri uri)
+    {
+        lock (_diagnosticsLock)
+            return _diagnosticsPublishCounts.GetValueOrDefault(uri.ToString());
+    }
 
     /// <summary>
     /// The most recent <c>textDocument/publishDiagnostics</c> notification for a URI, or null if
@@ -237,6 +245,7 @@ public sealed class LspServerHarness : IAsyncDisposable
         lock (_diagnosticsLock)
         {
             _diagnostics[p.Uri.ToString()] = p;
+            _diagnosticsPublishCounts[p.Uri.ToString()] = _diagnosticsPublishCounts.GetValueOrDefault(p.Uri.ToString()) + 1;
             var prev = _diagnosticsSignal;
             _diagnosticsSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             prev.TrySetResult(_diagnostics.Count);

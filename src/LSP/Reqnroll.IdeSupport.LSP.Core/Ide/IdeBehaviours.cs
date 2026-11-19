@@ -77,4 +77,12 @@ public sealed record IdeBehaviours
     /// F12 before the client has initialized all use it, so this flag must only gate telemetry.
     /// </summary>
     public bool NavigatesStepsViaFindStepDefinitions { get; init; }
+
+    /// <summary>
+    /// The client handles the server's <c>publishDiagnostics</c> and token pushes on its UI thread, so
+    /// producing both after every keystroke in a very large document makes typing stutter. While edits keep
+    /// arriving, the server runs each of those outputs at most once per interval (the first one after a
+    /// pause immediately, the last change always delivered). Opt-in: only measured in Visual Studio.
+    /// </summary>
+    public bool ThrottlesOutputWhileEditing { get; init; }
 }
