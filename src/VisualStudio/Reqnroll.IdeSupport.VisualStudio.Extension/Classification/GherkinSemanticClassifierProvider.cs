@@ -112,14 +112,27 @@ internal sealed class GherkinSemanticClassifier : IClassifier
     private IClassificationType? ResolveType(string tokenType) =>
         _typeCache.GetOrAdd(tokenType, name => _registry.GetClassificationType(name));
 
-    private void OnTokensChanged(string fileKey)
+    private void OnTokensChanged(string fileKey, int startLine, int endLine)
     {
         if (!string.Equals(fileKey, _fileKey, StringComparison.OrdinalIgnoreCase))
             return;
 
         var snapshot = _buffer.CurrentSnapshot;
-        ClassificationChanged?.Invoke(
-            this, new ClassificationChangedEventArgs(new SnapshotSpan(snapshot, 0, snapshot.Length)));
+        ClassificationChanged?.Invoke(this, new ClassificationChangedEventArgs(ChangedSpan(snapshot, startLine, endLine)));
+    }
+
+    /// <summary>
+    /// The span to re-classify when the tokens on <paramref name="startLine"/>..<paramref name="endLine"/> changed:
+    /// just those lines (clamped to the snapshot), or the whole snapshot when no usable line range is given.
+    /// </summary>
+    internal static SnapshotSpan ChangedSpan(ITextSnapshot snapshot, int startLine, int endLine)
+    {
+        if (startLine < 0 || endLine < startLine || snapshot.LineCount == 0)
+            return new SnapshotSpan(snapshot, 0, snapshot.Length);
+
+        var first = snapshot.GetLineFromLineNumber(Math.Min(startLine, snapshot.LineCount - 1));
+        var last = snapshot.GetLineFromLineNumber(Math.Min(endLine, snapshot.LineCount - 1));
+        return new SnapshotSpan(snapshot, first.Start.Position, last.End.Position - first.Start.Position);
     }
 
     /// <summary>
@@ -141,10 +154,10 @@ internal sealed class GherkinSemanticClassifier : IClassifier
         public static void Subscribe(SemanticTokenClassificationStore store, GherkinSemanticClassifier classifier) =>
             store.TokensChanged += new WeakTokensChangedSubscription(store, classifier).OnTokensChanged;
 
-        private void OnTokensChanged(string fileKey)
+        private void OnTokensChanged(string fileKey, int startLine, int endLine)
         {
             if (_classifier.TryGetTarget(out var classifier))
-                classifier.OnTokensChanged(fileKey);
+                classifier.OnTokensChanged(fileKey, startLine, endLine);
             else
                 _store.TokensChanged -= OnTokensChanged;
         }

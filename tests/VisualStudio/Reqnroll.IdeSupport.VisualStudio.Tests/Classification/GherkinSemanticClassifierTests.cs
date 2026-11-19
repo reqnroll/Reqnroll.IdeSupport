@@ -64,6 +64,86 @@ public class GherkinSemanticClassifierTests
         GC.KeepAlive(classifier);
     }
 
+    // ── ChangedSpan ──────────────────────────────────────────────────────────
+
+    private static ITextSnapshot SnapshotWithLines(int length, params (int Start, int End)[] lines)
+    {
+        var snapshot = Substitute.For<ITextSnapshot>();
+        snapshot.Length.Returns(length);
+        snapshot.LineCount.Returns(lines.Length);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            // Built before configuring the substitutes: constructing a SnapshotPoint reads the snapshot's
+            // Length, which must not happen inside a Returns(...) argument.
+            var start = new SnapshotPoint(snapshot, lines[i].Start);
+            var end = new SnapshotPoint(snapshot, lines[i].End);
+            var line = Substitute.For<ITextSnapshotLine>();
+            line.Start.Returns(start);
+            line.End.Returns(end);
+            snapshot.GetLineFromLineNumber(i).Returns(line);
+        }
+
+        return snapshot;
+    }
+
+    [Fact]
+    public void ChangedSpan_covers_exactly_the_changed_lines()
+    {
+        var snapshot = SnapshotWithLines(100, (0, 9), (10, 19), (20, 39), (40, 55), (56, 99));
+
+        var span = GherkinSemanticClassifier.ChangedSpan(snapshot, startLine: 1, endLine: 3);
+
+        span.Start.Position.Should().Be(10);
+        span.End.Position.Should().Be(55);
+    }
+
+    [Fact]
+    public void ChangedSpan_for_a_single_line_covers_just_that_line()
+    {
+        var snapshot = SnapshotWithLines(100, (0, 9), (10, 19), (20, 39));
+
+        var span = GherkinSemanticClassifier.ChangedSpan(snapshot, startLine: 2, endLine: 2);
+
+        span.Start.Position.Should().Be(20);
+        span.End.Position.Should().Be(39);
+    }
+
+    [Theory]
+    [InlineData(-1, -1)]
+    [InlineData(-1, 3)]
+    [InlineData(3, 1)]
+    public void ChangedSpan_covers_the_whole_snapshot_when_no_usable_line_range_is_given(int startLine, int endLine)
+    {
+        var snapshot = SnapshotWithLines(100, (0, 9), (10, 19), (20, 39), (40, 55));
+
+        var span = GherkinSemanticClassifier.ChangedSpan(snapshot, startLine, endLine);
+
+        span.Start.Position.Should().Be(0);
+        span.Length.Should().Be(100);
+    }
+
+    [Fact]
+    public void ChangedSpan_clamps_lines_beyond_the_end_of_the_snapshot_to_its_last_line()
+    {
+        // The snapshot can be shorter than the line numbers in a push when the user has deleted lines since.
+        var snapshot = SnapshotWithLines(40, (0, 9), (10, 39));
+
+        var span = GherkinSemanticClassifier.ChangedSpan(snapshot, startLine: 1, endLine: 9);
+
+        span.Start.Position.Should().Be(10);
+        span.End.Position.Should().Be(39);
+    }
+
+    [Fact]
+    public void ChangedSpan_of_an_empty_snapshot_is_empty()
+    {
+        var snapshot = SnapshotWithLines(0);
+
+        var span = GherkinSemanticClassifier.ChangedSpan(snapshot, startLine: 0, endLine: 2);
+
+        span.Length.Should().Be(0);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     // Not inlined so that no local in the calling test frame can keep the classifier reachable.

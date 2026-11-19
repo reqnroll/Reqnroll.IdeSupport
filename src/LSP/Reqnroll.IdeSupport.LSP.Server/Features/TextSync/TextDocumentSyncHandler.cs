@@ -13,6 +13,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
@@ -43,6 +44,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IDocumentGenerations _documentGenerations;
     private readonly ILspWorkspaceScopeManager? _scopeManager;
     private readonly ILspTelemetryService? _telemetryService;
+    private readonly IPushedSemanticTokens? _pushedSemanticTokens;
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
@@ -65,7 +67,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IDocumentGenerations documentGenerations,
         IOperationDurationRecorder? recorder = null,
         ILspWorkspaceScopeManager? scopeManager = null,
-        ILspTelemetryService? telemetryService = null)
+        ILspTelemetryService? telemetryService = null,
+        IPushedSemanticTokens? pushedSemanticTokens = null)
     {
         _documentBufferService = documentBufferService;
         _taggerService = taggerService;
@@ -80,6 +83,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
         _scopeManager = scopeManager;
         _telemetryService = telemetryService;
+        _pushedSemanticTokens = pushedSemanticTokens;
     }
 
     /// <summary>Reports the language id (<c>"csharp"</c> or <c>"Gherkin"</c>) the server should associate with the given document URI.</summary>
@@ -229,6 +233,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // is a change of text even when the buffer matched the file.
         _documentGenerations.Bump(uri.ToString());
         _documentBufferService.Remove(uri);
+        // The next open pushes the full token set again rather than a delta against tokens kept from before the close.
+        _pushedSemanticTokens?.Forget(uri.ToString());
         _bindingMatchService.InvalidateAllForDocument(uri.ToString());
 
         // Repopulate the match cache from disk so the file's usages remain discoverable by

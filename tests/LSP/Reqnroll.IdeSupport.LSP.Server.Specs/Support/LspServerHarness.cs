@@ -32,7 +32,7 @@ public sealed class LspServerHarness : IAsyncDisposable
     private TaskCompletionSource<int> _refreshSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly object _pushLock = new();
-    private readonly List<(string Uri, int TokenCount)> _pushes = new();
+    private readonly List<(string Uri, int TokenCount, int? StartLine, int? EndLine)> _pushes = new();
     private TaskCompletionSource<int> _pushSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public ILanguageClient Client =>
@@ -57,6 +57,15 @@ public sealed class LspServerHarness : IAsyncDisposable
 
     /// <summary>The <c>reqnroll/semanticTokens</c> push notifications received so far (uri + token count).</summary>
     public IReadOnlyList<(string Uri, int TokenCount)> SemanticTokenPushes
+    {
+        get { lock (_pushLock) return _pushes.Select(p => (p.Uri, p.TokenCount)).ToArray(); }
+    }
+
+    /// <summary>
+    /// The <c>reqnroll/semanticTokens</c> pushes received so far with the line range each one covers
+    /// (<c>StartLine</c> and <c>EndLine</c> are null for a push carrying the complete token set).
+    /// </summary>
+    public IReadOnlyList<(string Uri, int TokenCount, int? StartLine, int? EndLine)> SemanticTokenPushDetails
     {
         get { lock (_pushLock) return _pushes.ToArray(); }
     }
@@ -166,7 +175,9 @@ public sealed class LspServerHarness : IAsyncDisposable
             {
                 var uri = p["uri"]?.Value<string>() ?? string.Empty;
                 var count = (p["data"] as JArray)?.Count / 5 ?? 0;
-                RecordPush(uri, count);
+                int? startLine = p["startLine"]?.Type == JTokenType.Integer ? p["startLine"]!.Value<int>() : null;
+                int? endLine = p["endLine"]?.Type == JTokenType.Integer ? p["endLine"]!.Value<int>() : null;
+                RecordPush(uri, count, startLine, endLine);
                 return Task.CompletedTask;
             });
 
@@ -199,11 +210,11 @@ public sealed class LspServerHarness : IAsyncDisposable
         }
     }
 
-    private void RecordPush(string uri, int tokenCount)
+    private void RecordPush(string uri, int tokenCount, int? startLine, int? endLine)
     {
         lock (_pushLock)
         {
-            _pushes.Add((uri, tokenCount));
+            _pushes.Add((uri, tokenCount, startLine, endLine));
             var prev = _pushSignal;
             _pushSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             prev.TrySetResult(_pushes.Count);
@@ -326,6 +337,31 @@ public sealed class LspServerHarness : IAsyncDisposable
             if (completed != wait)
             {
                 lock (_pushLock) return _pushes.Any(p => uriMatch(p.Uri));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Waits until at least <paramref name="minCount"/> <c>reqnroll/semanticTokens</c> pushes whose URI satisfies
+    /// <paramref name="uriMatch"/> have been received, or the timeout elapses. Returns true if that many arrived.
+    /// </summary>
+    public async Task<bool> WaitForPushCountAsync(Func<string, bool> uriMatch, int minCount, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            Task<int> wait;
+            lock (_pushLock)
+            {
+                if (_pushes.Count(p => uriMatch(p.Uri)) >= minCount) return true;
+                wait = _pushSignal.Task;
+            }
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            if (remaining <= 0) return false;
+            var completed = await Task.WhenAny(wait, Task.Delay(remaining)).ConfigureAwait(false);
+            if (completed != wait)
+            {
+                lock (_pushLock) return _pushes.Count(p => uriMatch(p.Uri)) >= minCount;
             }
         }
     }

@@ -26,3 +26,43 @@ Scenario: The server does not push semantic tokens to non-Visual-Studio clients
 			When I press add
 		"""
 	Then the client receives no semantic tokens push
+
+Scenario: After an edit the server pushes only the tokens on the line that changed
+	Given the LSP server is started for IDE "visualstudio"
+	When the feature file "delta.feature" is opened with
+		"""
+		Feature: Delta coloring
+
+		@smoke
+		Scenario: S
+			When I press add
+		"""
+	And the feature file "delta.feature" is changed to
+		"""
+		Feature: Delta coloring
+
+		@smoke @regression
+		Scenario: S
+			When I press add
+		"""
+	Then the first semantic tokens push for "delta.feature" is the complete token set
+	And the second semantic tokens push for "delta.feature" covers only line 3
+
+Scenario: An edit that changes no token is not pushed again
+	Given the LSP server is started for IDE "visualstudio"
+	When the feature file "same.feature" is opened with
+		"""
+		Feature: Same coloring
+
+		Scenario: S
+			When I press add
+		"""
+	And the feature file "same.feature" is changed to
+		"""
+		Feature: Same coloring
+
+		Scenario: S
+			When I press add twice
+		"""
+	Then the first semantic tokens push for "same.feature" is the complete token set
+	And no further semantic tokens push for "same.feature" arrives
