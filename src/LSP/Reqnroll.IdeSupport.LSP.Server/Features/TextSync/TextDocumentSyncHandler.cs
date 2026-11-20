@@ -110,8 +110,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             _csharpFileTextCache.Update(uri, text);
             // Off the shared Serial dispatch lane -- the Roslyn parse this drives
             // (ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync's ReplaceBindings call)
-            // is real, non-trivial cost on a large step-definition file, and per-URI chaining in
-            // the coordinator still guarantees this file's own edits apply in order. The PERF
+            // is real, non-trivial cost on a large step-definition file, and the coordinator still
+            // runs this file's work one piece at a time, with the newest text always the last one
+            // applied (an edit that is still waiting is replaced by a newer one). The PERF
             // measurement moves inside the scheduled work so it still reflects actual parse
             // duration (Layer 4) rather than the now near-instant synchronous handler body.
             _parseCoordinator.Schedule(uri, ct =>

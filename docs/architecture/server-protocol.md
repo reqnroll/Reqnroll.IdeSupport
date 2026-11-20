@@ -99,6 +99,7 @@ sequenceDiagram
 | `SemanticTokensClassificationInterceptor`, `SemanticTokenClassificationStore`, `GherkinSemanticClassifier` | `src/VisualStudio/…Extension/Classification` | Visual Studio side of the push path. |
 | `TextDocumentSyncHandler` | `…LSP.Server/Features/TextSync` | One sync handler for `.feature` and `.cs`, routed by extension. |
 | `CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, `RefreshDebouncer` | `…LSP.Server/Pipeline`, `Concurrency` | Debounced refresh pushes to clients. |
+| `ParseCoordinator` | `…LSP.Server/Parsing` | Per-document slot for the work `didOpen`/`didChange` and the registry, configuration and activation reparses hand off the Serial lane: at most one piece of work running and one waiting per document, and newer work replaces the work that was waiting, so a burst of edits costs the running parse plus one more rather than one per edit. `WaitForReadyAsync` waits for the latest work. `FeatureDocumentReparser` does not announce a document version the buffer has already moved on from; the newer edit's own reparse does. |
 
 ## 6. Behaviour and contracts
 

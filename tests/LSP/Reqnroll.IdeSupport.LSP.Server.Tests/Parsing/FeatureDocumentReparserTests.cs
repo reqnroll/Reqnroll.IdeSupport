@@ -70,6 +70,45 @@ public class FeatureDocumentReparserTests
     }
 
     [Fact]
+    public async Task ReparseOpenDocumentAsync_does_not_publish_for_a_version_the_buffer_has_moved_on_from()
+    {
+        // The buffer is at v8: a newer edit arrived before this reparse for v7 ran. Its own reparse publishes for v8.
+        _bufferService.Update(FeatureUri, version: 8, "Feature: F\n");
+        _taggerService.ParseAsync(FeatureUri, 7).Returns(Array.Empty<IdeSupportTag>());
+
+        await CreateSut().ReparseOpenDocumentAsync(FeatureUri, 7, CancellationToken.None);
+
+        await _mediator.DidNotReceive().Publish(
+            Arg.Any<MatchCacheChangedNotification>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReparseOpenDocumentAsync_publishes_when_the_buffer_is_still_at_the_version_that_was_parsed()
+    {
+        _bufferService.Update(FeatureUri, version: 7, "Feature: F\n");
+        _taggerService.ParseAsync(FeatureUri, 7).Returns(Array.Empty<IdeSupportTag>());
+
+        await CreateSut().ReparseOpenDocumentAsync(FeatureUri, 7, CancellationToken.None);
+
+        await _mediator.Received(1).Publish(
+            Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 7),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReparseOpenDocumentAsync_publishes_when_no_version_was_given_whatever_the_buffer_holds()
+    {
+        _bufferService.Update(FeatureUri, version: 8, "Feature: F\n");
+        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<IdeSupportTag>());
+
+        await CreateSut().ReparseOpenDocumentAsync(FeatureUri, null, CancellationToken.None);
+
+        await _mediator.Received(1).Publish(
+            Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReparseOpenDocumentAsync_is_idempotent_when_called_twice_with_the_same_arguments()
     {
         // Consumers of MatchCacheChangedNotification must be idempotent -- calling
