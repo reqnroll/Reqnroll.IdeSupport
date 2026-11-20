@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -41,11 +42,12 @@ public class TextDocumentSyncHandlerTests
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
 
     private TextDocumentSyncHandler CreateSut(
-        IDocumentGenerations? documentGenerations = null, IPushedSemanticTokens? pushedSemanticTokens = null) =>
+        IDocumentGenerations? documentGenerations = null, IPushedSemanticTokens? pushedSemanticTokens = null,
+        IOutputThrottle? outputThrottle = null) =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
             _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator,
             documentGenerations ?? _documentGenerations, scopeManager: _scopeManager, telemetryService: _telemetry,
-            pushedSemanticTokens: pushedSemanticTokens);
+            pushedSemanticTokens: pushedSemanticTokens, outputThrottle: outputThrottle);
 
     private static DidOpenTextDocumentParams OpenParams(DocumentUri uri) => new()
     {
@@ -218,6 +220,19 @@ public class TextDocumentSyncHandlerTests
         await sut.Handle(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = FeatureUri } }, CancellationToken.None);
 
         pushedTokens.Received(1).Forget(FeatureUri.ToString());
+    }
+
+    [Fact]
+    public async Task Handle_DidClose_cancels_throttled_diagnostics_and_token_pushes_still_waiting_for_their_turn()
+    {
+        _bufferService.Update(FeatureUri, 1, "Feature: X\n");
+        var throttle = Substitute.For<IOutputThrottle>();
+
+        var sut = CreateSut(outputThrottle: throttle);
+        await sut.Handle(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = FeatureUri } }, CancellationToken.None);
+
+        throttle.Received(1).Cancel(OutputThrottleKeys.Diagnostics(FeatureUri));
+        throttle.Received(1).Cancel(OutputThrottleKeys.SemanticTokens(FeatureUri));
     }
 
     [Fact]
