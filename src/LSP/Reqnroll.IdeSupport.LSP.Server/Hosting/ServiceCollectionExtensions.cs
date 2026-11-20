@@ -179,6 +179,8 @@ public static class ServiceCollectionExtensions
             // see IRefreshDebouncer's remarks for why a transient handler's own instance field
             // can't debounce anything.
             .AddSingleton<IRefreshDebouncer, RefreshDebouncer>()
+            // Keeps one refresh request of each kind outstanding at most, so a slow client is not buried under them.
+            .AddSingleton<IRefreshGate, RefreshGate>()
             // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
             // preserving correctness for pull handlers with no refresh capability —
             // see IParseCoordinator's remarks. Singleton for the same reason as
