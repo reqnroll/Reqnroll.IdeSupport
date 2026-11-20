@@ -2,6 +2,8 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -27,6 +29,8 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IPushedSemanticTokens _pushedTokens;
+    private readonly IOutputThrottle _throttle;
+    private readonly IDocumentBufferService? _buffers;
 
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensPushHandler"/> class.</summary>
     public SemanticTokensPushHandler(
@@ -35,30 +39,44 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null,
-        IPushedSemanticTokens? pushedTokens = null)
+        IPushedSemanticTokens? pushedTokens = null,
+        IOutputThrottle? throttle = null,
+        IDocumentBufferService? buffers = null)
     {
+        _buffers = buffers;
         _languageServer = languageServer;
         _tokenService = tokenService;
         _clientIde = clientIde;
         _logger = logger;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
         _pushedTokens = pushedTokens ?? new PushedSemanticTokens();
+        _throttle = throttle ?? NullOutputThrottle.Instance;
     }
 
-    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by computing and pushing updated semantic tokens to Visual Studio clients (VS does not pull tokens itself; all other clients are skipped).</summary>
-    public async Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
+    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by computing and pushing updated semantic tokens to Visual Studio clients (VS does not pull tokens itself; all other clients are skipped). For a client whose behaviours say so (<see cref="Reqnroll.IdeSupport.LSP.Core.Ide.IdeBehaviours.ThrottlesOutputWhileEditing"/>), the push runs at most once per <see cref="OutputThrottlePolicy"/> interval (zero for small documents) while edits keep arriving and always carries the latest tokens.</summary>
+    public Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
     {
         // Only Visual Studio needs the push; all other clients pull semantic tokens themselves.
         if (!_clientIde.Behaviours.RequiresPushedSemanticTokens)
         {
             _logger.LogVerbose($"SemanticTokensPushHandler: skipped (client is not VS) for {notification.Uri} v{notification.Version}");
-            return;
+            return Task.CompletedTask;
         }
 
+        return _clientIde.Behaviours.ThrottlesOutputWhileEditing
+            ? _throttle.RunThrottledAsync(
+                OutputThrottleKeys.SemanticTokens(notification.Uri),
+                _buffers?.ThrottleInterval(notification.Uri) ?? TimeSpan.Zero,
+                () => PushTokensAsync(notification))
+            : PushTokensAsync(notification);
+    }
+
+    private async Task PushTokensAsync(MatchCacheChangedNotification notification)
+    {
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollSemanticTokens, notification.Uri);
 
         var tokens = await _tokenService
-            .GetSemanticTokensAsync(notification.Uri, notification.Version, cancellationToken)
+            .GetSemanticTokensAsync(notification.Uri, notification.Version, CancellationToken.None)
             .ConfigureAwait(false);
         if (tokens is null)
             return;

@@ -61,6 +61,7 @@ public static class IdeBehavioursResolver
                 RequestsCompletionAfterDeletion = true,
                 AppliesRenameResponseEditNatively = true,
                 NavigatesStepsViaFindStepDefinitions = true,
+                ThrottlesOutputWhileEditing = true,
             };
         }
 

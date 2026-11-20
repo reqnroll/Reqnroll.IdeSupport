@@ -1,10 +1,13 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Concurrency;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
@@ -130,6 +133,88 @@ public class SemanticTokensPushHandlerTests
         await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
 
         _sent.Should().ContainSingle("the client already holds exactly these tokens");
+    }
+
+    // Large enough (12,000 lines) to get the longest throttle interval.
+    private static readonly string LargeText = string.Join("\n", Enumerable.Repeat("  Given a step", 12_000));
+
+    private SemanticTokensPushHandler CreateThrottledSut(string? ide, ManualTimeProvider time, string? text = null)
+    {
+        var buffers = Substitute.For<IDocumentBufferService>();
+        var buffer = new DocumentBuffer(FeatureUri, 1, text ?? LargeText);
+        buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = buffer; return true; });
+
+        return new(_facade, _tokenService, new ClientIdeContext(ide), _logger,
+            pushedTokens: _pushed, throttle: new OutputThrottle(_logger, time), buffers: buffers);
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_small_document_pushes_every_change_at_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 6, 3, 0), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time, text: "Feature: X\n");
+
+        foreach (var version in new[] { 1, 2, 3 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        _sent.Select(p => p.Version).Should().Equal(1, 2, 3);
+        time.ActiveTimerCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_large_document_pushes_at_once_then_the_latest_tokens_of_a_burst_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 6, 3, 0), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        foreach (var version in new[] { 1, 2, 3 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        _sent.Should().ContainSingle("only the first change is pushed at once").Which.Version.Should().Be(1);
+
+        time.Advance(OutputThrottlePolicy.MaxInterval - TimeSpan.FromMilliseconds(1));
+        _sent.Should().ContainSingle("a large document waits the full interval");
+
+        time.Advance(TimeSpan.FromMilliseconds(1));
+
+        _sent.Should().HaveCount(2);
+        _sent[1].Version.Should().Be(3, "the last change of the burst is always pushed");
+        _sent[1].Data.Should().Equal(new[] { 2, 0, 9, 3, 0 }, "pushed against what the client received, which skipped version 2");
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_change_after_a_pause_is_pushed_at_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 9, 0, 0), version: 2);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(2));
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        time.ActiveTimerCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Non_visual_studio_clients_never_start_a_throttle_timer()
+    {
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("vscode", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        time.ActiveTimerCount.Should().Be(0);
+        _sent.Should().BeEmpty();
     }
 
     [Fact]
