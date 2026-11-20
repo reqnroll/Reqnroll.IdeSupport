@@ -15,10 +15,54 @@ plugins {
 
 group = providers.gradleProperty("pluginGroup").get()
 
+// ── Which Rider releases this build supports ──
+//
+// Default: the frontend-only plugin, one build for the whole range in gradle.properties
+// (pluginSinceBuild .. pluginUntilBuild), checked by verifyPlugin.
+//
+// -PwithBackend=true bundles the Rider backend module, which is compiled against exactly one Rider SDK and so
+// works on exactly one Rider release. That build is derived from the one setting `riderSdkVersion`: the release
+// number ("2026.2.3.1" -> wave 262) gives the since/until range, the plugin version suffix, and the releases
+// verifyPlugin checks, so none of them can disagree with the SDK the backend was built against. The range is a
+// closed one-release range on purpose: an open upper bound would let Rider install the backend on a newer
+// release it was never built for.
+//
+// `runIdeWithBackend` launches a sandbox of that one release (the plain `runIde` sandbox runs `platformVersion`, the
+// oldest release in the frontend-only range, which a backend build refuses to load). Asking for that task turns
+// the backend on by itself, so `./gradlew runIdeWithBackend` needs no -PwithBackend=true.
+val runIdeWithBackendTaskName = "runIdeWithBackend"
+val requestedTaskNames: List<String> = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }
+val withBackend = (findProperty("withBackend") as String? ?: "false").toBoolean() ||
+    runIdeWithBackendTaskName in requestedTaskNames
+val riderSdkVersion: String = providers.gradleProperty("riderSdkVersion").get()
+
+/** The build-number prefix of a Rider release: 2026.2.3.1 -> 262 (two-digit year, then the release number). */
+fun riderWaveOf(sdkVersion: String): String {
+    val match = Regex("""^(\d{4})\.(\d+)""").find(sdkVersion)
+        ?: error("riderSdkVersion '$sdkVersion' does not look like a Rider release such as 2026.2.3.1")
+    return "${match.groupValues[1].toInt() - 2000}${match.groupValues[2]}"
+}
+
+val riderWave = riderWaveOf(riderSdkVersion)
+if (withBackend) {
+    listOf("pluginSinceBuild", "pluginUntilBuild").forEach { name ->
+        require(name !in gradle.startParameter.projectProperties) {
+            "-P$name cannot be combined with -PwithBackend=true: the supported range is derived from " +
+                "riderSdkVersion ($riderSdkVersion, wave $riderWave), and an explicit range could be wider " +
+                "than the one Rider release the backend module is built for."
+        }
+    }
+}
+val pluginSinceBuildValue: Provider<String> =
+    if (withBackend) provider { riderWave } else providers.gradleProperty("pluginSinceBuild")
+val pluginUntilBuildValue: Provider<String> =
+    if (withBackend) provider { "$riderWave.*" } else providers.gradleProperty("pluginUntilBuild")
+
 // CI passes -PpluginVersion=<ReqnrollIdeSupportMainVersion>.<run number>. A local build falls back to the
 // same <ReqnrollIdeSupportMainVersion>.99999 that build/Version.props gives the .NET projects, so a local
-// install always sorts newer than any CI build (issue #1163).
-val pluginVersionValue: String = providers.gradleProperty("pluginVersion").orNull
+// install always sorts newer than any CI build (issue #1163). A backend build adds the Rider wave, so each
+// release's upload of the same plugin ID has its own version.
+val basePluginVersion: String = providers.gradleProperty("pluginVersion").orNull
     ?: run {
         val versionProps = rootDir.resolve("../../build/Version.props").readText()
         val mainVersion = Regex("<ReqnrollIdeSupportMainVersion>([^<]+)</ReqnrollIdeSupportMainVersion>")
@@ -29,6 +73,7 @@ val pluginVersionValue: String = providers.gradleProperty("pluginVersion").orNul
             ?: error("ReqnrollIdeSupportBuildNumber default not found in build/Version.props")
         "$mainVersion.$buildNumber"
     }
+val pluginVersionValue: String = if (withBackend) "$basePluginVersion.$riderWave" else basePluginVersion
 version = pluginVersionValue
 
 repositories {
@@ -56,6 +101,13 @@ dependencies {
         testFramework(TestFrameworkType.Platform)
     }
 
+    // The Cucumber Gherkin parser, which the feature-file lexer and tree parser walk (see
+    // src/main/java/io/cucumber/gherkin/GherkinSyntaxWalker.java). Keep this on the same version as the
+    // `Gherkin` NuGet package the language server uses (src/Core and src/LSP csproj files), so the editor and
+    // the server agree on the grammar and on every dialect's keywords. Its `messages` and `jspecify`
+    // dependencies come along transitively.
+    implementation("io.cucumber:gherkin:39.1.0")
+
     // Plain JUnit5 (kotlin.test assertions on the JUnit5 engine) for pure-logic unit tests that
     // don't need an IntelliJ Platform fixture — see src/test/kotlin.
     testImplementation(kotlin("test-junit5"))
@@ -81,7 +133,7 @@ kotlin {
     // The plugin runs against the IDE's own bundled Kotlin runtime (kotlin.stdlib.default.dependency
     // = false, gradle.properties), not a copy we ship -- so compiled bytecode must not reference
     // stdlib/coroutines symbols newer than what the *oldest* supported Rider bundles. Compiling at
-    // the default (compiler-version) API/language level with kotlin("jvm") 2.4.10 emitted a
+    // the default (compiler-version) API/language level with kotlin("jvm") 2.4.x emitted a
     // reference to kotlin.coroutines.jvm.internal.SpillingKt (a suspend-fn codegen helper added
     // after 2.0) that RD-243 (Rider 2024.3, this plugin's pluginSinceBuild) doesn't have, and
     // verifyPlugin caught it as a COMPATIBILITY_PROBLEMS NoSuchClassError risk. Pinning to 2.0 --
@@ -111,8 +163,8 @@ intellijPlatform {
         version = pluginVersionValue
 
         ideaVersion {
-            sinceBuild = providers.gradleProperty("pluginSinceBuild")
-            untilBuild = providers.gradleProperty("pluginUntilBuild")
+            sinceBuild = pluginSinceBuildValue
+            untilBuild = pluginUntilBuildValue
         }
     }
 
@@ -144,8 +196,8 @@ intellijPlatform {
             select {
                 types = listOf(IntelliJPlatformType.Rider)
                 channels = listOf(ProductRelease.Channel.RELEASE)
-                sinceBuild = providers.gradleProperty("pluginSinceBuild")
-                untilBuild = providers.gradleProperty("pluginUntilBuild")
+                sinceBuild = pluginSinceBuildValue
+                untilBuild = pluginUntilBuildValue
             }
         }
     }
@@ -202,7 +254,7 @@ val connectorProject = File(repoRoot, "src/LSP/Reqnroll.IdeSupport.LSP.Connector
 // distribution and should keep bundling the Release server). Checked via the requested task
 // names rather than a project property so plain `./gradlew runIde` does the right thing with
 // no extra flags.
-val isRunIdeInvocation = gradle.startParameter.taskNames.any { it == "runIde" || it.endsWith(":runIde") }
+val isRunIdeInvocation = requestedTaskNames.any { it == "runIde" || it == runIdeWithBackendTaskName }
 val serverConfiguration = if (isRunIdeInvocation) "Debug" else "Release"
 
 // Directory containing one server-<rid>-shaped subdirectory per RID, pre-published
@@ -253,6 +305,40 @@ val publishServer by tasks.registering(Exec::class) {
         "--self-contained", "true",
         "--nologo",
         "--output", serverOutputDir.asFile.absolutePath,
+    )
+}
+
+// ── Rider backend module (.feature breakpoints) ──
+//
+// A small .NET module that runs in Rider's ReSharper backend process and lets the debugger offer
+// breakpoints in .feature files (see docs/Rider-Feature-Breakpoints-Plan.md). Unlike the Kotlin code, it is
+// compiled against one Rider SDK version (`riderSdkVersion`), so a build that includes it is only compatible
+// with that Rider release; the range at the top of this file is derived from it. Without -PwithBackend=true
+// the build is the frontend-only plugin that works across the whole range.
+//
+// Pre-built by CI and passed in with -PbackendBuildDir (a directory holding the module's DLL), in
+// which case compileBackend is skipped, mirroring -PlspServerBuildDir above.
+val backendDir = layout.projectDirectory.dir("dotnet")
+val backendAssemblyName = "Reqnroll.IdeSupport.Rider.Backend"
+val backendProject = File(backendDir.asFile, "$backendAssemblyName/$backendAssemblyName.csproj")
+val backendOutputDir = layout.projectDirectory.dir("dotnet/$backendAssemblyName/bin/Release/net472")
+val externalBackendBuildDir = (findProperty("backendBuildDir") as String?)?.let { File(it) }
+
+val compileBackend by tasks.registering(Exec::class) {
+    group = "reqnroll"
+    description = "Builds the Rider backend module against the Rider SDK. Skipped when -PbackendBuildDir " +
+        "is set or -PwithBackend=false."
+    onlyIf { withBackend && externalBackendBuildDir == null }
+
+    inputs.files(fileTree(backendDir) { exclude("**/bin/**", "**/obj/**") })
+    inputs.property("riderSdkVersion", riderSdkVersion)
+    outputs.dir(backendOutputDir)
+
+    commandLine(
+        "dotnet", "build", backendProject.toString(),
+        "--configuration", "Release",
+        "--nologo",
+        "-p:RiderSdkVersion=$riderSdkVersion",
     )
 }
 
@@ -370,6 +456,23 @@ tasks.withType<PrepareSandboxTask>().configureEach {
         }
     }
 
+    if (withBackend) {
+        val externalBackendDir = externalBackendBuildDir
+        val backendFiles = listOf("$backendAssemblyName.dll", "$backendAssemblyName.pdb")
+        if (externalBackendDir == null) {
+            dependsOn(compileBackend)
+            from(backendOutputDir) {
+                include(backendFiles)
+                into("${project.name}/dotnet")
+            }
+        } else {
+            from(externalBackendDir) {
+                include(backendFiles)
+                into("${project.name}/dotnet")
+            }
+        }
+    }
+
     val externalLoggerDir = externalTestLoggerBuildDir
     if (externalLoggerDir == null) {
         dependsOn(publishTestLogger)
@@ -398,7 +501,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
 
 tasks {
     wrapper {
-        gradleVersion = "9.6.1"
+        gradleVersion = "9.8.2"
     }
 }
 
@@ -408,8 +511,30 @@ tasks {
 // JavaExec-derived task in the IntelliJ Platform Gradle Plugin, so `systemProperty` applies to
 // the JVM it launches (the sandboxed IDE itself, not our LSP server subprocess — the plugin
 // code reads it and passes the corresponding --log-level through when it spawns the server).
-tasks.matching { it.name == "runIde" }.configureEach {
+tasks.matching { it.name == "runIde" || it.name == runIdeWithBackendTaskName }.configureEach {
     (this as? JavaExec)?.systemProperty("reqnroll.devSandbox", "true")
+}
+
+// A backend build supports only the riderSdkVersion release (see the top of this file), so it needs a sandbox of
+// that release rather than the platformVersion one `runIde` starts. The plugin is still compiled against
+// platformVersion; only the IDE that runs it differs.
+intellijPlatformTesting {
+    runIde {
+        register(runIdeWithBackendTaskName) {
+            type = IntelliJPlatformType.Rider
+            version = riderSdkVersion
+        }
+    }
+}
+
+// Fail early instead of launching a sandbox that rejects the plugin as incompatible.
+tasks.named("runIde") {
+    doFirst {
+        check(!withBackend) {
+            "A -PwithBackend=true build only loads in Rider $riderSdkVersion (wave $riderWave), but runIde starts " +
+                "the platformVersion sandbox. Run ./gradlew $runIdeWithBackendTaskName instead."
+        }
+    }
 }
 
 // ── Built-in Application Insights resource (issue #1160) ──

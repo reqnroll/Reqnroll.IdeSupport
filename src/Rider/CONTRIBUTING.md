@@ -188,6 +188,27 @@ ReSharper-backend plugin part subscribing to unit-test results, or the frontend
 took, look in the sandbox's `log/UnitTestLogs/Sessions/*.log` (UTF-16; `iconv -f UTF-16`)
 for the `Starting process:` line, and in the LSP server log for `registerRun`.
 
+## Rider backend module (`.feature` breakpoints)
+
+Rider only lets you set a breakpoint on a file its .NET backend knows. `dotnet/Reqnroll.IdeSupport.Rider.Backend`
+is a small `net472` module, loaded by Rider's backend process, that gives `.feature` files a stub language and
+a line-breakpoint provider. It parses no Gherkin; the language server does all of that. The design and the
+reasoning behind it are in [docs/Rider-Feature-Breakpoints-Plan.md](../../docs/Rider-Feature-Breakpoints-Plan.md).
+
+- `./gradlew buildPlugin` builds it (`compileBackend`) and copies the DLL into the plugin's `dotnet/` folder. It
+  needs the .NET SDK and the `JetBrains.Rider.SDK` NuGet package.
+- It is compiled against one Rider SDK version, set with `-PriderSdkVersion=<version>` (the default is in
+  `dotnet/Directory.Build.props`). A plugin built with the module only works on the Rider version whose SDK it was
+  built against, so `pluginSinceBuild` / `pluginUntilBuild` must be narrowed to that version when it is included.
+- `-PwithBackend=false` builds the frontend-only plugin, which works across the whole supported range but offers
+  no `.feature` breakpoints.
+- `-PbackendBuildDir=<dir>` bundles an already-built module from `<dir>` instead of running `dotnet build`, the
+  same way `-PlspServerBuildDir` does for the server.
+- Unit tests for the SDK-free logic: `dotnet test dotnet/Reqnroll.IdeSupport.Rider.Backend.Tests`.
+- The `rider.debuggerSupportPolicy` registration in `plugin.xml` is for the `Gherkin` language, which is the PSI
+  language of `.feature` files now that the file type has a `ParserDefinition`. Rider's breakpoint check keys on
+  that language.
+
 ## Local install of a dev build
 
 `runIde` (above) launches a disposable sandboxed Rider instance — it doesn't touch your regular
