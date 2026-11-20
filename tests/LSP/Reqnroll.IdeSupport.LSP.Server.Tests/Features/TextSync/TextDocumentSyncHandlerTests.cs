@@ -11,6 +11,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -32,6 +33,7 @@ public class TextDocumentSyncHandlerTests
     // instead of awaiting it inline, so tests need the scheduled work to actually run.
     private readonly IParseCoordinator _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IDocumentGenerations _documentGenerations = new DocumentGenerations();
+    private readonly IPublishedDiagnosticsCache _publishedDiagnostics = Substitute.For<IPublishedDiagnosticsCache>();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
@@ -42,7 +44,7 @@ public class TextDocumentSyncHandlerTests
     private TextDocumentSyncHandler CreateSut(IDocumentGenerations? documentGenerations = null) =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
             _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator,
-            documentGenerations ?? _documentGenerations, scopeManager: _scopeManager, telemetryService: _telemetry);
+            documentGenerations ?? _documentGenerations, _publishedDiagnostics, scopeManager: _scopeManager, telemetryService: _telemetry);
 
     private static DidOpenTextDocumentParams OpenParams(DocumentUri uri) => new()
     {
@@ -203,6 +205,32 @@ public class TextDocumentSyncHandlerTests
             Arg.Is<PublishDiagnosticsParams>(p =>
                 p.Uri == FeatureUri &&
                 !p.Diagnostics.Any()));
+    }
+
+    [Fact]
+    public async Task Handle_DidClose_evicts_the_published_diagnostics_entry_after_removing_the_buffer()
+    {
+        _bufferService.Update(FeatureUri, 1, "Feature: X\n");
+
+        await CreateSut().Handle(
+            new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = FeatureUri } },
+            CancellationToken.None);
+
+        _publishedDiagnostics.Received(1).Evict(FeatureUri);
+        _bufferService.TryGet(FeatureUri, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_DidOpen_resets_the_published_diagnostics_entry_even_for_an_already_open_document()
+    {
+        var sut = CreateSut();
+
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+        await sut.Handle(OpenParams(FeatureUri), CancellationToken.None);
+        await WaitForScheduledWorkAsync(FeatureUri);
+
+        _publishedDiagnostics.Received(2).Reset(FeatureUri);
     }
 
     [Fact]

@@ -15,6 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -41,6 +42,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IOperationDurationRecorder _recorder;
     private readonly IParseCoordinator _parseCoordinator;
     private readonly IDocumentGenerations _documentGenerations;
+    private readonly IPublishedDiagnosticsCache _publishedDiagnostics;
     private readonly ILspWorkspaceScopeManager? _scopeManager;
     private readonly ILspTelemetryService? _telemetryService;
 
@@ -63,6 +65,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IIdeSupportLogger logger,
         IParseCoordinator parseCoordinator,
         IDocumentGenerations documentGenerations,
+        IPublishedDiagnosticsCache publishedDiagnostics,
         IOperationDurationRecorder? recorder = null,
         ILspWorkspaceScopeManager? scopeManager = null,
         ILspTelemetryService? telemetryService = null)
@@ -77,6 +80,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _logger = logger;
         _parseCoordinator = parseCoordinator;
         _documentGenerations = documentGenerations;
+        _publishedDiagnostics = publishedDiagnostics;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
         _scopeManager = scopeManager;
         _telemetryService = telemetryService;
@@ -132,6 +136,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // The buffer stores the generation with its text, so a reader never pairs them separately.
         var generation = _documentGenerations.Bump(uri.ToString());
         _documentBufferService.Update(uri, version, text, generation);
+        // Whatever the client holds for this URI is unknown after an open, so the next
+        // diagnostics push must go out even if it equals the last one sent.
+        _publishedDiagnostics.Reset(uri);
         if (isNewOpen)
             ReportFeatureFileOpened(uri);
 
@@ -229,6 +236,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // is a change of text even when the buffer matched the file.
         _documentGenerations.Bump(uri.ToString());
         _documentBufferService.Remove(uri);
+        // After the buffer removal: a publish racing this close then sees the document as closed
+        // and cannot re-create the entry.
+        _publishedDiagnostics.Evict(uri);
         _bindingMatchService.InvalidateAllForDocument(uri.ToString());
 
         // Repopulate the match cache from disk so the file's usages remain discoverable by

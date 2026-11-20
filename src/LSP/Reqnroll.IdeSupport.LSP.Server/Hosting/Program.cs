@@ -21,6 +21,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Core.Ide;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
@@ -333,6 +334,8 @@ public class Program
             // inline, so a mistake in one (e.g. an IDE-specific branch in
             // ApplySemanticTokensCapability) can't silently bleed into an unrelated capability
             // assignment sharing the same block.
+            // A (re-)initialised session starts with an empty client: nothing sent before counts.
+            languageServer.Services.GetRequiredService<IPublishedDiagnosticsCache>().Clear();
             ApplyInitialTraceLevel();
             ApplyClientIdentity();
             ApplySemanticTokensCapability();
