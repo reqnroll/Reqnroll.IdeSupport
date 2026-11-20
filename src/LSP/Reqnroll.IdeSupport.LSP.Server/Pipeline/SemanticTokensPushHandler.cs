@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
@@ -75,6 +76,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
     {
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollSemanticTokens, notification.Uri);
 
+        var generationBefore = CurrentGeneration(notification.Uri);
         var tokens = await _tokenService
             .GetSemanticTokensAsync(notification.Uri, notification.Version, CancellationToken.None)
             .ConfigureAwait(false);
@@ -82,7 +84,21 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
             return;
 
         var uri = notification.Uri.ToString();
-        var push = _pushedTokens.Plan(uri, tokens.Data.ToArray());
+
+        // The planner needs the text the tokens were computed from. The tokens come from the buffer as it was
+        // when the service looked; when the buffer moved on meanwhile, which text they describe is unknown,
+        // so the push is the full set.
+        string? text = null;
+        if (_buffers is not null)
+        {
+            if (_buffers.TryGet(notification.Uri, out var buffer) && buffer is not null
+                && generationBefore == buffer.Generation)
+                text = buffer.Text;
+            else
+                _pushedTokens.Forget(uri);
+        }
+
+        var push = _pushedTokens.Plan(uri, tokens.Data.ToArray(), text);
         if (push.Unchanged)
         {
             _logger.LogVerbose(
@@ -113,4 +129,9 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
             ? $"SemanticTokensPushHandler: pushed {push.Data.Length / 5} of {push.TokenCount} tokens (lines {push.StartLine}-{push.EndLine}) for {uri} v{notification.Version}"
             : $"SemanticTokensPushHandler: pushed {push.TokenCount} tokens for {uri} v{notification.Version}");
     }
+
+    private long? CurrentGeneration(DocumentUri uri)
+        => _buffers is not null && _buffers.TryGet(uri, out var buffer) && buffer is not null
+            ? buffer.Generation
+            : null;
 }

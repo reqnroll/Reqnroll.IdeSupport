@@ -144,6 +144,95 @@ public class GherkinSemanticClassifierTests
         span.Length.Should().Be(0);
     }
 
+    // ── Moving tokens through edits ──────────────────────────────────────────
+
+    // Lines given as (start, end) positions; also answers the position-to-line lookups the conversion needs.
+    private static ITextSnapshot SnapshotWithLinesByPosition(int length, params (int Start, int End)[] lines)
+    {
+        var snapshot = SnapshotWithLines(length, lines);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = snapshot.GetLineFromLineNumber(i);
+            line.LineNumber.Returns(i);
+            for (var position = lines[i].Start; position <= Math.Min(length, lines[i].End + 1); position++)
+                snapshot.GetLineFromPosition(position).Returns(line);
+        }
+
+        return snapshot;
+    }
+
+    private static ITextChange TextChange(int oldPosition, int oldEnd, int newEnd)
+    {
+        var change = Substitute.For<ITextChange>();
+        change.OldPosition.Returns(oldPosition);
+        change.OldEnd.Returns(oldEnd);
+        change.NewEnd.Returns(newEnd);
+        return change;
+    }
+
+    [Fact]
+    public void ToTokenTextChange_describes_an_edit_in_line_and_character_coordinates()
+    {
+        // Before: "abcde\nfghij\nklmno" (lines at 0-5, 6-11, 12-17); after a line break was typed at position 8.
+        var before = SnapshotWithLinesByPosition(17, (0, 5), (6, 11), (12, 17));
+        var after = SnapshotWithLinesByPosition(19, (0, 5), (6, 8), (9, 12), (13, 18));
+        var change = TextChange(oldPosition: 8, oldEnd: 8, newEnd: 10);
+
+        var result = GherkinSemanticClassifier.ToTokenTextChange(change, before, after);
+
+        result.OldStartLine.Should().Be(1);
+        result.OldStartChar.Should().Be(2);
+        result.OldEndLine.Should().Be(1);
+        result.OldEndChar.Should().Be(2);
+        result.NewEndLine.Should().Be(2);
+        result.NewEndChar.Should().Be(1);
+        result.LineCountDelta.Should().Be(1);
+    }
+
+    [Fact]
+    public void An_edit_of_the_buffer_moves_the_cached_tokens_and_recolours_from_the_edited_line_on()
+    {
+        var store = new SemanticTokenClassificationStore();
+        var snapshot = SnapshotWithLinesByPosition(19, (0, 5), (6, 8), (9, 12), (13, 18));
+        var before = SnapshotWithLinesByPosition(17, (0, 5), (6, 11), (12, 17));
+        var buffer = Substitute.For<ITextBuffer>();
+        buffer.Properties.Returns(new PropertyCollection());
+        buffer.CurrentSnapshot.Returns(snapshot);
+        var document = Substitute.For<ITextDocument>();
+        document.FilePath.Returns(FilePath);
+        var classifier = new GherkinSemanticClassifier(
+            buffer, Substitute.For<IClassificationTypeRegistryService>(), new FakeTextDocumentFactory(document), store);
+        store.SetTokens(FileKey, new List<ClassifiedToken> { new(0, 0, 5, "reqnroll.keyword"), new(2, 0, 5, "reqnroll.keyword") });
+        ClassificationChangedEventArgs? raised = null;
+        classifier.ClassificationChanged += (_, args) => raised = args;
+
+        buffer.ChangedHighPriority += Raise.EventWith(buffer, ChangedArgs(before, snapshot, TextChange(8, 8, 10)));
+
+        store.TryGetTokens(FileKey, out var tokens).Should().BeTrue();
+        tokens.Select(t => (t.Line, t.StartChar)).Should().Equal((0, 0), (3, 0));
+        raised.Should().NotBeNull("the lines below an added line were recoloured");
+        raised!.ChangeSpan.Start.Position.Should().Be(6, "from the line the edit started on");
+        GC.KeepAlive(classifier);
+    }
+
+    // TextContentChangedEventArgs reads its changes from the version of the snapshot before the edit.
+    private static TextContentChangedEventArgs ChangedArgs(ITextSnapshot before, ITextSnapshot after, params ITextChange[] changes)
+    {
+        var version = Substitute.For<ITextVersion>();
+        version.Changes.Returns(new FakeChanges(changes));
+        before.Version.Returns(version);
+        return new TextContentChangedEventArgs(before, after, EditOptions.None, null);
+    }
+
+    private sealed class FakeChanges : List<ITextChange>, INormalizedTextChangeCollection
+    {
+        public FakeChanges(IEnumerable<ITextChange> changes) : base(changes)
+        {
+        }
+
+        public bool IncludesLineChanges => true;
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     // Not inlined so that no local in the calling test frame can keep the classifier reachable.

@@ -40,7 +40,15 @@ public interface IPushedSemanticTokens
     /// current tokens) with the last set sent for <paramref name="uri"/>, records it as the new baseline
     /// and returns what to send. The caller must <see cref="Forget"/> the document if the send fails.
     /// </summary>
-    SemanticTokenPush Plan(string uri, int[] encodedTokens);
+    /// <param name="uri">The document the tokens belong to.</param>
+    /// <param name="encodedTokens">The document's current tokens, LSP relative-encoded.</param>
+    /// <param name="text">
+    /// The text <paramref name="encodedTokens"/> were computed from. A client that moves its copy of the
+    /// tokens through each edit no longer holds exactly the last pushed set on the lines the user edited,
+    /// so those lines are always part of a ranged push, even where the new tokens equal the old ones. Null
+    /// when the text is not known: the plan then rests on the tokens alone.
+    /// </param>
+    SemanticTokenPush Plan(string uri, int[] encodedTokens, string? text = null);
 
     /// <summary>Drops the baseline for <paramref name="uri"/>, so the next push for it is the full set.</summary>
     void Forget(string uri);
@@ -58,6 +66,9 @@ public sealed class PushedSemanticTokens : IPushedSemanticTokens
     {
         public Token[] Tokens = Array.Empty<Token>();
 
+        // The text the tokens were computed from; null when the caller did not supply it.
+        public string? Text;
+
         // -1 until the first full push has been planned, then the ranged pushes planned since the last full one.
         public int RangedSinceFull = -1;
     }
@@ -65,7 +76,7 @@ public sealed class PushedSemanticTokens : IPushedSemanticTokens
     private readonly record struct Token(int Line, int Char, int Length, int TypeIdx, int ModBits);
 
     /// <inheritdoc/>
-    public SemanticTokenPush Plan(string uri, int[] encodedTokens)
+    public SemanticTokenPush Plan(string uri, int[] encodedTokens, string? text = null)
     {
         var current = DecodeAbsolute(encodedTokens);
         var baseline = _baselines.GetOrAdd(uri, _ => new Baseline());
@@ -73,25 +84,59 @@ public sealed class PushedSemanticTokens : IPushedSemanticTokens
         lock (baseline)
         {
             var previous = baseline.Tokens;
+            var previousText = baseline.Text;
             var hadBaseline = baseline.RangedSinceFull >= 0;
             var resync = baseline.RangedSinceFull >= FullResyncInterval;
 
             baseline.Tokens = current;
+            baseline.Text = text;
 
-            if (!hadBaseline || resync)
+            // Without the text the last push was computed from there is no telling which lines the client
+            // edited, so only the full set is safe.
+            var textUnknown = text is not null && previousText is null;
+
+            if (!hadBaseline || resync || textUnknown)
             {
                 baseline.RangedSinceFull = 0;
                 return Full(encodedTokens, current.Length);
             }
 
-            return PlanRanged(baseline, previous, current, encodedTokens);
+            var edited = text is not null && previousText is not null
+                ? EditedLines(previousText, text)
+                : null;
+            return PlanRanged(baseline, previous, current, edited);
         }
     }
 
     /// <inheritdoc/>
     public void Forget(string uri) => _baselines.TryRemove(uri, out _);
 
-    private static SemanticTokenPush PlanRanged(Baseline baseline, Token[] previous, Token[] current, int[] encodedTokens)
+    /// <summary>
+    /// The lines of <paramref name="current"/> that differ from <paramref name="previous"/>: from the line of
+    /// the first differing character to the line of the last one (a single line for a pure deletion, where
+    /// the text on either side of it joins). Null when the texts are equal.
+    /// </summary>
+    private static (int First, int Last)? EditedLines(string previous, string current)
+    {
+        var prefix = previous.AsSpan().CommonPrefixLength(current);
+        if (prefix == previous.Length && prefix == current.Length)
+            return null;
+
+        var limit = Math.Min(previous.Length, current.Length) - prefix;
+        var suffix = 0;
+        while (suffix < limit && previous[previous.Length - 1 - suffix] == current[current.Length - 1 - suffix])
+            suffix++;
+
+        var changedEnd = current.Length - suffix;
+        var first = current.AsSpan(0, prefix).Count('\n');
+        var last = changedEnd > prefix
+            ? current.AsSpan(0, changedEnd - 1).Count('\n')
+            : first;
+        return (first, last);
+    }
+
+    private static SemanticTokenPush PlanRanged(
+        Baseline baseline, Token[] previous, Token[] current, (int First, int Last)? edited)
     {
         // Longest common prefix and suffix of the two ordered token lists; everything between them changed.
         var limit = Math.Min(previous.Length, current.Length);
@@ -106,9 +151,6 @@ public sealed class PushedSemanticTokens : IPushedSemanticTokens
 
         var oldEnd = previous.Length - suffix;
         var newEnd = current.Length - suffix;
-
-        if (prefix == oldEnd && prefix == newEnd)
-            return new SemanticTokenPush(Array.Empty<int>(), null, null, current.Length, Unchanged: true);
 
         // The client replaces whole lines, so widen the changed token span to the lines it touches in
         // either list.
@@ -125,6 +167,18 @@ public sealed class PushedSemanticTokens : IPushedSemanticTokens
             from = Math.Min(from, current[prefix].Line);
             to = Math.Max(to, current[newEnd - 1].Line);
         }
+
+        // The edited lines are replaced too: the client moved its tokens through the edit, which can drop
+        // or resize a token the new set contains unchanged.
+        if (edited is var (editedFirst, editedLast)
+            && (to >= 0 || current.Any(t => t.Line >= editedFirst && t.Line <= editedLast)))
+        {
+            from = Math.Min(from, editedFirst);
+            to = Math.Max(to, editedLast);
+        }
+
+        if (to < 0)
+            return new SemanticTokenPush(Array.Empty<int>(), null, null, current.Length, Unchanged: true);
 
         var slice = current
             .Where(t => t.Line >= from && t.Line <= to)

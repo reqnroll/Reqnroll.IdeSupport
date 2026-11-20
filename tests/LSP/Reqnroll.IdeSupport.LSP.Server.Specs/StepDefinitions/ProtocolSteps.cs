@@ -490,7 +490,7 @@ public sealed class ProtocolSteps
     {
         (await _ctx.Harness.WaitForPushCountAsync(
                 uri => uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase), minCount: 2))
-            .Should().BeTrue("the edit changed the file's tokens, so the server should push again");
+            .Should().BeTrue("the edit changed the file's tokens or a line that holds tokens, so the server should push again");
 
         var second = _ctx.Harness.SemanticTokenPushDetails
             .Where(p => p.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
@@ -507,7 +507,7 @@ public sealed class ProtocolSteps
         await Task.Delay(1500);
         _ctx.Harness.SemanticTokenPushDetails
             .Count(p => p.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
-            .Should().Be(1, "the edit changed no token, so the client already holds exactly what the server would send");
+            .Should().Be(1, "the edit changed no token and touched no line with a token, so the client already holds exactly what the server would send");
     }
 
     [Then("the client receives no semantic tokens push")]

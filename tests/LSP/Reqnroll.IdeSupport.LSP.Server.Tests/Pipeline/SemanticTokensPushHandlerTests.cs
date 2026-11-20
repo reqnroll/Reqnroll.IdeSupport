@@ -217,6 +217,53 @@ public class SemanticTokensPushHandlerTests
         _sent.Should().BeEmpty();
     }
 
+    private SemanticTokensPushHandler CreateSutWithBuffers(IDocumentBufferService buffers) =>
+        new(_facade, _tokenService, new ClientIdeContext("visualstudio"), _logger, pushedTokens: _pushed, buffers: buffers);
+
+    [Fact]
+    public async Task An_edited_line_is_pushed_although_its_tokens_are_unchanged()
+    {
+        var buffers = new DocumentBufferService();
+        var sut = CreateSutWithBuffers(buffers);
+        var tokens = Tokens(0, 0, 4, 0, 0, 1, 0, 4, 0, 0);
+        SetupTokens(tokens, version: 1);
+        SetupTokens(tokens, version: 2);
+
+        buffers.Update(FeatureUri, 1, "Feature\nAnd x", generation: 1);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        buffers.Update(FeatureUri, 2, "Feature\nAnd xy", generation: 2);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        _sent[1].StartLine.Should().Be(1);
+        _sent[1].EndLine.Should().Be(1);
+        _sent[1].Data.Should().Equal(1, 0, 4, 0, 0);
+    }
+
+    [Fact]
+    public async Task The_full_set_is_pushed_when_the_buffer_moved_on_while_the_tokens_were_computed()
+    {
+        var buffers = new DocumentBufferService();
+        var sut = CreateSutWithBuffers(buffers);
+        SetupTokens(Tokens(0, 0, 4, 0, 0, 1, 0, 4, 0, 0), version: 1);
+        buffers.Update(FeatureUri, 1, "Feature\nAnd x", generation: 1);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        // The token service answers for version 2, and the buffer has moved to generation 3 by the time the
+        // handler looks at it again.
+        buffers.Update(FeatureUri, 2, "Feature\nAnd xy", generation: 2);
+        _tokenService.GetSemanticTokensAsync(FeatureUri, 2, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                buffers.Update(FeatureUri, 3, "Feature\nAnd xyz", generation: 3);
+                return Task.FromResult<SemanticTokens?>(Tokens(0, 0, 4, 0, 0, 1, 0, 4, 0, 0));
+            });
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent[^1].StartLine.Should().BeNull("which text the tokens describe is unknown, so the client gets the full set");
+        _sent[^1].Data.Should().Equal(0, 0, 4, 0, 0, 1, 0, 4, 0, 0);
+    }
+
     [Fact]
     public async Task A_failed_send_makes_the_next_push_the_full_set_again()
     {

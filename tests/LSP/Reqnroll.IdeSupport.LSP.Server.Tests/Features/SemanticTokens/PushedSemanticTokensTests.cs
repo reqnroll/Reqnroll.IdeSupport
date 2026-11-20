@@ -207,6 +207,112 @@ public class PushedSemanticTokensTests
     }
 
     [Fact]
+    public void An_edited_line_is_pushed_even_when_its_tokens_are_the_same_as_before()
+    {
+        // The client moved its tokens through the edit and may have dropped the one on the edited line, so
+        // that line's tokens are sent although the new set equals the old one.
+        var tokens = Encode(Tok(0, 0), Tok(1, 0), Tok(2, 0), Tok(3, 0));
+        _sut.Plan(Uri, tokens, "Feature: a\nGiven b\nAnd c\nThen d");
+
+        var push = _sut.Plan(Uri, tokens, "Feature: a\nGiven b\nAnd cc\nThen d");
+
+        push.IsRanged.Should().BeTrue();
+        push.StartLine.Should().Be(2);
+        push.EndLine.Should().Be(2);
+        Decode(push.Data).Should().Equal(Tok(2, 0));
+        push.TokenCount.Should().Be(4);
+    }
+
+    [Fact]
+    public void An_edit_on_a_line_without_tokens_needs_no_push()
+    {
+        var tokens = Encode(Tok(0, 0), Tok(2, 0));
+        _sut.Plan(Uri, tokens, "Feature: a\n  a description\nGiven b");
+
+        var push = _sut.Plan(Uri, tokens, "Feature: a\n  a longer description\nGiven b");
+
+        push.Unchanged.Should().BeTrue("neither the server nor the client holds a token on the edited line");
+    }
+
+    [Fact]
+    public void The_same_text_and_tokens_need_no_push()
+    {
+        var tokens = Encode(Tok(0, 0), Tok(1, 0));
+        _sut.Plan(Uri, tokens, "Feature: a\nGiven b");
+
+        _sut.Plan(Uri, tokens, "Feature: a\nGiven b").Unchanged.Should().BeTrue();
+    }
+
+    [Fact]
+    public void The_pushed_range_covers_both_the_edited_lines_and_the_changed_tokens()
+    {
+        _sut.Plan(Uri, Encode(Tok(0, 0), Tok(1, 0), Tok(2, 0), Tok(3, 0), Tok(4, 0), Tok(5, 0)),
+            "l0\nl1\nl2\nl3\nl4\nl5");
+
+        // Line 1 is edited with its token unchanged; the token on line 4 changes (a consequence elsewhere).
+        var push = _sut.Plan(Uri, Encode(Tok(0, 0), Tok(1, 0), Tok(2, 0), Tok(3, 0), Tok(4, 0, length: 9), Tok(5, 0)),
+            "l0\nL1\nl2\nl3\nl4\nl5");
+
+        push.StartLine.Should().Be(1);
+        push.EndLine.Should().Be(4);
+        Decode(push.Data).Should().Equal(Tok(1, 0), Tok(2, 0), Tok(3, 0), Tok(4, 0, length: 9));
+    }
+
+    [Fact]
+    public void Deleting_a_line_pushes_the_line_where_the_text_joined()
+    {
+        _sut.Plan(Uri, Encode(Tok(0, 0), Tok(2, 0)), "a\nb\nc");
+
+        // "b" is deleted: "c" moves from line 2 to line 1, so the tokens differ as well.
+        var push = _sut.Plan(Uri, Encode(Tok(0, 0), Tok(1, 0)), "a\nc");
+
+        push.StartLine.Should().Be(1);
+        push.EndLine.Should().BeGreaterThanOrEqualTo(1);
+        Decode(push.Data).Should().Contain(Tok(1, 0));
+    }
+
+    [Fact]
+    public void A_push_after_one_without_text_is_the_full_set_because_the_edited_lines_are_unknown()
+    {
+        var tokens = Encode(Tok(0, 0), Tok(1, 0));
+        _sut.Plan(Uri, tokens);
+
+        var push = _sut.Plan(Uri, tokens, "Feature: a\nGiven b");
+
+        push.IsRanged.Should().BeFalse();
+        push.Unchanged.Should().BeFalse();
+        push.Data.Should().Equal(tokens);
+    }
+
+    [Fact]
+    public void Applying_each_push_to_what_the_client_holds_always_reproduces_the_current_tokens_when_the_client_shifts_its_tokens()
+    {
+        // The client moves its tokens through each edit before the next push arrives. Whatever it dropped or
+        // resized on the edited lines must be restored by the push, even where the new set equals the old one.
+        var lines = Enumerable.Range(0, 30).Select(i => $"Given step {i}").ToList();
+        List<(int Line, int Char, int Length, int TypeIdx, int ModBits)> TokensFor(List<string> text)
+            => text.Select((l, i) => Tok(i, 0, length: 5, type: 1)).ToList();
+
+        var held = Decode(_sut.Plan(Uri, Encode(TokensFor(lines).ToArray()), string.Join('\n', lines)).Data);
+        var random = new Random(20261120);
+
+        for (var step = 0; step < 300; step++)
+        {
+            // The edit: change the text of a line (a user retyping a keyword), and the client drops that
+            // line's token because the edit replaced it; the server's token set for the new text is unchanged.
+            var line = random.Next(lines.Count);
+            lines[line] = $"Given edited {step}";
+            held = held.Where(t => t.Line != line).ToList();
+
+            var current = TokensFor(lines);
+            var push = _sut.Plan(Uri, Encode(current.ToArray()), string.Join('\n', lines));
+            held = Apply(held, push);
+
+            held.Should().Equal(current, $"the client must hold the server's tokens after step {step}");
+        }
+    }
+
+    [Fact]
     public void Applying_each_push_to_what_the_client_holds_always_reproduces_the_current_tokens()
     {
         // A client that applies every push in order must end up holding exactly the server's token set, for any
