@@ -472,6 +472,44 @@ public sealed class ProtocolSteps
             .Should().BeTrue(
                 $"the server should push a reqnroll/semanticTokens notification for '{fileName}' to the VS client");
 
+    [Then(@"the first semantic tokens push for ""(.*)"" is the complete token set")]
+    public async Task ThenTheFirstPushIsTheCompleteSet(string fileName)
+    {
+        (await _ctx.Harness.WaitForPushCountAsync(
+                uri => uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase), minCount: 1))
+            .Should().BeTrue("the server should push tokens when the file is opened");
+
+        var first = _ctx.Harness.SemanticTokenPushDetails
+            .First(p => p.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase));
+        first.StartLine.Should().BeNull("the client holds nothing for the document yet, so the first push replaces everything");
+        first.EndLine.Should().BeNull();
+    }
+
+    [Then(@"the second semantic tokens push for ""(.*)"" covers only line (\d+)")]
+    public async Task ThenTheSecondPushCoversOnlyLine(string fileName, int line)
+    {
+        (await _ctx.Harness.WaitForPushCountAsync(
+                uri => uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase), minCount: 2))
+            .Should().BeTrue("the edit changed the file's tokens, so the server should push again");
+
+        var second = _ctx.Harness.SemanticTokenPushDetails
+            .Where(p => p.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
+            .ElementAt(1);
+        second.StartLine.Should().Be(line - 1, "the range is zero-based and the edit changed only that line");
+        second.EndLine.Should().Be(line - 1);
+    }
+
+    [Then(@"no further semantic tokens push for ""(.*)"" arrives")]
+    public async Task ThenNoFurtherPushArrives(string fileName)
+    {
+        // Pushes fire right after the match cache changes, which also drives the debounced (500 ms) refresh;
+        // wait past that window before asserting that only the first push was sent.
+        await Task.Delay(1500);
+        _ctx.Harness.SemanticTokenPushDetails
+            .Count(p => p.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
+            .Should().Be(1, "the edit changed no token, so the client already holds exactly what the server would send");
+    }
+
     [Then("the client receives no semantic tokens push")]
     public async Task ThenClientReceivesNoPush()
     {

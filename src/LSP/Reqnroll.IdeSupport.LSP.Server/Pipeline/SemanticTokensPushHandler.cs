@@ -26,6 +26,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
     private readonly ClientIdeContext _clientIde;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IPushedSemanticTokens _pushedTokens;
 
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensPushHandler"/> class.</summary>
     public SemanticTokensPushHandler(
@@ -33,13 +34,15 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
         ISemanticTokensService tokenService,
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IPushedSemanticTokens? pushedTokens = null)
     {
         _languageServer = languageServer;
         _tokenService = tokenService;
         _clientIde = clientIde;
         _logger = logger;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _pushedTokens = pushedTokens ?? new PushedSemanticTokens();
     }
 
     /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by computing and pushing updated semantic tokens to Visual Studio clients (VS does not pull tokens itself; all other clients are skipped).</summary>
@@ -60,15 +63,36 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
         if (tokens is null)
             return;
 
-        var data = tokens.Data.ToArray();
-        _languageServer.SendNotification(CustomLspMethodNames.ReqnrollSemanticTokens, new PublishSemanticTokensParams
+        var uri = notification.Uri.ToString();
+        var push = _pushedTokens.Plan(uri, tokens.Data.ToArray());
+        if (push.Unchanged)
         {
-            Uri = notification.Uri.ToString(),
-            Version = notification.Version,
-            Data = data,
-        });
+            _logger.LogVerbose(
+                $"SemanticTokensPushHandler: tokens unchanged for {uri} v{notification.Version} — nothing to push");
+            return;
+        }
 
-        _logger.LogInfo(
-            $"SemanticTokensPushHandler: pushed {data.Length / 5} tokens for {notification.Uri} v{notification.Version}");
+        try
+        {
+            _languageServer.SendNotification(CustomLspMethodNames.ReqnrollSemanticTokens, new PublishSemanticTokensParams
+            {
+                Uri = uri,
+                Version = notification.Version,
+                Data = push.Data,
+                StartLine = push.StartLine,
+                EndLine = push.EndLine,
+                TokenCount = push.TokenCount,
+            });
+        }
+        catch
+        {
+            // The baseline now describes tokens the client never received; the next push must be the full set.
+            _pushedTokens.Forget(uri);
+            throw;
+        }
+
+        _logger.LogInfo(push.IsRanged
+            ? $"SemanticTokensPushHandler: pushed {push.Data.Length / 5} of {push.TokenCount} tokens (lines {push.StartLine}-{push.EndLine}) for {uri} v{notification.Version}"
+            : $"SemanticTokensPushHandler: pushed {push.TokenCount} tokens for {uri} v{notification.Version}");
     }
 }

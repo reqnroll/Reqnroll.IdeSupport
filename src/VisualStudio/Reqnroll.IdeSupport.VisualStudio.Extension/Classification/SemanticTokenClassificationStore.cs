@@ -55,12 +55,15 @@ internal sealed class SemanticTokenClassificationStore
     private readonly ConcurrentDictionary<string, IReadOnlyList<ClassifiedToken>> _byFile =
         new ConcurrentDictionary<string, IReadOnlyList<ClassifiedToken>>(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Raised after the tokens for a file change. Argument is the normalized file key.</summary>
+    /// <summary>
+    /// Raised after the tokens for a file change. Arguments are the normalized file key and the first and last
+    /// line (inclusive) whose tokens changed, or <c>-1, -1</c> when any line may have changed.
+    /// </summary>
     /// <remarks>
     /// The store lives for the whole VS session, so a handler subscribed here stays reachable until it is
     /// removed. Per-buffer subscribers must subscribe weakly (see <see cref="GherkinSemanticClassifier"/>).
     /// </remarks>
-    public event Action<string>? TokensChanged;
+    public event Action<string, int, int>? TokensChanged;
 
     /// <summary>The token-type legend advertised by the server (index → name).</summary>
     public string[] Legend => _legend;
@@ -72,7 +75,39 @@ internal sealed class SemanticTokenClassificationStore
     {
         if (fileKey is null) return;
         _byFile[fileKey] = tokens;
-        TokensChanged?.Invoke(fileKey);
+        TokensChanged?.Invoke(fileKey, -1, -1);
+    }
+
+    /// <summary>
+    /// Replaces the cached tokens on lines <paramref name="startLine"/> to <paramref name="endLine"/> (inclusive)
+    /// with <paramref name="rangeTokens"/> and keeps every token on other lines. Raises
+    /// <see cref="TokensChanged"/> for that line range only. Returns false, changing nothing, when the file has no
+    /// cached tokens yet, because a ranged update only makes sense on top of an earlier complete set, and for a line
+    /// range that is negative or inverted.
+    /// </summary>
+    public bool ApplyRange(string fileKey, int startLine, int endLine, IReadOnlyList<ClassifiedToken> rangeTokens)
+    {
+        if (fileKey is null || startLine < 0 || endLine < startLine) return false;
+
+        while (true)
+        {
+            if (!_byFile.TryGetValue(fileKey, out var existing)) return false;
+
+            var merged = new List<ClassifiedToken>(existing.Count + rangeTokens.Count);
+            var i = 0;
+            for (; i < existing.Count && existing[i].Line < startLine; i++) merged.Add(existing[i]);
+            merged.AddRange(rangeTokens);
+            for (; i < existing.Count && existing[i].Line <= endLine; i++) { }
+            for (; i < existing.Count; i++) merged.Add(existing[i]);
+
+            // A concurrent SetTokens between the read and the write would otherwise be overwritten with a
+            // set built from the older tokens; retry against the newer one instead.
+            if (_byFile.TryUpdate(fileKey, merged, existing))
+            {
+                TokensChanged?.Invoke(fileKey, startLine, endLine);
+                return true;
+            }
+        }
     }
 
     /// <summary>Gets the cached tokens for a file, if any have been stored.</summary>

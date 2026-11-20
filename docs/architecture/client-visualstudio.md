@@ -146,6 +146,10 @@ by the swap. `VsSessionRouter` drops a response whose owning session was abandon
 
 **Semantic tokens.** `SemanticTokensClassificationInterceptor` captures `reqnroll/semanticTokens`, caches them in
 `SemanticTokenClassificationStore`, and `GherkinSemanticClassifier` emits spans with `IdeSupportClassifications`.
+A push either carries the complete token set, which replaces what the store holds, or only the tokens on
+`startLine`..`endLine`, which replace the store's tokens on exactly those lines; the classifier then re-classifies only
+those lines. A ranged push with no complete set to apply it to is ignored (the server always sends the full set first),
+and the push's `tokenCount` is compared with what the store holds afterwards, so a disagreement is logged.
 
 **CodeLens on `.feature`.** An in-process `ITaggerProvider` places tags and out-of-process data-point providers call back
 into `devenv.exe` through `ICodeLensCallbackService` listeners. Hook lenses use two data-point providers sharing one

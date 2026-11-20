@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
@@ -39,10 +40,12 @@ public class TextDocumentSyncHandlerTests
     private readonly ILspTelemetryService _telemetry = Substitute.For<ILspTelemetryService>();
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
 
-    private TextDocumentSyncHandler CreateSut(IDocumentGenerations? documentGenerations = null) =>
+    private TextDocumentSyncHandler CreateSut(
+        IDocumentGenerations? documentGenerations = null, IPushedSemanticTokens? pushedSemanticTokens = null) =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
             _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator,
-            documentGenerations ?? _documentGenerations, scopeManager: _scopeManager, telemetryService: _telemetry);
+            documentGenerations ?? _documentGenerations, scopeManager: _scopeManager, telemetryService: _telemetry,
+            pushedSemanticTokens: pushedSemanticTokens);
 
     private static DidOpenTextDocumentParams OpenParams(DocumentUri uri) => new()
     {
@@ -203,6 +206,18 @@ public class TextDocumentSyncHandlerTests
             Arg.Is<PublishDiagnosticsParams>(p =>
                 p.Uri == FeatureUri &&
                 !p.Diagnostics.Any()));
+    }
+
+    [Fact]
+    public async Task Handle_DidClose_forgets_the_pushed_semantic_token_baseline_so_the_next_open_pushes_the_full_set()
+    {
+        _bufferService.Update(FeatureUri, 1, "Feature: X\n");
+        var pushedTokens = Substitute.For<IPushedSemanticTokens>();
+
+        var sut = CreateSut(pushedSemanticTokens: pushedTokens);
+        await sut.Handle(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier { Uri = FeatureUri } }, CancellationToken.None);
+
+        pushedTokens.Received(1).Forget(FeatureUri.ToString());
     }
 
     [Fact]
