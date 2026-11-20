@@ -1,7 +1,8 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
@@ -141,11 +142,83 @@ public class SemanticTokensPushHandlerTests
     private SemanticTokensPushHandler CreateThrottledSut(string? ide, ManualTimeProvider time, string? text = null)
     {
         var buffers = Substitute.For<IDocumentBufferService>();
-        var buffer = new DocumentBuffer(FeatureUri, 1, text ?? LargeText);
+        var buffer = new DocumentBuffer(FeatureUri, 1, text ?? LargeText, Array.Empty<IdeSupportTag>());
         buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = buffer; return true; });
 
         return new(_facade, _tokenService, new ClientIdeContext(ide), _logger,
             pushedTokens: _pushed, throttle: new OutputThrottle(_logger, time), buffers: buffers);
+    }
+
+    private SemanticTokensPushHandler CreateSutWithBuffer(DocumentBuffer? buffer)
+    {
+        var buffers = Substitute.For<IDocumentBufferService>();
+        buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = buffer; return buffer is not null; });
+
+        return new(_facade, _tokenService, new ClientIdeContext("visualstudio"), _logger,
+            pushedTokens: _pushed, buffers: buffers);
+    }
+
+    [Fact]
+    public async Task Nothing_is_pushed_while_the_buffers_tags_are_not_computed_yet()
+    {
+        // A newer edit has replaced the buffer and its tags are not there yet, so the service answers with an empty
+        // set. Pushed, that would wipe every colour in the file.
+        SetupTokens(Tokens(), version: 1);
+        var sut = CreateSutWithBuffer(new DocumentBuffer(FeatureUri, 2, "Feature: X\n", Tags: null));
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        _sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_empty_set_is_not_pushed_when_the_tags_appeared_after_the_service_looked()
+    {
+        // The service saw no tags and answered with an empty set; by the time the handler looks, the tags exist. The
+        // empty set describes a state that is gone, so it must not be pushed.
+        SetupTokens(Tokens(), version: 1);
+        var tags = new[] { new IdeSupportTag(IdeSupportTagTypes.FeatureBlock, null!) };
+        var sut = CreateSutWithBuffer(new DocumentBuffer(FeatureUri, 2, "Feature: X\n", tags));
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        _sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_buffer_whose_tags_are_computed_is_pushed_even_when_it_has_no_tokens()
+    {
+        // An emptied document does have to be cleared on the client.
+        SetupTokens(Tokens(), version: 1);
+        var sut = CreateSutWithBuffer(new DocumentBuffer(FeatureUri, 1, string.Empty, Array.Empty<IdeSupportTag>()));
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        _sent.Should().ContainSingle().Which.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Tokens_that_were_skipped_for_missing_tags_do_not_disturb_the_baseline_of_the_next_push()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var tags = Array.Empty<IdeSupportTag>();
+        var current = new DocumentBuffer(FeatureUri, 1, "Feature: X\n", tags);
+        var buffers = Substitute.For<IDocumentBufferService>();
+        buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = current; return true; });
+        var sut = new SemanticTokensPushHandler(_facade, _tokenService, new ClientIdeContext("visualstudio"), _logger,
+            pushedTokens: _pushed, buffers: buffers);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        current = new DocumentBuffer(FeatureUri, 2, "Feature: X\n", Tags: null);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+        current = new DocumentBuffer(FeatureUri, 3, "Feature: X\n", tags);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 3), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        _sent[1].StartLine.Should().Be(2, "the second push is a delta against the first, as if the skipped one never happened");
+        _sent[1].Data.Should().Equal(2, 0, 9, 3, 0);
     }
 
     [Fact]

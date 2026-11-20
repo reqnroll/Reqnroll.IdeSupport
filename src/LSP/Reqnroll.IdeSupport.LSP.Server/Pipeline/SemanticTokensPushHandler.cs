@@ -81,6 +81,21 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
         if (tokens is null)
             return;
 
+        // The tokens come from the buffer's current tags. While a newer edit has replaced the buffer but its tags are
+        // not computed yet, the service answers with an empty set; that is right for a client that asks, but pushed it
+        // would wipe every colour in the file until the next push. The edit's own change notification follows once its
+        // tags exist, and pushes the real tokens then. An empty set is therefore pushed only when the buffer's tags
+        // exist and really are empty (an emptied document): tags that are missing, or that appeared after the service
+        // looked, mean the set was computed from a state that is already gone.
+        if (tokens.Data.Length == 0
+            && _buffers is not null
+            && !(_buffers.TryGet(notification.Uri, out var current) && current?.Tags is { Count: 0 }))
+        {
+            _logger.LogVerbose(
+                $"SemanticTokensPushHandler: tags of {notification.Uri} are not computed yet (v{notification.Version}) — nothing to push");
+            return;
+        }
+
         var uri = notification.Uri.ToString();
         var push = _pushedTokens.Plan(uri, tokens.Data.ToArray());
         if (push.Unchanged)
