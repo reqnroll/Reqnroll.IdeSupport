@@ -95,7 +95,7 @@ internal sealed class ServerToVsPump
 
                 // Consume correlated responses before *forwarding* to VS (they must never reach
                 // VS's own JsonRpc, which never sent them) — but still run them through the receive
-                // interceptors first so LspInspectorLogger sees this traffic like
+                // interceptors first so LspInspectorLogger (when enabled) sees this traffic like
                 // everything else on the pipe. Without this, every owned-RPC response (e.g.
                 // reqnroll/resolveTestTargets) is invisible to the inspector log even though it
                 // genuinely crossed the wire, which made a real N+1 request-storm bug look like
