@@ -1,7 +1,9 @@
 ﻿using MediatR;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -27,6 +29,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IPushedSemanticTokens _pushedTokens;
+    private readonly IDocumentBufferService? _buffers;
 
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensPushHandler"/> class.</summary>
     public SemanticTokensPushHandler(
@@ -35,8 +38,10 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null,
-        IPushedSemanticTokens? pushedTokens = null)
+        IPushedSemanticTokens? pushedTokens = null,
+        IDocumentBufferService? buffers = null)
     {
+        _buffers = buffers;
         _languageServer = languageServer;
         _tokenService = tokenService;
         _clientIde = clientIde;
@@ -57,6 +62,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
 
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollSemanticTokens, notification.Uri);
 
+        var generationBefore = CurrentGeneration(notification.Uri);
         var tokens = await _tokenService
             .GetSemanticTokensAsync(notification.Uri, notification.Version, cancellationToken)
             .ConfigureAwait(false);
@@ -64,7 +70,21 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
             return;
 
         var uri = notification.Uri.ToString();
-        var push = _pushedTokens.Plan(uri, tokens.Data.ToArray());
+
+        // The planner needs the text the tokens were computed from. The tokens come from the buffer as it was
+        // when the service looked; when the buffer moved on meanwhile, which text they describe is unknown,
+        // so the push is the full set.
+        string? text = null;
+        if (_buffers is not null)
+        {
+            if (_buffers.TryGet(notification.Uri, out var buffer) && buffer is not null
+                && generationBefore == buffer.Generation)
+                text = buffer.Text;
+            else
+                _pushedTokens.Forget(uri);
+        }
+
+        var push = _pushedTokens.Plan(uri, tokens.Data.ToArray(), text);
         if (push.Unchanged)
         {
             _logger.LogVerbose(
@@ -95,4 +115,9 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
             ? $"SemanticTokensPushHandler: pushed {push.Data.Length / 5} of {push.TokenCount} tokens (lines {push.StartLine}-{push.EndLine}) for {uri} v{notification.Version}"
             : $"SemanticTokensPushHandler: pushed {push.TokenCount} tokens for {uri} v{notification.Version}");
     }
+
+    private long? CurrentGeneration(DocumentUri uri)
+        => _buffers is not null && _buffers.TryGet(uri, out var buffer) && buffer is not null
+            ? buffer.Generation
+            : null;
 }

@@ -158,6 +158,11 @@ the lines below a line that was just inserted or deleted keep their colours wher
 the colours of the text that used to be there until the server's push arrives. The push, computed from the new text,
 then replaces the tokens of the lines it covers as before.
 
+Because the client's tokens on an edited line may have been dropped or resized by that move, the server's ranged
+push (`PushedSemanticTokens`) always covers the lines whose text differs from the text of the previous push, even
+where the new tokens equal the old ones; it keeps the last pushed text per document for this. When it cannot tell
+which text the tokens were computed from (the buffer changed while they were being computed) it sends the full set.
+
 **CodeLens on `.feature`.** An in-process `ITaggerProvider` places tags and out-of-process data-point providers call back
 into `devenv.exe` through `ICodeLensCallbackService` listeners. Hook lenses use two data-point providers sharing one
 line-scoped tag.
