@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -146,8 +147,9 @@ public class LspServerConnectionServiceTests
             createInterceptingPipe: (_, sendInterceptors, _, _) =>
             {
                 inspectorLogger = sendInterceptors.OfType<LspInspectorLogger>().Single();
-                throw new InvalidOperationException("Simulated pipe construction failure (issue #1024).");
-            });
+                throw new InvalidOperationException("Simulated pipe construction failure.");
+            },
+            isInspectorLogEnabled: () => true);
 
         try
         {
@@ -176,6 +178,99 @@ public class LspServerConnectionServiceTests
             service.Dispose();
             try { if (watcher is { HasExited: false }) watcher.Kill(); } catch { /* best-effort */ }
             watcher?.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("off", false)]
+    [InlineData("0", false)]
+    [InlineData("false", false)]
+    [InlineData("nonsense", false)]
+    [InlineData("messages", true)]
+    [InlineData("verbose", true)]
+    [InlineData("VERBOSE", true)]
+    [InlineData("1", true)]
+    [InlineData("true", true)]
+    public void The_inspector_log_is_on_only_for_a_recognised_enabling_value(string? value, bool expected)
+    {
+        InspectorLogSetting.IsEnabledValue(value).Should().Be(expected);
+    }
+
+    [Fact]
+    public void WithInspectorLogger_puts_the_logger_first_and_omits_it_when_absent()
+    {
+        var other = new ShutdownHandshakeInterceptor(NullLogger<ShutdownHandshakeInterceptor>.Instance);
+        var logger = new LspInspectorLogger(Path.Combine(Path.GetTempPath(), $"insp-{Guid.NewGuid():N}.log"), NullLogger<LspInspectorLogger>.Instance);
+        try
+        {
+            LspServerConnectionService.WithInspectorLogger(logger, other).Should().Equal(logger, other);
+            LspServerConnectionService.WithInspectorLogger(null, other).Should().Equal(other);
+        }
+        finally
+        {
+            logger.Dispose();
+            File.Delete(logger.LogFilePath);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_setting_read_at_server_start_decides_whether_either_pipeline_has_a_logger(bool enabled)
+    {
+#pragma warning disable VSSDK005 // No VS host here: there is no ThreadHelper singleton to share.
+        var joinableTaskFactory = new JoinableTaskContext().Factory;
+#pragma warning restore VSSDK005
+        Process? watcher = null;
+        IReadOnlyList<ILspMessageInterceptor>? sendList = null, receiveList = null;
+        LspInspectorLogger? created = null;
+
+        var service = new LspServerConnectionService(
+            NullLogger<LspServerConnectionService>.Instance,
+            NullLoggerFactory.Instance,
+            new StepCodeLensState(),
+            joinableTaskFactory,
+            serverExe: typeof(LspServerConnectionServiceTests).Assembly.Location,
+            startProcess: psi =>
+            {
+                psi.FileName  = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+                psi.Arguments = "/d /q";
+                var process = Process.Start(psi)!;
+                watcher = Process.GetProcessById(process.Id);
+                return process;
+            },
+            createInterceptingPipe: (_, send, receive, _) =>
+            {
+                sendList    = send;
+                receiveList = receive;
+                created     = send.OfType<LspInspectorLogger>().SingleOrDefault();
+                throw new InvalidOperationException("Simulated pipe construction failure.");
+            },
+            isInspectorLogEnabled: () => enabled);
+
+        try
+        {
+            await service.GetConnectionAsync();
+
+            using (new AssertionScope())
+            {
+                sendList.Should().NotBeNull();
+                receiveList.Should().NotBeNull();
+                sendList!.OfType<LspInspectorLogger>().Any().Should().Be(enabled);
+                receiveList!.OfType<LspInspectorLogger>().Any().Should().Be(enabled);
+                if (enabled)
+                    sendList.OfType<LspInspectorLogger>().Single().Should().BeSameAs(receiveList.OfType<LspInspectorLogger>().Single());
+            }
+        }
+        finally
+        {
+            service.Dispose();
+            try { if (watcher is { HasExited: false }) watcher.Kill(); } catch { /* best-effort */ }
+            watcher?.Dispose();
+            if (created is not null)
+                try { File.Delete(created.LogFilePath); } catch { /* best-effort */ }
         }
     }
 }

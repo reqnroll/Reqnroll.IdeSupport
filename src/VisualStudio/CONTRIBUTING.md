@@ -119,10 +119,16 @@ for the full naming/format convention shared across every log in this family):
   discovery, handler activity), at the level set by `--log-level` (see below). Appended across
   server process launches sharing a day and PID is generally stable per VS session, but check the
   `=== Reqnroll LSP Server started — …, PID N ===` banner line when correlating multiple restarts.
-- `reqnroll-vs-inspector-<datetime>.log` — client-side JSON-RPC trace from `LspInspectorLogger` on
-  the `LspInterceptingPipe`, one line per message. This is the source of truth for what actually
-  crossed the wire (legend negotiation, semanticTokens requests/responses, custom `reqnroll/*`
+- `reqnroll-vs-inspector-<datetime>.log` — **off by default**; set `REQNROLLVS_TRACE_SERVER` to
+  `messages` (or `verbose`, `1`, `true`) before launching Visual Studio to write it. Read once when the
+  server process starts, so restart VS (or the server) after changing it; any other value, including
+  `off`, writes nothing. The names mirror VS Code's `reqnroll.trace.server`; VS records full message
+  bodies either way, so `messages` and `verbose` behave the same. Client-side JSON-RPC trace from
+  `LspInspectorLogger` on the `LspInterceptingPipe`, one line per message, flushed on every write and
+  never rotated, so it grows quickly on a large `.feature` file. This is the source of truth for what
+  actually crossed the wire (legend negotiation, semanticTokens requests/responses, custom `reqnroll/*`
   traffic) — [lsp-inspector-tool](https://github.com/microsoft/lsp-inspector) compatible format.
+  When it is off the logger is not constructed, so no file is created and nothing depends on it.
 - `reqnroll-lsp-connector-<date>-<pid>.log` — the **out-of-process Connector's** own log, one file
   per discovery-run child process. Unlike the logs above, this one usually doesn't exist: it's
   buffered in memory and only written when a discovery run actually fails, or when `--log-level` is
@@ -137,8 +143,8 @@ for the full naming/format convention shared across every log in this family):
   full format.
 
 When debugging coloring/binding/CodeLens behavior, the ext-debug and server-debug logs together
-usually tell the whole story; the inspector log is what to reach for when you suspect a protocol
-mismatch specifically, and the connector log (when present) is the first place to look for a
+usually tell the whole story; the inspector log (enable it first, see above) is what to reach for when you
+suspect a protocol mismatch specifically, and the connector log (when present) is the first place to look for a
 discovery-specific failure — its "Discovery complete"/"Discovery failed" line in the server log
 carries a `(connector pid=N)` suffix matching that file's own PID.
 

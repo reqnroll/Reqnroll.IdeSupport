@@ -58,6 +58,7 @@ internal sealed class LspServerConnectionService : IDisposable
     private readonly string _serverExe;
     private readonly Func<ProcessStartInfo, Process?> _startProcess;
     private readonly Func<IDuplexPipe, IReadOnlyList<ILspMessageInterceptor>, IReadOnlyList<ILspMessageInterceptor>, ILogger<LspInterceptingPipe>, LspInterceptingPipe> _createInterceptingPipe;
+    private readonly Func<bool> _isInspectorLogEnabled;
 
     // JoinableTask (not a plain Task) so GetConnectionAsync's await is JTF-aware — avoids the
     // VSTHRD003 "awaiting a foreign task" analyzer error for a task started outside the awaiting
@@ -125,7 +126,8 @@ internal sealed class LspServerConnectionService : IDisposable
             ResolveServerExePath(typeof(LspServerConnectionService).Assembly.Location),
             Process.Start,
             (serverPipe, sendInterceptors, receiveInterceptors, pipeLogger) =>
-                new LspInterceptingPipe(serverPipe, sendInterceptors, receiveInterceptors, pipeLogger))
+                new LspInterceptingPipe(serverPipe, sendInterceptors, receiveInterceptors, pipeLogger),
+            InspectorLogSetting.IsEnabled)
     {
     }
 
@@ -141,7 +143,8 @@ internal sealed class LspServerConnectionService : IDisposable
         Microsoft.VisualStudio.Threading.JoinableTaskFactory joinableTaskFactory,
         string serverExe,
         Func<ProcessStartInfo, Process?> startProcess,
-        Func<IDuplexPipe, IReadOnlyList<ILspMessageInterceptor>, IReadOnlyList<ILspMessageInterceptor>, ILogger<LspInterceptingPipe>, LspInterceptingPipe> createInterceptingPipe)
+        Func<IDuplexPipe, IReadOnlyList<ILspMessageInterceptor>, IReadOnlyList<ILspMessageInterceptor>, ILogger<LspInterceptingPipe>, LspInterceptingPipe> createInterceptingPipe,
+        Func<bool> isInspectorLogEnabled)
     {
         _logger                 = logger                 ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory          = loggerFactory          ?? throw new ArgumentNullException(nameof(loggerFactory));
@@ -150,6 +153,7 @@ internal sealed class LspServerConnectionService : IDisposable
         _serverExe              = serverExe              ?? throw new ArgumentNullException(nameof(serverExe));
         _startProcess           = startProcess           ?? throw new ArgumentNullException(nameof(startProcess));
         _createInterceptingPipe = createInterceptingPipe ?? throw new ArgumentNullException(nameof(createInterceptingPipe));
+        _isInspectorLogEnabled  = isInspectorLogEnabled  ?? throw new ArgumentNullException(nameof(isInspectorLogEnabled));
 
         _logger.LogInformation("LspServerConnectionService: instance created — starting server eagerly.");
 
@@ -623,12 +627,15 @@ internal sealed class LspServerConnectionService : IDisposable
                 _serverProcess.StandardOutput.BaseStream.UsePipeReader(),
                 _serverProcess.StandardInput.BaseStream.UsePipeWriter());
 
-            // Build the LSP Inspector log file path, unique per session.
-            var logFile = Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), $"reqnroll-vs-inspector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
-            _logger.LogInformation(
-                "LspServerConnectionService: server process started (PID {ProcessId}). Inspector log: {LogFile}",
-                _serverProcess.Id, logFile);
-            _inspectorLogger = new LspInspectorLogger(logFile, _loggerFactory.CreateLogger<LspInspectorLogger>());
+            // The LSP Inspector log is opt-in: when off, no logger exists and no file is created.
+            if (_isInspectorLogEnabled())
+            {
+                var logFile = Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), $"reqnroll-vs-inspector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+                _logger.LogInformation(
+                    "LspServerConnectionService: inspector log enabled by {Setting}: {LogFile}",
+                    InspectorLogSetting.EnvironmentVariable, logFile);
+                _inspectorLogger = new LspInspectorLogger(logFile, _loggerFactory.CreateLogger<LspInspectorLogger>());
+            }
 
             // Observes semanticTokens traffic (both directions) and caches the decoded tokens so the
             // editor classifier can colour .feature files with Reqnroll's custom classifications,
@@ -671,8 +678,8 @@ internal sealed class LspServerConnectionService : IDisposable
             _shutdownHandshakeInterceptor = new ShutdownHandshakeInterceptor(
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
-            // Send pipeline:   VS → [logger, activity, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
-            // Receive pipeline: Server → [logger, activity, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
+            // Send pipeline:   VS → [(logger, when enabled), activity, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
+            // Receive pipeline: Server → [(logger, when enabled), activity, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
             // activity is on both pipelines: send records each request, receive removes it on its response.
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
             // push. It is not on the send pipeline: invalidating per .cs didChange would have VS
@@ -680,8 +687,9 @@ internal sealed class LspServerConnectionService : IDisposable
             // so the debounced, server-pushed signal is the only trigger.
             // shutdownHandshake is on both pipelines: send captures the outgoing shutdown request id;
             // receive watches for the matching response.
-            var sendInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, activityTracker, shadowDocumentFilterInterceptor, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
+            // The logger, when present, goes first so it records a message before any interceptor consumes it.
+            var sendInterceptors = WithInspectorLogger(_inspectorLogger,
+                activityTracker, shadowDocumentFilterInterceptor, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor);
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.
@@ -689,8 +697,8 @@ internal sealed class LspServerConnectionService : IDisposable
             var telemetryInterceptor = new TelemetryEventInterceptor(
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             _telemetryInterceptor = telemetryInterceptor;
-            var receiveInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
+            var receiveInterceptors = WithInspectorLogger(_inspectorLogger,
+                activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor);
 
             _interceptingPipe = _createInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());
@@ -711,6 +719,11 @@ internal sealed class LspServerConnectionService : IDisposable
             return null;
         }
     }
+
+    /// <summary>The interceptor list, with the inspector logger first when there is one.</summary>
+    internal static ILspMessageInterceptor[] WithInspectorLogger(
+        ILspMessageInterceptor? inspectorLogger, params ILspMessageInterceptor[] interceptors) =>
+        inspectorLogger is null ? interceptors : [inspectorLogger, .. interceptors];
 
     /// <summary>
     /// Stops the server process a failed <see cref="StartAsync"/> may already have started, and
