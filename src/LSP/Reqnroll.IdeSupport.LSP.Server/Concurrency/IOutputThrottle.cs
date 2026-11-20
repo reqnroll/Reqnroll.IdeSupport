@@ -46,11 +46,45 @@ public interface IOutputThrottle
     void Cancel(string key);
 }
 
-/// <summary>The interval shared by the outputs that are throttled while a document is being edited.</summary>
-public static class OutputThrottleDefaults
+/// <summary>
+/// Chooses how long the outputs that are throttled while a document is being edited wait between runs, from the
+/// size of the document.
+/// </summary>
+/// <remarks>
+/// A small or medium document needs no throttle: its outputs are cheap for the client to take in, and waiting would
+/// only delay them. The cost of one output grows with the size of the document, so the interval is zero up to
+/// <see cref="RampStartLines"/> lines, grows linearly to <see cref="MaxInterval"/> at <see cref="RampEndLines"/> lines,
+/// and stays there for anything larger. A zero interval runs every request at once.
+/// </remarks>
+public static class OutputThrottlePolicy
 {
-    /// <summary>At most one run per document and output per this interval while edits keep arriving.</summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(250);
+    /// <summary>Documents with at most this many lines are never throttled.</summary>
+    public const int RampStartLines = 4_000;
+
+    /// <summary>Documents with at least this many lines get <see cref="MaxInterval"/>.</summary>
+    public const int RampEndLines = 10_000;
+
+    /// <summary>The longest wait between runs, applied from <see cref="RampEndLines"/> lines upward.</summary>
+    public static readonly TimeSpan MaxInterval = TimeSpan.FromMilliseconds(450);
+
+    /// <summary>The interval to wait between runs for a document of <paramref name="lineCount"/> lines.</summary>
+    public static TimeSpan IntervalFor(int lineCount)
+    {
+        if (lineCount <= RampStartLines)
+            return TimeSpan.Zero;
+
+        if (lineCount >= RampEndLines)
+            return MaxInterval;
+
+        var milliseconds = MaxInterval.TotalMilliseconds * (lineCount - RampStartLines) / (RampEndLines - RampStartLines);
+        return TimeSpan.FromMilliseconds(Math.Round(milliseconds));
+    }
+
+    /// <summary>The interval to wait between runs for a document with the given text.</summary>
+    public static TimeSpan IntervalFor(string text) => IntervalFor(CountLines(text));
+
+    /// <summary>The number of lines in <paramref name="text"/>; the empty text has one.</summary>
+    public static int CountLines(string text) => text.AsSpan().Count('\n') + 1;
 }
 
 /// <summary>The throttle keys of the outputs that are throttled per document.</summary>

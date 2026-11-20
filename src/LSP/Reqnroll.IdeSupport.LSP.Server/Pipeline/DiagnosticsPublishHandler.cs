@@ -72,12 +72,12 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         _clientIde             = clientIde;
     }
 
-    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by re-aggregating diagnostics for the affected document and pushing an updated <c>textDocument/publishDiagnostics</c> notification to the client. For a client whose behaviours say so (<see cref="Reqnroll.IdeSupport.LSP.Core.Ide.IdeBehaviours.ThrottlesOutputWhileEditing"/>), the publish runs at most once per <see cref="OutputThrottleDefaults.Interval"/> while edits keep arriving and always carries the latest state.</summary>
+    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by re-aggregating diagnostics for the affected document and pushing an updated <c>textDocument/publishDiagnostics</c> notification to the client. For a client whose behaviours say so (<see cref="Reqnroll.IdeSupport.LSP.Core.Ide.IdeBehaviours.ThrottlesOutputWhileEditing"/>), the publish runs at most once per <see cref="OutputThrottlePolicy"/> interval (zero for small documents) while edits keep arriving and always carries the latest state.</summary>
     public Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
         => _clientIde?.Behaviours.ThrottlesOutputWhileEditing == true
             ? _throttle.RunThrottledAsync(
                 OutputThrottleKeys.Diagnostics(notification.Uri),
-                OutputThrottleDefaults.Interval,
+                _documentBufferService.ThrottleInterval(notification.Uri),
                 () => PublishDiagnosticsAsync(notification))
             : PublishDiagnosticsAsync(notification);
 
