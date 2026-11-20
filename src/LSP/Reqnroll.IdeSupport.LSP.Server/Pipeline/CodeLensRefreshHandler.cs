@@ -31,7 +31,14 @@ public class CodeLensRefreshHandler :
     INotificationHandler<ClosedFileMatchCacheChangedNotification>
 {
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(500);
+
+    // Visual Studio blanks every lens in the file while it fetches them again, so a refresh after each pause in typing
+    // makes the lenses flicker out for as long as someone keeps editing. Waiting for a longer pause keeps them on
+    // screen until the edits stop.
+    private static readonly TimeSpan CustomRefreshDebounceDelay = TimeSpan.FromSeconds(2);
     private const string DebounceKey = nameof(CodeLensRefreshHandler);
+
+    private TimeSpan RefreshDelay => _clientIde.Behaviours.UsesCustomCodeLensRefresh ? CustomRefreshDebounceDelay : DebounceDelay;
 
     private readonly ILanguageServerFacade _languageServer;
     private readonly ClientIdeContext _clientIde;
@@ -59,7 +66,7 @@ public class CodeLensRefreshHandler :
     {
         _logger.LogVerbose($"MatchCacheChanged: scheduling code lens refresh for {notification.Uri} v{notification.Version}");
 
-        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
+        _debouncer.Schedule(DebounceKey, RefreshDelay, SendRefreshAsync);
         return Task.CompletedTask;
     }
 
@@ -68,7 +75,7 @@ public class CodeLensRefreshHandler :
     {
         _logger.LogVerbose($"ClosedFileMatchCacheChanged: scheduling code lens refresh for {notification.Uri}");
 
-        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
+        _debouncer.Schedule(DebounceKey, RefreshDelay, SendRefreshAsync);
         return Task.CompletedTask;
     }
 
