@@ -102,6 +102,7 @@ sequenceDiagram
 | `TextDocumentSyncHandler` | `…LSP.Server/Features/TextSync` | One sync handler for `.feature` and `.cs`, routed by extension. |
 | `CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, `RefreshDebouncer` | `…LSP.Server/Pipeline`, `Concurrency` | Debounced refresh pushes to clients. |
 | `RefreshGate` | `…LSP.Server/Concurrency` | Keeps at most one `workspace/semanticTokens/refresh` and one `workspace/inlayHint/refresh` request outstanding. A request that arrives while one is unanswered is folded into one that follows the answer, so a client that answers slowly is never buried under requests for states that are already out of date; an unanswered request is given up on after 60 s. `SemanticTokensRefreshHandler` also skips clients with `RequiresPushedSemanticTokens` (Visual Studio), and `CodeLensRefreshHandler` waits 2 s instead of 500 ms for clients with `UsesCustomCodeLensRefresh`. |
+| `ParseCoordinator` | `…LSP.Server/Parsing` | Per-document slot for the work `didOpen`/`didChange` and the registry, configuration and activation reparses hand off the Serial lane: at most one piece of work running and one waiting per document, and newer work replaces the work that was waiting, so a burst of edits costs the running parse plus one more rather than one per edit. `WaitForReadyAsync` waits for the latest work. `FeatureDocumentReparser` does not announce a document version the buffer has already moved on from; the newer edit's own reparse does. |
 
 ## 6. Behaviour and contracts
 

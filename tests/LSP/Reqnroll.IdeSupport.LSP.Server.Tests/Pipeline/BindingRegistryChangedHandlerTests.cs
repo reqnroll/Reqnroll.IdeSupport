@@ -309,8 +309,8 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         // ReparseOpenFilesAsync now schedules each buffer's reparse through
         // IParseCoordinator instead of awaiting it inline.
         await _parseCoordinator.WaitForReadyAsync(ownedUri, CancellationToken.None);
-        await _reparser.Received(1).ReparseOpenDocumentAsync(ownedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
-        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(foreignUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseIfOpenAsync(ownedUri, Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseIfOpenAsync(foreignUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -353,7 +353,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
-        await _reparser.Received(1).ReparseOpenDocumentAsync(linkedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseIfOpenAsync(linkedUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -375,8 +375,8 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(inFolderUri, CancellationToken.None);
-        await _reparser.Received(1).ReparseOpenDocumentAsync(inFolderUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
-        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(outsideUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseIfOpenAsync(inFolderUri, Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseIfOpenAsync(outsideUri, Arg.Any<CancellationToken>());
     }
 
     // ── IsFullReplacement = false does not trigger closed-file scan ───────────

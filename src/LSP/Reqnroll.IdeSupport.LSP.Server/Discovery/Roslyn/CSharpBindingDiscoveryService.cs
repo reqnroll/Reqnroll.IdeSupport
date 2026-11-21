@@ -50,14 +50,14 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
     public async Task UpdateFromSourceAsync(DocumentUri uri, string text, bool isOpen, CancellationToken cancellationToken)
     {
         // Staleness short-circuit, mirroring GherkinDocumentTaggerService.ParseAsync's
-        // version-mismatch guard for the .feature path: IParseCoordinator chains every scheduled
-        // didOpen/didChange rather than cancelling superseded ones (its own contract requires
-        // that -- see its remarks), so on rapid typing several of these can be queued at once. If
+        // version-mismatch guard for the .feature path: IParseCoordinator keeps at most one piece
+        // of work waiting per file, but the call that is already running cannot be cancelled, and
+        // one that was waiting when the text changed again may still be the one that starts. If
         // the live-text cache no longer holds the exact text this call was scheduled with, a
-        // later edit already landed and updated it first, and that later call -- chained to run
-        // after this one -- will do the real (and only relevant) parse. Reparsing this superseded
-        // text here would just be a full Roslyn parse + registry patch for a result nothing will
-        // ever observe. Every caller of this method updates the cache with its own text before
+        // later edit already landed and updated it first, and that later call -- which replaces
+        // this one's slot or runs after it -- will do the real (and only relevant) parse.
+        // Reparsing this superseded text here would just be a full Roslyn parse + registry patch
+        // for a result nothing will ever observe. Every caller of this method updates the cache with its own text before
         // calling in (TextDocumentSyncHandler synchronously, RenamePostApplyCoordinator
         // explicitly), so a mismatch here can only mean a newer write already happened; no cache
         // entry at all (TryGet returns false) means nothing to compare against, so proceed.
