@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Concurrency;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
@@ -50,6 +51,35 @@ public class SemanticTokensRefreshHandlerTests : IDisposable
         _languageServer.Client.When(c => c.SendRequest(Arg.Any<string>())).Do(_ => sent.TrySetResult());
 
         await CreateSut().Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.SemanticTokensRefresh);
+    }
+
+    [Fact]
+    public async Task Handle_never_asks_a_client_that_gets_its_tokens_pushed_to_refresh_them()
+    {
+        SetRefreshSupport(true);
+
+        await new SemanticTokensRefreshHandler(_languageServer, _logger, _debouncer, clientIde: new ClientIdeContext("visualstudio"))
+            .Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
+        await Task.Delay(700);
+
+        _languageServer.Client.DidNotReceive().SendRequest(WorkspaceNames.SemanticTokensRefresh);
+    }
+
+    [Theory]
+    [InlineData("vscode")]
+    [InlineData("rider")]
+    [InlineData(null)]
+    public async Task Handle_still_asks_other_clients_to_refresh(string? ide)
+    {
+        SetRefreshSupport(true);
+        var sent = new TaskCompletionSource();
+        _languageServer.Client.When(c => c.SendRequest(Arg.Any<string>())).Do(_ => sent.TrySetResult());
+
+        await new SemanticTokensRefreshHandler(_languageServer, _logger, _debouncer, clientIde: new ClientIdeContext(ide))
+            .Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         _languageServer.Client.Received(1).SendRequest(WorkspaceNames.SemanticTokensRefresh);

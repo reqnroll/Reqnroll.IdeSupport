@@ -182,6 +182,8 @@ public static class ServiceCollectionExtensions
             // Per-document rate limit for the outputs Visual Studio processes on its UI thread (diagnostics and
             // token pushes). A singleton for the same reason as the debouncer above.
             .AddSingleton<IOutputThrottle, OutputThrottle>()
+            // Keeps one refresh request of each kind outstanding at most, so a slow client is not buried under them.
+            .AddSingleton<IRefreshGate, RefreshGate>()
             // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
             // preserving correctness for pull handlers with no refresh capability —
             // see IParseCoordinator's remarks. Singleton for the same reason as

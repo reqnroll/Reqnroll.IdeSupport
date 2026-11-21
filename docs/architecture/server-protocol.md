@@ -101,6 +101,7 @@ sequenceDiagram
 | `SemanticTokensClassificationInterceptor`, `SemanticTokenClassificationStore`, `GherkinSemanticClassifier` | `src/VisualStudio/…Extension/Classification` | Visual Studio side of the push path. |
 | `TextDocumentSyncHandler` | `…LSP.Server/Features/TextSync` | One sync handler for `.feature` and `.cs`, routed by extension. |
 | `CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, `RefreshDebouncer` | `…LSP.Server/Pipeline`, `Concurrency` | Debounced refresh pushes to clients. |
+| `RefreshGate` | `…LSP.Server/Concurrency` | Keeps at most one `workspace/semanticTokens/refresh` and one `workspace/inlayHint/refresh` request outstanding. A request that arrives while one is unanswered is folded into one that follows the answer, so a client that answers slowly is never buried under requests for states that are already out of date; an unanswered request is given up on after 60 s. `SemanticTokensRefreshHandler` also skips clients with `RequiresPushedSemanticTokens` (Visual Studio), and `CodeLensRefreshHandler` waits 2 s instead of 500 ms for clients with `UsesCustomCodeLensRefresh`. |
 
 ## 6. Behaviour and contracts
 

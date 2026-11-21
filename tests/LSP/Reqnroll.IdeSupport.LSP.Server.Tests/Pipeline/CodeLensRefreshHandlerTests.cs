@@ -128,13 +128,36 @@ public class CodeLensRefreshHandlerTests : IDisposable
     [Fact]
     public async Task A_burst_of_closed_file_and_open_file_notifications_sends_one_refresh()
     {
+        var sent = new TaskCompletionSource();
+        _languageServer.When(l => l.SendNotification(Arg.Any<string>(), Arg.Any<object>()))
+            .Do(_ => sent.TrySetResult());
         var handler = CreateSut(new ClientIdeContext("visualstudio"));
 
         await handler.Handle(new ClosedFileMatchCacheChangedNotification(DocumentUri.From("file:///a.feature")), CancellationToken.None);
         await handler.Handle(new ClosedFileMatchCacheChangedNotification(DocumentUri.From("file:///b.feature")), CancellationToken.None);
         await handler.Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///c.feature"), 1), CancellationToken.None);
-        await Task.Delay(900);
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+        await Task.Delay(300);
 
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRefreshCodeLens, Arg.Any<RefreshCodeLensParams>());
+    }
+
+    [Fact]
+    public async Task For_visual_studio_the_refresh_waits_for_a_longer_pause_than_for_other_clients()
+    {
+        var sent = new TaskCompletionSource();
+        _languageServer.When(l => l.SendNotification(Arg.Any<string>(), Arg.Any<object>()))
+            .Do(_ => sent.TrySetResult());
+
+        await CreateSut(new ClientIdeContext("visualstudio"))
+            .Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
+        await Task.Delay(1200);
+
+        _languageServer.DidNotReceive().SendNotification(
+            CustomLspMethodNames.ReqnrollRefreshCodeLens, Arg.Any<RefreshCodeLensParams>());
+
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
         _languageServer.Received(1).SendNotification(
             CustomLspMethodNames.ReqnrollRefreshCodeLens, Arg.Any<RefreshCodeLensParams>());
     }

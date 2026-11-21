@@ -30,18 +30,21 @@ public class InlayHintRefreshHandler : INotificationHandler<MatchCacheChangedNot
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IRefreshDebouncer _debouncer;
+    private readonly IRefreshGate? _gate;
 
     /// <summary>Initializes a new instance of the <see cref="InlayHintRefreshHandler"/> class.</summary>
     public InlayHintRefreshHandler(
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
         IRefreshDebouncer debouncer,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IRefreshGate? gate = null)
     {
         _languageServer = languageServer;
         _logger = logger;
         _debouncer = debouncer;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _gate = gate;
     }
 
     /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by debouncing and, if the client supports it, sending a <c>workspace/inlayHint/refresh</c> request.</summary>
@@ -54,9 +57,17 @@ public class InlayHintRefreshHandler : INotificationHandler<MatchCacheChangedNot
 
         _logger.LogVerbose($"MatchCacheChanged: scheduling inlay hint refresh for {notification.Uri} v{notification.Version}");
 
-        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
+        _debouncer.Schedule(DebounceKey, DebounceDelay, GatedSendRefreshAsync);
         return Task.CompletedTask;
     }
+
+    // With the gate, at most one refresh request is outstanding at a time: a client that answers slowly (Visual Studio
+    // in a very large file) is told about the latest change when it is ready, not buried under requests for states
+    // that are already out of date.
+    private Task GatedSendRefreshAsync(CancellationToken cancellationToken) =>
+        _gate is null
+            ? SendRefreshAsync(cancellationToken)
+            : _gate.RunAsync(DebounceKey, SendRefreshAsync);
 
     private async Task SendRefreshAsync(CancellationToken cancellationToken)
     {
