@@ -397,4 +397,29 @@ public class ParseCoordinatorTests
 
         _ran.Should().Equal("after");
     }
+
+    [Fact]
+    public async Task A_failure_while_reporting_a_failure_releases_the_waiters_and_leaves_the_document_free_for_new_work()
+    {
+        // The logger throwing while the coordinator reports a fault of the work is the one way the run loop itself can
+        // fail. The entry for the document must not be left behind, or every later parse of it would wait forever.
+        _logger.When(l => l.Log(Arg.Is<LogMessage>(m => m.Level == System.Diagnostics.TraceLevel.Warning))).Do(_ => throw new InvalidOperationException("logger"));
+        var sut = CreateSut();
+        var mayFail = new TaskCompletionSource();
+
+        sut.Schedule(UriA, async _ =>
+        {
+            await mayFail.Task;
+            throw new InvalidOperationException("boom");
+        });
+        sut.Schedule(UriA, Records("dropped"));
+        var waiter = sut.WaitForReadyAsync(UriA, CancellationToken.None);
+
+        mayFail.SetResult();
+        await waiter.WaitAsync(TimeSpan.FromSeconds(5));
+
+        sut.Schedule(UriA, Records("fresh"));
+        await sut.WaitForReadyAsync(UriA, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        _ran.Should().Equal("fresh");
+    }
 }

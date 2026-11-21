@@ -89,9 +89,46 @@ public sealed class ParseCoordinator : IParseCoordinator
         return waitFor is not null ? waitFor.WaitAsync(cancellationToken) : Task.CompletedTask;
     }
 
+    // Nobody observes this task, and the entry in _states must not outlive it: an entry left behind would make
+    // every later Schedule for the URI wait behind work that never runs, and WaitForReadyAsync callers would wait
+    // for a completion nobody sets. RunSafelyAsync already contains faults of the work itself, so this only
+    // catches what goes wrong around it (for example the logger throwing while reporting such a fault).
+    private async Task RunAsync(string key, DocumentUri uri, State state, Func<CancellationToken, Task> work)
+    {
+        try
+        {
+            await RunUntilIdleAsync(key, uri, state, work).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Abandon(key, state);
+            try
+            {
+                _logger.LogWarning($"[ParseCoordinator] Parse scheduling for '{uri}' stopped unexpectedly and dropped any waiting work: {ex.Message}");
+            }
+            catch
+            {
+                // Nothing left to report to; the entry has been cleaned up, which is what matters.
+            }
+        }
+    }
+
+    // Removes the entry (if it is still this run's) and releases everyone waiting on it, so the next Schedule starts afresh.
+    private void Abandon(string key, State state)
+    {
+        lock (_gate)
+        {
+            if (_states.TryGetValue(key, out var current) && ReferenceEquals(current, state))
+                _states.Remove(key);
+        }
+
+        state.RunningDone.TrySetResult();
+        state.PendingDone?.TrySetResult();
+    }
+
     // Runs the first piece of work inline (up to its first await), then whatever has been left in the waiting slot,
     // one at a time, until nothing is waiting.
-    private async Task RunAsync(string key, DocumentUri uri, State state, Func<CancellationToken, Task> work)
+    private async Task RunUntilIdleAsync(string key, DocumentUri uri, State state, Func<CancellationToken, Task> work)
     {
         while (true)
         {
