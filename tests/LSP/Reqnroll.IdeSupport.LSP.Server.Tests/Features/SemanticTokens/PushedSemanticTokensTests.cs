@@ -223,6 +223,37 @@ public class PushedSemanticTokensTests
         push.TokenCount.Should().Be(4);
     }
 
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    [InlineData("\r")]
+    public void The_edited_line_is_found_whatever_the_line_endings_are(string lineEnding)
+    {
+        string Text(string third) => string.Join(lineEnding, "Feature: a", "Given b", third, "Then d");
+
+        var tokens = Encode(Tok(0, 0), Tok(1, 0), Tok(2, 0), Tok(3, 0));
+        _sut.Plan(Uri, tokens, Text("And c"));
+
+        var push = _sut.Plan(Uri, tokens, Text("And cc"));
+
+        push.IsRanged.Should().BeTrue();
+        push.StartLine.Should().Be(2);
+        push.EndLine.Should().Be(2);
+    }
+
+    [Fact]
+    public void An_edit_that_starts_between_the_halves_of_a_crlf_belongs_to_the_line_the_break_ends()
+    {
+        var tokens = Encode(Tok(0, 0), Tok(1, 0));
+        _sut.Plan(Uri, tokens, "a\rb");
+
+        // The break after "a" becomes "\r\n": the first differing character is the "\n", right after the "\r".
+        var push = _sut.Plan(Uri, tokens, "a\r\nb");
+
+        push.StartLine.Should().Be(0);
+        push.EndLine.Should().Be(0);
+    }
+
     [Fact]
     public void An_edit_on_a_line_without_tokens_needs_no_push()
     {

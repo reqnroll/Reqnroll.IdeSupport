@@ -128,11 +128,34 @@ public sealed class PushedSemanticTokens : IPushedSemanticTokens
             suffix++;
 
         var changedEnd = current.Length - suffix;
-        var first = current.AsSpan(0, prefix).Count('\n');
-        var last = changedEnd > prefix
-            ? current.AsSpan(0, changedEnd - 1).Count('\n')
-            : first;
+        var first = LineOf(current, prefix);
+        var last = changedEnd > prefix ? LineOf(current, changedEnd - 1) : first;
         return (first, last);
+    }
+
+    /// <summary>
+    /// The zero-based line of the character at <paramref name="offset"/>, counting line breaks the way the
+    /// document's own line model does: <c>\n</c>, <c>\r\n</c> and a lone <c>\r</c> each end one line.
+    /// </summary>
+    private static int LineOf(string text, int offset)
+    {
+        var lines = 0;
+        var position = 0;
+        while (position < offset)
+        {
+            var found = text.AsSpan(position, offset - position).IndexOfAny('\r', '\n');
+            if (found < 0)
+                break;
+
+            position += found;
+            var isCarriageReturnOfPair = text[position] == '\r' && position + 1 < text.Length && text[position + 1] == '\n';
+            if (!isCarriageReturnOfPair)
+                lines++;
+
+            position++;
+        }
+
+        return lines;
     }
 
     private static SemanticTokenPush PlanRanged(
