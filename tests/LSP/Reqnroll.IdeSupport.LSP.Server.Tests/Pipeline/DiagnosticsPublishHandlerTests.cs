@@ -45,8 +45,140 @@ public class DiagnosticsPublishHandlerTests
                       .Returns(ProjectBindingRegistry.Invalid);
     }
 
+    private readonly PublishedDiagnosticsCache _cache = new();
+
     private DiagnosticsPublishHandler CreateSut() =>
-        new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger);
+        new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger, _cache);
+
+    private static async Task Publish(DiagnosticsPublishHandler sut, int version = 1) =>
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+    private int PushCount() =>
+        _facade.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(ILanguageServerFacade.SendNotification)
+                                           && c.GetArguments().Any(a => a is PublishDiagnosticsParams));
+
+    private const string Text = "Feature: F\nScenario: S\n    Given step\n";
+
+    private static GherkinDiagnostic Diag(
+        GherkinDiagnosticSeverity severity = GherkinDiagnosticSeverity.Warning, string message = "m", int offset = 0)
+        => MakeDiagnostic(Text, offset, 7, severity, DiagnosticsAggregator.BindingSource, message);
+
+    // ── Skipping unchanged sets ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task Unchanged_set_is_pushed_once()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator(Diag());
+        var sut = CreateSut();
+
+        await Publish(sut, 1);
+        await Publish(sut, 2);
+
+        PushCount().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Changed_set_is_pushed_again_with_its_own_version()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        var sut = CreateSut();
+        SetupAggregator(Diag(message: "a"));
+        await Publish(sut, 1);
+        SetupAggregator(Diag(message: "b"));
+        await Publish(sut, 2);
+
+        PushCount().Should().Be(2);
+        _facade.Received(1).SendNotification(
+            "textDocument/publishDiagnostics", Arg.Is<PublishDiagnosticsParams>(p => p.Version == 2));
+    }
+
+    [Fact]
+    public async Task Severity_only_change_is_pushed()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        var sut = CreateSut();
+        SetupAggregator(Diag(GherkinDiagnosticSeverity.Warning));
+        await Publish(sut);
+        SetupAggregator(Diag(GherkinDiagnosticSeverity.Error));
+        await Publish(sut);
+
+        PushCount().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Non_empty_to_empty_is_pushed_and_repeated_empty_is_skipped()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        var sut = CreateSut();
+        SetupAggregator(Diag());
+        await Publish(sut);
+        SetupAggregator();
+        await Publish(sut);
+        await Publish(sut);
+
+        PushCount().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task First_empty_set_after_open_is_pushed()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator();
+
+        await Publish(CreateSut());
+
+        PushCount().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Reset_on_open_forces_the_next_identical_set_to_be_pushed()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator(Diag());
+        var sut = CreateSut();
+        await Publish(sut);
+
+        _cache.Reset(FeatureUri);
+        await Publish(sut);
+
+        PushCount().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Close_then_reopen_pushes_the_same_set_again()
+    {
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator(Diag());
+        var sut = CreateSut();
+        await Publish(sut);
+
+        SetupNoBuffer();
+        _cache.Evict(FeatureUri);
+        await Publish(sut); // a publish landing after the close sends nothing and creates no entry
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        await Publish(sut);
+
+        PushCount().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Different_documents_are_tracked_independently()
+    {
+        var other = DocumentUri.FromFileSystemPath("/workspace/other.feature");
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        var buffer = new DocumentBuffer(other, 1, "Feature: Y\n", Array.Empty<IdeSupportTag>());
+        _bufferService.TryGet(other, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = buffer; return true; });
+        SetupAggregator(Diag());
+        var sut = CreateSut();
+
+        await Publish(sut);
+        await sut.Handle(new MatchCacheChangedNotification(other, 1), CancellationToken.None);
+        await Publish(sut);
+        await sut.Handle(new MatchCacheChangedNotification(other, 2), CancellationToken.None);
+
+        PushCount().Should().Be(2);
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -92,8 +224,18 @@ public class DiagnosticsPublishHandlerTests
 
     // ── Output throttling ─────────────────────────────────────────────────────
 
+    // Typing changes the diagnostics of the edited line every time; an unchanged set is not published again,
+    // so the throttling tests need each change to produce a different set.
+    private void SetupChangingAggregator()
+    {
+        var calls = 0;
+        _aggregator
+            .Aggregate(Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<FeatureBindingMatchSet>())
+            .Returns(_ => new[] { Diag(message: $"edit {Interlocked.Increment(ref calls)}") });
+    }
+
     private DiagnosticsPublishHandler CreateThrottledSut(string? ide, ManualTimeProvider time) =>
-        new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger,
+        new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger, _cache,
             throttle: new OutputThrottle(_logger, time), clientIde: new ClientIdeContext(ide));
 
     private int PublishesWithVersion(int version) =>
@@ -106,7 +248,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task For_a_throttling_client_a_large_document_publishes_at_once_then_the_latest_state_of_a_burst_once()
     {
         SetupBuffer(Array.Empty<IdeSupportTag>(), LargeText);
-        SetupAggregator();
+        SetupChangingAggregator();
         var time = new ManualTimeProvider();
         var sut = CreateThrottledSut("visualstudio", time);
 
@@ -131,7 +273,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task For_a_throttling_client_a_small_document_publishes_every_change_at_once()
     {
         SetupBuffer(Array.Empty<IdeSupportTag>());
-        SetupAggregator();
+        SetupChangingAggregator();
         var time = new ManualTimeProvider();
         var sut = CreateThrottledSut("visualstudio", time);
 
@@ -146,7 +288,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task For_a_throttling_client_a_later_change_after_a_pause_is_published_at_once()
     {
         SetupBuffer(Array.Empty<IdeSupportTag>(), LargeText);
-        SetupAggregator();
+        SetupChangingAggregator();
         var time = new ManualTimeProvider();
         var sut = CreateThrottledSut("visualstudio", time);
 
@@ -164,7 +306,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task For_a_client_that_does_not_ask_for_throttling_every_change_is_published_at_once(string? ide)
     {
         SetupBuffer(Array.Empty<IdeSupportTag>(), LargeText);
-        SetupAggregator();
+        SetupChangingAggregator();
         var time = new ManualTimeProvider();
         var sut = CreateThrottledSut(ide, time);
 
@@ -451,13 +593,14 @@ public class DiagnosticsPublishHandlerTests
     // ── Idempotency ─────────────────────────────────────────────
 
     [Fact]
-    public async Task Handling_the_same_notification_twice_pushes_the_same_diagnostics_both_times()
+    public async Task Handling_the_same_notification_twice_leaves_the_client_with_the_same_diagnostics()
     {
         // MatchCacheChangedNotification consumers must be idempotent: handling the same
         // notification twice must leave the same observable end state as handling it once.
         // This handler always re-aggregates from current buffer/registry state and pushes the
         // complete diagnostic set, so a duplicate publish (e.g. two debounced triggers landing
-        // for one edit) must produce two identical pushes, not an accumulating or diverging one.
+        // for one edit) must not accumulate or diverge: the second, identical set is not pushed
+        // again, and after a reset (didOpen) the identical set is pushed in full.
         const string featureText = "Feature: F\nScenario: S\n    Given step\n";
         SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator(MakeDiagnostic(featureText, 0, 7, GherkinDiagnosticSeverity.Warning,
@@ -470,6 +613,11 @@ public class DiagnosticsPublishHandlerTests
         var sut = CreateSut();
         var notification = new MatchCacheChangedNotification(FeatureUri, 1);
         await sut.Handle(notification, CancellationToken.None);
+        await sut.Handle(notification, CancellationToken.None);
+
+        captured.Should().HaveCount(1);
+
+        _cache.Reset(FeatureUri);
         await sut.Handle(notification, CancellationToken.None);
 
         captured.Should().HaveCount(2);

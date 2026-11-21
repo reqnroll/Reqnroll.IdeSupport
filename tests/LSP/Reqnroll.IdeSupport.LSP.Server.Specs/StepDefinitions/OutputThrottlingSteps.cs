@@ -40,8 +40,9 @@ public sealed class OutputThrottlingSteps
 
     /// <summary>
     /// Sends <paramref name="count"/> didChange notifications back to back, the way a client does while someone is
-    /// typing. The last revision has a Gherkin parse error and every earlier one is valid, so the diagnostics of the
-    /// final revision can be told apart from those of any earlier one.
+    /// typing. The last revision has a Gherkin parse error and the revisions before it alternate between valid and
+    /// broken, so every edit changes the diagnostics (an unchanged set is not published again), and a lost final
+    /// publish would leave the valid revision before it as the last state the client saw.
     /// </summary>
     [When(@"the feature file ""([^""]*)"" is edited (\d+) times in rapid succession, the last edit introducing a parse error")]
     public void WhenTheFeatureFileIsEditedRapidlyEndingInAParseError(string fileName, int count)
@@ -51,7 +52,10 @@ public sealed class OutputThrottlingSteps
 
         for (var i = 1; i <= count; i++)
         {
-            _ctx.LastDocumentText = (i < count ? ValidRevision(i) : BrokenRevision(i)) + _padding;
+            // Alternate between a valid and a broken revision, ending on a broken one, so that every edit changes
+            // the document's diagnostics: the server does not publish a set the client already holds.
+            var broken = (count - i) % 2 == 0;
+            _ctx.LastDocumentText = (broken ? BrokenRevision(i) : ValidRevision(i)) + _padding;
             _ctx.LastVersion += 1;
             _ctx.Harness.Client.ChangeDocument(uri, _ctx.LastVersion, _ctx.LastDocumentText);
         }

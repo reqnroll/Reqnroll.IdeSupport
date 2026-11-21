@@ -221,6 +221,7 @@ public static class ServiceCollectionExtensions
             // The baseline each push is diffed against must outlive the transient push handler.
             .AddSingleton<IPushedSemanticTokens, PushedSemanticTokens>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
+            .AddSingleton<IPublishedDiagnosticsCache, PublishedDiagnosticsCache>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsPublisher, CSharpDiagnosticsPublisher>()
             .AddSingleton<IFoldingRangeService, FoldingRangeService>()

@@ -33,6 +33,9 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// For shared/linked features the primary owner's match set is used (primary-owner resolution /
 /// shared-feature scoping 2A/2B: LSP provides one result per URI with no project context, so one
 /// owner must be chosen).
+///
+/// A set identical to the one last pushed for the URI is not pushed again
+/// (<see cref="IPublishedDiagnosticsCache"/>): the client already holds it.
 /// </remarks>
 public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheChangedNotification>
 {
@@ -43,6 +46,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
     private readonly IDiagnosticsAggregator   _aggregator;
     private readonly ILanguageServerFacade    _languageServer;
     private readonly IIdeSupportLogger           _logger;
+    private readonly IPublishedDiagnosticsCache _publishedCache;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IOutputThrottle          _throttle;
     private readonly ClientIdeContext?        _clientIde;
@@ -56,6 +60,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         IDiagnosticsAggregator    aggregator,
         ILanguageServerFacade     languageServer,
         IIdeSupportLogger            logger,
+        IPublishedDiagnosticsCache publishedCache,
         IOperationDurationRecorder? recorder = null,
         IOutputThrottle? throttle = null,
         ClientIdeContext? clientIde = null)
@@ -67,6 +72,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         _aggregator            = aggregator;
         _languageServer        = languageServer;
         _logger                = logger;
+        _publishedCache        = publishedCache;
         _recorder              = recorder ?? NullOperationDurationRecorder.Instance;
         _throttle              = throttle ?? NullOutputThrottle.Instance;
         _clientIde             = clientIde;
@@ -121,17 +127,25 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
             .Select(ToLspDiagnostic)
             .ToArray();
 
-        _logger.LogVerbose(
-            $"DiagnosticsPublishHandler: pushing {lspDiagnostics.Length} diagnostic(s) for {uri} v{notification.Version}");
+        // A push replaces the client's set, so an identical set is not sent again. The cache is
+        // reset on didOpen and evicted on didClose; "open" here is the buffer service's view, which
+        // didClose clears before it evicts.
+        var published = _publishedCache.TryPublish(
+            uri,
+            lspDiagnostics,
+            () => _documentBufferService.TryGet(uri, out _),
+            () => _languageServer.SendNotification(
+                LspStandardMethodNames.TextDocumentPublishDiagnostics,
+                new PublishDiagnosticsParams
+                {
+                    Uri         = uri,
+                    Version     = notification.Version,
+                    Diagnostics = new Container<Diagnostic>(lspDiagnostics)
+                }));
 
-        _languageServer.SendNotification(
-            LspStandardMethodNames.TextDocumentPublishDiagnostics,
-            new PublishDiagnosticsParams
-            {
-                Uri         = uri,
-                Version     = notification.Version,
-                Diagnostics = new Container<Diagnostic>(lspDiagnostics)
-            });
+        _logger.LogVerbose(published
+            ? $"DiagnosticsPublishHandler: pushed {lspDiagnostics.Length} diagnostic(s) for {uri} v{notification.Version}"
+            : $"DiagnosticsPublishHandler: {lspDiagnostics.Length} diagnostic(s) for {uri} unchanged or document closed — not pushed.");
 
         return Task.CompletedTask;
     }
