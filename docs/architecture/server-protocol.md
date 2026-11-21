@@ -95,7 +95,9 @@ sequenceDiagram
 | `IdeBehaviours`, `IdeBehavioursResolver` | `src/LSP/…LSP.Core/Ide` | The behaviour flags and the single place they are populated from identity. |
 | `ReqnrollMethodProvider` | `…LSP.Server/Protocol` | Registers the `reqnroll/*` method names with OmniSharp. |
 | `CustomLspMethodNames`, `LspStandardMethodNames` | `src/Core/…Common/Lsp` | Canonical method-name constants shared by the server and the Visual Studio client. |
-| `SemanticTokensPushHandler` | `…LSP.Server/Pipeline` | Pushes `reqnroll/semanticTokens` when the behaviour is set. |
+| `SemanticTokensPushHandler` | `…LSP.Server/Pipeline` | Pushes `reqnroll/semanticTokens` when the behaviour is set. The first push for a document is the full token set; later pushes carry only the lines that changed (`startLine`/`endLine`), or nothing when no token changed. |
+| `OutputThrottle` | `…LSP.Server/Concurrency` | Per-document, per-output rate limit used by `DiagnosticsPublishHandler` and `SemanticTokensPushHandler` for clients with `ThrottlesOutputWhileEditing`. Leading edge: the first run after a pause is immediate; while edits keep arriving, at most one run per interval, using the latest request, so the last change is always delivered. The interval comes from `OutputThrottlePolicy` and depends on the document's line count: none up to 4,000 lines, rising linearly to 450 ms at 10,000 lines, and 450 ms above that. Runs for one key never overlap; a close cancels a waiting run. |
+| `PushedSemanticTokens` | `…LSP.Server/Features/SemanticTokens` | Remembers the token set last pushed for each document, so the next push can be a delta; forgets it on close. Sends the full set again every 25 ranged pushes. |
 | `SemanticTokensClassificationInterceptor`, `SemanticTokenClassificationStore`, `GherkinSemanticClassifier` | `src/VisualStudio/…Extension/Classification` | Visual Studio side of the push path. |
 | `TextDocumentSyncHandler` | `…LSP.Server/Features/TextSync` | One sync handler for `.feature` and `.cs`, routed by extension. |
 | `CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, `RefreshDebouncer` | `…LSP.Server/Pipeline`, `Concurrency` | Debounced refresh pushes to clients. |
@@ -128,6 +130,7 @@ Behaviours, as the resolver sets them today:
 | `RequestsCompletionAfterDeletion` | The client asks for completion after a deletion, reporting the deleted text as `triggerCharacter` with kind `Invoked`; answer with an empty list | Visual Studio |
 | `AppliesRenameResponseEditNatively` | The client applies whatever edit the rename response carries, so the server pushes the real edit with `workspace/applyEdit` and returns an empty edit | Visual Studio |
 | `NavigatesStepsViaFindStepDefinitions` | Step navigation goes through `reqnroll/findStepDefinitions`; gates telemetry for `textDocument/definition` only | Visual Studio |
+| `ThrottlesOutputWhileEditing` | While edits keep arriving, `publishDiagnostics` and the token push run at most once per interval per document (the first after a pause immediately, the last change always delivered; the interval is 0 up to 4,000 lines, rises to 450 ms at 10,000 lines and stays there), because the client handles them on its UI thread | Visual Studio |
 | `HonorsShowDocumentRequests` | `window/showDocument` reliably opens a document | VS Code |
 | `SupportsCodeLensResolve` | The client issues `codeLens/resolve`, so per-lens counts can be deferred | none currently |
 

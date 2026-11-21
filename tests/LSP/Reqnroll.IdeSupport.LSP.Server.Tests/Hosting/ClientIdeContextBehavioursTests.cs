@@ -14,6 +14,7 @@ public class ClientIdeContextBehavioursTests
         RequestsCompletionAfterDeletion = true,
         AppliesRenameResponseEditNatively = true,
         NavigatesStepsViaFindStepDefinitions = true,
+        ThrottlesOutputWhileEditing = true,
     };
 
     private static readonly IdeBehaviours VSCodeBehaviours = new()
