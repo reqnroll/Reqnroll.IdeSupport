@@ -547,10 +547,11 @@ public static class BatchScenarios
     /// superseded <c>.cs</c> edits — no delay between them, faster than Roslyn can parse a single one,
     /// modelling fast typing — against a synthetic binding file, then a final edit that actually
     /// matches one of the corpus's deliberately-unbound steps, and measures wall-clock from that FINAL
-    /// edit to the step resolving. <c>IParseCoordinator</c> chains every queued call rather than
-    /// cancelling superseded ones (by design), so without the short-circuit every junk edit in the burst would still do a
+    /// edit to the step resolving. <c>IParseCoordinator</c> keeps at most one call waiting per file
+    /// (a newer call replaces it), but the call already running cannot be cancelled, so without the
+    /// short-circuit that call, and one that started just before a later edit, would still do a
     /// full, uncancellable Roslyn re-parse + registry patch; the short-circuit instead compares each
-    /// queued call's text against the current cache entry and skips the parse once a later edit has
+    /// call's text against the current cache entry and skips the parse once a later edit has
     /// already overwritten it. A regression that reintroduces the uncancellable pile-up should show up
     /// here as this number growing with <paramref name="burstSize"/> instead of staying close to
     /// <see cref="RoslynReDiscoveryAsync"/>'s single-edit number.

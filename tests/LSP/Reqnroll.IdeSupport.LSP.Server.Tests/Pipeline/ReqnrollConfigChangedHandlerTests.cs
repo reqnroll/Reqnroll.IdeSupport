@@ -40,13 +40,13 @@ public class ReqnrollConfigChangedHandlerTests
     public async Task Handle_schedules_a_reparse_for_every_open_buffer_under_the_workspace_root()
     {
         _bufferService.Update(InScopeUri, version: 3, "Feature: F\n");
-        _reparser.ReparseOpenDocumentAsync(InScopeUri, 3, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _reparser.ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         await CreateSut().Handle(
             new ReqnrollConfigChangedNotification("/workspace/proj"), CancellationToken.None);
 
         await WaitForScheduledWorkAsync(InScopeUri);
-        await _reparser.Received(1).ReparseOpenDocumentAsync(InScopeUri, 3, Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -57,8 +57,7 @@ public class ReqnrollConfigChangedHandlerTests
         await CreateSut().Handle(
             new ReqnrollConfigChangedNotification("/workspace/proj"), CancellationToken.None);
 
-        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(
-            OutOfScopeUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseIfOpenAsync(OutOfScopeUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -68,8 +67,7 @@ public class ReqnrollConfigChangedHandlerTests
             new ReqnrollConfigChangedNotification("/workspace/empty"), CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseIfOpenAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -78,16 +76,16 @@ public class ReqnrollConfigChangedHandlerTests
         var secondUri = DocumentUri.FromFileSystemPath("/workspace/proj/b.feature");
         _bufferService.Update(InScopeUri, version: 1, "Feature: A\n");
         _bufferService.Update(secondUri, version: 2, "Feature: B\n");
-        _reparser.ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        _reparser.ReparseOpenDocumentAsync(secondUri, 2, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _reparser.ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _reparser.ReparseIfOpenAsync(secondUri, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         await CreateSut().Handle(
             new ReqnrollConfigChangedNotification("/workspace/proj"), CancellationToken.None);
 
         await WaitForScheduledWorkAsync(InScopeUri);
         await WaitForScheduledWorkAsync(secondUri);
-        await _reparser.Received(1).ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>());
-        await _reparser.Received(1).ReparseOpenDocumentAsync(secondUri, 2, Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseIfOpenAsync(secondUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -100,7 +98,7 @@ public class ReqnrollConfigChangedHandlerTests
         var reparseStarted = new TaskCompletionSource();
         var releaseReparse = new TaskCompletionSource();
         _bufferService.Update(InScopeUri, version: 1, "Feature: F\n");
-        _reparser.ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>()).Returns(async _ =>
+        _reparser.ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>()).Returns(async _ =>
         {
             reparseStarted.TrySetResult();
             await releaseReparse.Task;
@@ -124,7 +122,7 @@ public class ReqnrollConfigChangedHandlerTests
         // actual parse duration (mirrors TextDocumentSyncHandler / BindingRegistryChangedHandler).
         var releaseReparse = new TaskCompletionSource();
         _bufferService.Update(InScopeUri, version: 1, "Feature: F\n");
-        _reparser.ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>())
+        _reparser.ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>())
             .Returns(_ => releaseReparse.Task);
 
         var handleTask = CreateSut().Handle(
@@ -143,7 +141,7 @@ public class ReqnrollConfigChangedHandlerTests
         // duplicate publish (e.g. a debounced watcher firing twice for one save) must not
         // compound into extra or different work versus a single publish.
         _bufferService.Update(InScopeUri, version: 1, "Feature: F\n");
-        _reparser.ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _reparser.ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         var sut = CreateSut();
         var notification = new ReqnrollConfigChangedNotification("/workspace/proj");
@@ -155,7 +153,7 @@ public class ReqnrollConfigChangedHandlerTests
 
         // Exactly the same reparse, run twice with identical arguments -- not doubled, not
         // corrupted, not throwing on the second call.
-        await _reparser.Received(2).ReparseOpenDocumentAsync(InScopeUri, 1, Arg.Any<CancellationToken>());
+        await _reparser.Received(2).ReparseIfOpenAsync(InScopeUri, Arg.Any<CancellationToken>());
     }
 
     // A project's configuration (for example language.feature) changes how every one of its feature files
@@ -182,8 +180,7 @@ public class ReqnrollConfigChangedHandlerTests
         await _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryPatchedNotification>(n => ReferenceEquals(n.Project, project)),
             Arg.Any<CancellationToken>());
-        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(
-            Arg.Any<DocumentUri>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseIfOpenAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
     }
 
     // ── Config generation ────────────────────────────────────────────────

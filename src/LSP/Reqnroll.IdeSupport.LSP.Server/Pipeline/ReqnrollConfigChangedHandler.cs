@@ -103,8 +103,10 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         {
             cancellationToken.ThrowIfCancellationRequested();
             var uri = buffer.Uri;
-            var version = buffer.Version;
-            _parseCoordinator.Schedule(uri, ct => _reparser.ReparseOpenDocumentAsync(uri, version, ct));
+            // No version is captured: only the newest request for a document is kept, so the reparse must read the
+            // buffer as it is when it runs. A version captured here could be older than an edit that arrives before
+            // Schedule, and this request would then replace that edit's reparse with one that is skipped as stale.
+            _parseCoordinator.Schedule(uri, ct => _reparser.ReparseIfOpenAsync(uri, ct));
         }
     }
 

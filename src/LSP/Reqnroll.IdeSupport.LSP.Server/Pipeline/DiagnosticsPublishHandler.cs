@@ -6,7 +6,9 @@ using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -46,6 +48,8 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
     private readonly IIdeSupportLogger           _logger;
     private readonly IPublishedDiagnosticsCache _publishedCache;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IOutputThrottle          _throttle;
+    private readonly ClientIdeContext?        _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="DiagnosticsPublishHandler"/> class.</summary>
     public DiagnosticsPublishHandler(
@@ -57,7 +61,9 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         ILanguageServerFacade     languageServer,
         IIdeSupportLogger            logger,
         IPublishedDiagnosticsCache publishedCache,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IOutputThrottle? throttle = null,
+        ClientIdeContext? clientIde = null)
     {
         _documentBufferService = documentBufferService;
         _bindingMatchService   = bindingMatchService;
@@ -68,10 +74,20 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         _logger                = logger;
         _publishedCache        = publishedCache;
         _recorder              = recorder ?? NullOperationDurationRecorder.Instance;
+        _throttle              = throttle ?? NullOutputThrottle.Instance;
+        _clientIde             = clientIde;
     }
 
-    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by re-aggregating diagnostics for the affected document and pushing an updated <c>textDocument/publishDiagnostics</c> notification to the client.</summary>
+    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by re-aggregating diagnostics for the affected document and pushing an updated <c>textDocument/publishDiagnostics</c> notification to the client. For a client whose behaviours say so (<see cref="Reqnroll.IdeSupport.LSP.Core.Ide.IdeBehaviours.ThrottlesOutputWhileEditing"/>), the publish runs at most once per <see cref="OutputThrottlePolicy"/> interval (zero for small documents) while edits keep arriving and always carries the latest state.</summary>
     public Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
+        => _clientIde?.Behaviours.ThrottlesOutputWhileEditing == true
+            ? _throttle.RunThrottledAsync(
+                OutputThrottleKeys.Diagnostics(notification.Uri),
+                _documentBufferService.ThrottleInterval(notification.Uri),
+                () => PublishDiagnosticsAsync(notification))
+            : PublishDiagnosticsAsync(notification);
+
+    private Task PublishDiagnosticsAsync(MatchCacheChangedNotification notification)
     {
         var uri = notification.Uri;
 

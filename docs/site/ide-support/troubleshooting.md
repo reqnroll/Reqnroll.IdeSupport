@@ -195,6 +195,12 @@ pane shows a one-line summary of each message; the full details, including
 stack traces, are only in the log files above. The pane doesn't show the LSP
 server's logs — check those files directly.
 
+**Inspector trace (protocol problems):** off by default. Set the `REQNROLLVS_TRACE_SERVER`
+environment variable to `messages` (or `verbose`, `1`, `true`) before starting Visual Studio and
+it writes `reqnroll-vs-inspector-<timestamp>.log` under `%LOCALAPPDATA%\Reqnroll\logs\`, recording
+every message between Visual Studio and the language server. The file is never rotated and grows
+quickly with large `.feature` files, so turn it off again when done.
+
 **Changing the log level:** there's no in-product setting. A normal
 (released, VSIX-installed) build logs the LSP server at `Warning` level and the
 extension side at `Info` by default. The

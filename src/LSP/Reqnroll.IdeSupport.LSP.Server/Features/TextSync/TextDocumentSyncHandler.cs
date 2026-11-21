@@ -10,9 +10,11 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
@@ -45,6 +47,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IPublishedDiagnosticsCache _publishedDiagnostics;
     private readonly ILspWorkspaceScopeManager? _scopeManager;
     private readonly ILspTelemetryService? _telemetryService;
+    private readonly IPushedSemanticTokens? _pushedSemanticTokens;
+    private readonly IOutputThrottle? _outputThrottle;
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
@@ -68,7 +72,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IPublishedDiagnosticsCache publishedDiagnostics,
         IOperationDurationRecorder? recorder = null,
         ILspWorkspaceScopeManager? scopeManager = null,
-        ILspTelemetryService? telemetryService = null)
+        ILspTelemetryService? telemetryService = null,
+        IPushedSemanticTokens? pushedSemanticTokens = null,
+        IOutputThrottle? outputThrottle = null)
     {
         _documentBufferService = documentBufferService;
         _taggerService = taggerService;
@@ -84,6 +90,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
         _scopeManager = scopeManager;
         _telemetryService = telemetryService;
+        _pushedSemanticTokens = pushedSemanticTokens;
+        _outputThrottle = outputThrottle;
     }
 
     /// <summary>Reports the language id (<c>"csharp"</c> or <c>"Gherkin"</c>) the server should associate with the given document URI.</summary>
@@ -114,8 +122,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             _csharpFileTextCache.Update(uri, text);
             // Off the shared Serial dispatch lane -- the Roslyn parse this drives
             // (ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync's ReplaceBindings call)
-            // is real, non-trivial cost on a large step-definition file, and per-URI chaining in
-            // the coordinator still guarantees this file's own edits apply in order. The PERF
+            // is real, non-trivial cost on a large step-definition file, and the coordinator still
+            // runs this file's work one piece at a time, with the newest text always the last one
+            // applied (an edit that is still waiting is replaced by a newer one). The PERF
             // measurement moves inside the scheduled work so it still reflects actual parse
             // duration (Layer 4) rather than the now near-instant synchronous handler body.
             _parseCoordinator.Schedule(uri, ct =>
@@ -239,6 +248,11 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // After the buffer removal: a publish racing this close then sees the document as closed
         // and cannot re-create the entry.
         _publishedDiagnostics.Evict(uri);
+        // The next open pushes the full token set again rather than a delta against tokens kept from before the close.
+        _pushedSemanticTokens?.Forget(uri.ToString());
+        // A diagnostics publish or token push still waiting for its turn must not fire after the close has cleared them.
+        _outputThrottle?.Cancel(OutputThrottleKeys.Diagnostics(uri));
+        _outputThrottle?.Cancel(OutputThrottleKeys.SemanticTokens(uri));
         _bindingMatchService.InvalidateAllForDocument(uri.ToString());
 
         // Repopulate the match cache from disk so the file's usages remain discoverable by

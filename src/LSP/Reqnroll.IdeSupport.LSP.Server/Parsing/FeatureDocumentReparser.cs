@@ -34,6 +34,21 @@ public sealed class FeatureDocumentReparser : IFeatureDocumentReparser
         // ParseAsync stores updated tags (with the stamp of the inputs they were derived from) and
         // recomputes/stores the binding match set before this notification fires.
         await _taggerService.ParseAsync(uri, version).ConfigureAwait(false);
+
+        // A newer edit replaced the buffer before or while this parse ran: its tags were rejected (or never
+        // computed), and the newer edit's own reparse follows and publishes for the latest text. Announcing this
+        // version would only make every consumer of the notification (diagnostics, token push, lenses, hints) read
+        // a buffer whose tags are not there yet.
+        if (version.HasValue
+            && _documentBufferService.TryGet(uri, out var current)
+            && current is not null
+            && (current.Version ?? 0) != version.Value)
+        {
+            _logger.LogVerbose(
+                $"FeatureDocumentReparser: '{uri}' moved on from v{version} to v{current.Version} during the parse — not publishing.");
+            return;
+        }
+
         await _mediator.Publish(
             new MatchCacheChangedNotification(uri, version ?? 0),
             cancellationToken).ConfigureAwait(false);
