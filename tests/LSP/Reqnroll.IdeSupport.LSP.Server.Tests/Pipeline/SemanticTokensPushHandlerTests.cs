@@ -2,9 +2,13 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Concurrency;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
@@ -13,15 +17,27 @@ public class SemanticTokensPushHandlerTests
     private readonly ILanguageServerFacade _facade = Substitute.For<ILanguageServerFacade>();
     private readonly ISemanticTokensService _tokenService = Substitute.For<ISemanticTokensService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
+    private readonly List<PublishSemanticTokensParams> _sent = new();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    private SemanticTokensPushHandler CreateSut(string? ide) =>
-        new(_facade, _tokenService, new ClientIdeContext(ide), _logger);
+    // One baseline store shared by every handler a test creates, as the DI container does for the
+    // transient handler instances MediatR resolves per notification.
+    private readonly IPushedSemanticTokens _pushed = new PushedSemanticTokens();
 
-    private void SetupTokens(SemanticTokens? tokens) =>
-        _tokenService.GetSemanticTokensAsync(FeatureUri, 1, Arg.Any<CancellationToken>())
+    public SemanticTokensPushHandlerTests()
+    {
+        _facade.SendNotification("reqnroll/semanticTokens", Arg.Do<PublishSemanticTokensParams>(p => _sent.Add(p)));
+    }
+
+    private SemanticTokensPushHandler CreateSut(string? ide) =>
+        new(_facade, _tokenService, new ClientIdeContext(ide), _logger, pushedTokens: _pushed);
+
+    private void SetupTokens(SemanticTokens? tokens, int version = 1) =>
+        _tokenService.GetSemanticTokensAsync(FeatureUri, version, Arg.Any<CancellationToken>())
                      .Returns(Task.FromResult(tokens));
+
+    private static SemanticTokens Tokens(params int[] data) => new() { Data = data.ToImmutableArray() };
 
     [Fact]
     public async Task Pushes_reqnroll_semanticTokens_notification_for_visual_studio()
@@ -58,5 +74,286 @@ public class SemanticTokensPushHandlerTests
         await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
 
         _facade.DidNotReceive().SendNotification(Arg.Any<string>(), Arg.Any<PublishSemanticTokensParams>());
+    }
+
+    [Fact]
+    public async Task The_first_push_carries_the_full_set_and_no_line_range()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0));
+        var sut = CreateSut("visualstudio");
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        var push = _sent.Should().ContainSingle().Subject;
+        push.StartLine.Should().BeNull();
+        push.EndLine.Should().BeNull();
+        push.Data.Should().Equal(0, 0, 8, 0, 0, 2, 0, 5, 3, 0);
+        push.TokenCount.Should().Be(2);
+        push.Version.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_later_push_for_the_same_document_carries_only_the_changed_lines()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 2); // the token on line 2 got longer
+        var sut = CreateSut("visualstudio");
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        var ranged = _sent[1];
+        ranged.StartLine.Should().Be(2);
+        ranged.EndLine.Should().Be(2);
+        ranged.Data.Should().Equal(2, 0, 9, 3, 0);
+        ranged.TokenCount.Should().Be(2);
+        ranged.Version.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_push_is_diffed_against_the_previous_one_even_when_a_new_handler_instance_handles_it()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 2);
+
+        await CreateSut("visualstudio").Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await CreateSut("visualstudio").Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent[1].StartLine.Should().Be(2, "the baseline lives in the shared service, not in the handler");
+    }
+
+    [Fact]
+    public async Task Nothing_is_pushed_when_the_tokens_have_not_changed()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0), version: 2);
+        var sut = CreateSut("visualstudio");
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().ContainSingle("the client already holds exactly these tokens");
+    }
+
+    // Large enough (12,000 lines) to get the longest throttle interval.
+    private static readonly string LargeText = string.Join("\n", Enumerable.Repeat("  Given a step", 12_000));
+
+    private SemanticTokensPushHandler CreateThrottledSut(string? ide, ManualTimeProvider time, string? text = null)
+    {
+        var buffers = Substitute.For<IDocumentBufferService>();
+        var buffer = new DocumentBuffer(FeatureUri, 1, text ?? LargeText, Array.Empty<IdeSupportTag>());
+        buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = buffer; return true; });
+
+        return new(_facade, _tokenService, new ClientIdeContext(ide), _logger,
+            pushedTokens: _pushed, throttle: new OutputThrottle(_logger, time), buffers: buffers);
+    }
+
+    private SemanticTokensPushHandler CreateSutWithBuffer(DocumentBuffer? buffer)
+    {
+        var buffers = Substitute.For<IDocumentBufferService>();
+        buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = buffer; return buffer is not null; });
+
+        return new(_facade, _tokenService, new ClientIdeContext("visualstudio"), _logger,
+            pushedTokens: _pushed, buffers: buffers);
+    }
+
+    [Fact]
+    public async Task Nothing_is_pushed_while_the_buffers_tags_are_not_computed_yet()
+    {
+        // A newer edit has replaced the buffer and its tags are not there yet, so the service answers with an empty
+        // set. Pushed, that would wipe every colour in the file.
+        SetupTokens(Tokens(), version: 1);
+        var sut = CreateSutWithBuffer(new DocumentBuffer(FeatureUri, 2, "Feature: X\n", Tags: null));
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        _sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_empty_set_is_not_pushed_when_the_tags_appeared_after_the_service_looked()
+    {
+        // The service saw no tags and answered with an empty set; by the time the handler looks, the tags exist. The
+        // empty set describes a state that is gone, so it must not be pushed.
+        SetupTokens(Tokens(), version: 1);
+        var tags = new[] { new IdeSupportTag(IdeSupportTagTypes.FeatureBlock, null!) };
+        var sut = CreateSutWithBuffer(new DocumentBuffer(FeatureUri, 2, "Feature: X\n", tags));
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        _sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_buffer_whose_tags_are_computed_is_pushed_even_when_it_has_no_tokens()
+    {
+        // An emptied document does have to be cleared on the client.
+        SetupTokens(Tokens(), version: 1);
+        var sut = CreateSutWithBuffer(new DocumentBuffer(FeatureUri, 1, string.Empty, Array.Empty<IdeSupportTag>()));
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        _sent.Should().ContainSingle().Which.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Tokens_that_were_skipped_for_missing_tags_do_not_disturb_the_baseline_of_the_next_push()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var tags = Array.Empty<IdeSupportTag>();
+        var current = new DocumentBuffer(FeatureUri, 1, "Feature: X\n", tags);
+        var buffers = Substitute.For<IDocumentBufferService>();
+        buffers.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>()).Returns(x => { x[1] = current; return true; });
+        var sut = new SemanticTokensPushHandler(_facade, _tokenService, new ClientIdeContext("visualstudio"), _logger,
+            pushedTokens: _pushed, buffers: buffers);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        current = new DocumentBuffer(FeatureUri, 2, "Feature: X\n", Tags: null);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+        current = new DocumentBuffer(FeatureUri, 3, "Feature: X\n", tags);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 3), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        _sent[1].StartLine.Should().Be(2, "the second push is a delta against the first, as if the skipped one never happened");
+        _sent[1].Data.Should().Equal(2, 0, 9, 3, 0);
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_small_document_pushes_every_change_at_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 6, 3, 0), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time, text: "Feature: X\n");
+
+        foreach (var version in new[] { 1, 2, 3 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        _sent.Select(p => p.Version).Should().Equal(1, 2, 3);
+        time.ActiveTimerCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_large_document_pushes_at_once_then_the_latest_tokens_of_a_burst_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 6, 3, 0), version: 2);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 3);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        foreach (var version in new[] { 1, 2, 3 })
+            await sut.Handle(new MatchCacheChangedNotification(FeatureUri, version), CancellationToken.None);
+
+        _sent.Should().ContainSingle("only the first change is pushed at once").Which.Version.Should().Be(1);
+
+        time.Advance(OutputThrottlePolicy.MaxInterval - TimeSpan.FromMilliseconds(1));
+        _sent.Should().ContainSingle("a large document waits the full interval");
+
+        time.Advance(TimeSpan.FromMilliseconds(1));
+
+        _sent.Should().HaveCount(2);
+        _sent[1].Version.Should().Be(3, "the last change of the burst is always pushed");
+        _sent[1].Data.Should().Equal(new[] { 2, 0, 9, 3, 0 }, "pushed against what the client received, which skipped version 2");
+    }
+
+    [Fact]
+    public async Task For_visual_studio_a_change_after_a_pause_is_pushed_at_once()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 9, 0, 0), version: 2);
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("visualstudio", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        time.Advance(TimeSpan.FromSeconds(2));
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        time.ActiveTimerCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Non_visual_studio_clients_never_start_a_throttle_timer()
+    {
+        var time = new ManualTimeProvider();
+        var sut = CreateThrottledSut("vscode", time);
+
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        time.ActiveTimerCount.Should().Be(0);
+        _sent.Should().BeEmpty();
+    }
+
+    private SemanticTokensPushHandler CreateSutWithBuffers(IDocumentBufferService buffers) =>
+        new(_facade, _tokenService, new ClientIdeContext("visualstudio"), _logger, pushedTokens: _pushed, buffers: buffers);
+
+    [Fact]
+    public async Task An_edited_line_is_pushed_although_its_tokens_are_unchanged()
+    {
+        var buffers = new DocumentBufferService();
+        var sut = CreateSutWithBuffers(buffers);
+        var tokens = Tokens(0, 0, 4, 0, 0, 1, 0, 4, 0, 0);
+        SetupTokens(tokens, version: 1);
+        SetupTokens(tokens, version: 2);
+
+        buffers.Update(FeatureUri, 1, "Feature\nAnd x", generation: 1);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        buffers.Update(FeatureUri, 2, "Feature\nAnd xy", generation: 2);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent.Should().HaveCount(2);
+        _sent[1].StartLine.Should().Be(1);
+        _sent[1].EndLine.Should().Be(1);
+        _sent[1].Data.Should().Equal(1, 0, 4, 0, 0);
+    }
+
+    [Fact]
+    public async Task The_full_set_is_pushed_when_the_buffer_moved_on_while_the_tokens_were_computed()
+    {
+        var buffers = new DocumentBufferService();
+        var sut = CreateSutWithBuffers(buffers);
+        SetupTokens(Tokens(0, 0, 4, 0, 0, 1, 0, 4, 0, 0), version: 1);
+        buffers.Update(FeatureUri, 1, "Feature\nAnd x", generation: 1);
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        // The token service answers for version 2, and the buffer has moved to generation 3 by the time the
+        // handler looks at it again.
+        buffers.Update(FeatureUri, 2, "Feature\nAnd xy", generation: 2);
+        _tokenService.GetSemanticTokensAsync(FeatureUri, 2, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                buffers.Update(FeatureUri, 3, "Feature\nAnd xyz", generation: 3);
+                return Task.FromResult<SemanticTokens?>(Tokens(0, 0, 4, 0, 0, 1, 0, 4, 0, 0));
+            });
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        _sent[^1].StartLine.Should().BeNull("which text the tokens describe is unknown, so the client gets the full set");
+        _sent[^1].Data.Should().Equal(0, 0, 4, 0, 0, 1, 0, 4, 0, 0);
+    }
+
+    [Fact]
+    public async Task A_failed_send_makes_the_next_push_the_full_set_again()
+    {
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 5, 3, 0), version: 1);
+        SetupTokens(Tokens(0, 0, 8, 0, 0, 2, 0, 9, 3, 0), version: 2);
+        var sut = CreateSut("visualstudio");
+
+        var calls = 0;
+        _facade.When(f => f.SendNotification("reqnroll/semanticTokens", Arg.Any<PublishSemanticTokensParams>()))
+               .Do(_ => { if (calls++ == 0) throw new InvalidOperationException("pipe closed"); });
+
+        var first = () => sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+        await first.Should().ThrowAsync<InvalidOperationException>();
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        var last = _sent[^1];
+        last.StartLine.Should().BeNull("the client never received the first push, so a delta against it would be wrong");
+        last.Data.Should().Equal(0, 0, 8, 0, 0, 2, 0, 9, 3, 0);
     }
 }

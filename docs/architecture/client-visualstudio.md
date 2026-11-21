@@ -146,6 +146,22 @@ by the swap. `VsSessionRouter` drops a response whose owning session was abandon
 
 **Semantic tokens.** `SemanticTokensClassificationInterceptor` captures `reqnroll/semanticTokens`, caches them in
 `SemanticTokenClassificationStore`, and `GherkinSemanticClassifier` emits spans with `IdeSupportClassifications`.
+A push either carries the complete token set, which replaces what the store holds, or only the tokens on
+`startLine`..`endLine`, which replace the store's tokens on exactly those lines; the classifier then re-classifies only
+those lines. A ranged push with no complete set to apply it to is ignored (the server always sends the full set first),
+and the push's `tokenCount` is compared with what the store holds afterwards, so a disagreement is logged.
+Between pushes the classifier also moves the stored tokens through every edit made to the buffer (it handles the
+buffer's high-priority change event, before the editor asks for the new classifications): a token before an edit
+stays, a token after it moves by what the edit added or removed (down or up a line, along the line), a token the edit
+only lengthens or shortens (typing within a word) grows or shrinks, and any other token the edit touches is dropped. So
+the lines below a line that was just inserted or deleted keep their colours where their text now is, instead of showing
+the colours of the text that used to be there until the server's push arrives. The push, computed from the new text,
+then replaces the tokens of the lines it covers as before.
+
+Because the client's tokens on an edited line may have been dropped or resized by that move, the server's ranged
+push (`PushedSemanticTokens`) always covers the lines whose text differs from the text of the previous push, even
+where the new tokens equal the old ones; it keeps the last pushed text per document for this. When it cannot tell
+which text the tokens were computed from (the buffer changed while they were being computed) it sends the full set.
 
 **CodeLens on `.feature`.** An in-process `ITaggerProvider` places tags and out-of-process data-point providers call back
 into `devenv.exe` through `ICodeLensCallbackService` listeners. Hook lenses use two data-point providers sharing one
