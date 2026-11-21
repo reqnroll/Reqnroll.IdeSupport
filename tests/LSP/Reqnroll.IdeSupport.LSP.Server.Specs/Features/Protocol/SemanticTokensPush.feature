@@ -48,7 +48,7 @@ Scenario: After an edit the server pushes only the tokens on the line that chang
 	Then the first semantic tokens push for "delta.feature" is the complete token set
 	And the second semantic tokens push for "delta.feature" covers only line 3
 
-Scenario: An edit that changes no token is not pushed again
+Scenario: An edit on a line without tokens is not pushed again
 	Given the LSP server is started for IDE "visualstudio"
 	When the feature file "same.feature" is opened with
 		"""
@@ -62,7 +62,26 @@ Scenario: An edit that changes no token is not pushed again
 		Feature: Same coloring
 
 		Scenario: S
-			When I press add twice
+			When I press add
 		"""
 	Then the first semantic tokens push for "same.feature" is the complete token set
 	And no further semantic tokens push for "same.feature" arrives
+
+Scenario: An edited line is pushed again even when its tokens are unchanged
+	Given the LSP server is started for IDE "visualstudio"
+	When the feature file "edited.feature" is opened with
+		"""
+		Feature: Edited coloring
+
+		Scenario: S
+			When I press add
+		"""
+	And the feature file "edited.feature" is changed to
+		"""
+		Feature: Edited coloring
+
+		Scenario: S
+			When I press add twice
+		"""
+	Then the first semantic tokens push for "edited.feature" is the complete token set
+	And the second semantic tokens push for "edited.feature" covers only line 4
