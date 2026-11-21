@@ -45,7 +45,7 @@ sequenceDiagram
     H->>S: compute tokens
     S-->>C: SemanticTokens (5-int tuples against the legend)
     C-->>U: coloured text
-    Note over TDS,C: Visual Studio instead receives reqnroll/semanticTokens pushed after each match-cache change
+    Note over TDS,C: Visual Studio instead receives reqnroll/semanticTokens pushed after each match-cache change (the full set first, then only the lines that changed)
 ```
 
 ## 4. Glossary

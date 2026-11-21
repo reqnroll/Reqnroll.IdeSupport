@@ -179,6 +179,11 @@ public static class ServiceCollectionExtensions
             // see IRefreshDebouncer's remarks for why a transient handler's own instance field
             // can't debounce anything.
             .AddSingleton<IRefreshDebouncer, RefreshDebouncer>()
+            // Per-document rate limit for the outputs Visual Studio processes on its UI thread (diagnostics and
+            // token pushes). A singleton for the same reason as the debouncer above.
+            .AddSingleton<IOutputThrottle, OutputThrottle>()
+            // Keeps one refresh request of each kind outstanding at most, so a slow client is not buried under them.
+            .AddSingleton<IRefreshGate, RefreshGate>()
             // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
             // preserving correctness for pull handlers with no refresh capability —
             // see IParseCoordinator's remarks. Singleton for the same reason as
@@ -213,6 +218,8 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
             .AddSingleton<IFeatureDocumentReparser, FeatureDocumentReparser>()
             .AddSingleton<ISemanticTokensService, SemanticTokensService>()
+            // The baseline each push is diffed against must outlive the transient push handler.
+            .AddSingleton<IPushedSemanticTokens, PushedSemanticTokens>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsPublisher, CSharpDiagnosticsPublisher>()

@@ -80,9 +80,45 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
         if (message.Body["params"]?["data"] is not JArray data) return;
 
         var tokens = Decode(data, _store.Legend);
+
+        var startLine = message.Body["params"]?["startLine"];
+        var endLine = message.Body["params"]?["endLine"];
+        if (startLine is { Type: JTokenType.Integer } && endLine is { Type: JTokenType.Integer })
+        {
+            // A ranged push carries only the tokens on startLine..endLine; it must never replace the whole set.
+            CaptureRangedTokens(fileKey, startLine.Value<int>(), endLine.Value<int>(), tokens, message.Body["params"]?["tokenCount"]);
+            return;
+        }
+
         _store.SetTokens(fileKey, tokens);
         _logger.LogDebug(
             "SemanticTokensClassificationInterceptor: stored {TokenCount} pushed tokens for {FileKey}.", tokens.Count, fileKey);
+    }
+
+    private void CaptureRangedTokens(string fileKey, int startLine, int endLine, IReadOnlyList<ClassifiedToken> tokens, JToken? expectedCount)
+    {
+        if (!_store.ApplyRange(fileKey, startLine, endLine, tokens))
+        {
+            // No complete set to apply the range to: the server always sends the full set first, so this means that
+            // set was missed. Colouring stays as it is until the next full push.
+            _logger.LogWarning(
+                "SemanticTokensClassificationInterceptor: ignored a ranged push (lines {Start}-{End}) for {FileKey} because no complete token set is held.",
+                startLine, endLine, fileKey);
+            return;
+        }
+
+        _store.TryGetTokens(fileKey, out var merged);
+        _logger.LogDebug(
+            "SemanticTokensClassificationInterceptor: applied {TokenCount} ranged tokens (lines {Start}-{End}) for {FileKey}; store now has {Total} tokens.",
+            tokens.Count, startLine, endLine, fileKey, merged.Count);
+
+        if (expectedCount is { Type: JTokenType.Integer } && expectedCount.Value<int>() != merged.Count)
+        {
+            // Colouring is wrong on some lines until the server's next periodic full push corrects it.
+            _logger.LogWarning(
+                "SemanticTokensClassificationInterceptor: {FileKey} holds {Held} tokens after a ranged push but the server reports {Expected}.",
+                fileKey, merged.Count, expectedCount.Value<int>());
+        }
     }
 
     private void CaptureLegendIfPresent(LspMessage message)

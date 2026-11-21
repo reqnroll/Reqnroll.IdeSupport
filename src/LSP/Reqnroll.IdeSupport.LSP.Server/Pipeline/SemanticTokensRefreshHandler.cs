@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Concurrency;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
@@ -40,23 +41,32 @@ public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChang
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IRefreshDebouncer _debouncer;
+    private readonly ClientIdeContext? _clientIde;
+    private readonly IRefreshGate? _gate;
 
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensRefreshHandler"/> class.</summary>
     public SemanticTokensRefreshHandler(
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
         IRefreshDebouncer debouncer,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        ClientIdeContext? clientIde = null,
+        IRefreshGate? gate = null)
     {
         _languageServer = languageServer;
         _logger = logger;
         _debouncer = debouncer;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _clientIde = clientIde;
+        _gate = gate;
     }
 
-    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by debouncing and, if the client advertised refresh support, sending a <c>workspace/semanticTokens/refresh</c> request.</summary>
+    /// <summary>Handles an internal <see cref="MatchCacheChangedNotification"/> by debouncing and, if the client advertised refresh support, sending a <c>workspace/semanticTokens/refresh</c> request. A client that gets its tokens pushed (<see cref="Reqnroll.IdeSupport.LSP.Core.Ide.IdeBehaviours.RequiresPushedSemanticTokens"/>, Visual Studio) is never asked to refresh them: it does not pull them, so the request would only cost it work.</summary>
     public Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
     {
+        if (_clientIde?.Behaviours.RequiresPushedSemanticTokens == true)
+            return Task.CompletedTask;
+
         // Guard: only send the refresh if the client advertised support for it.
         var semanticTokensWorkspace = _languageServer.ClientSettings.Capabilities?.Workspace?.SemanticTokens;
         if (semanticTokensWorkspace is null || !semanticTokensWorkspace.Value.IsSupported ||
@@ -65,9 +75,14 @@ public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChang
 
         _logger.LogVerbose($"MatchCacheChanged: scheduling semantic token refresh for {notification.Uri} v{notification.Version}");
 
-        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
+        _debouncer.Schedule(DebounceKey, DebounceDelay, GatedSendRefreshAsync);
         return Task.CompletedTask;
     }
+
+    private Task GatedSendRefreshAsync(CancellationToken cancellationToken) =>
+        _gate is null
+            ? SendRefreshAsync(cancellationToken)
+            : _gate.RunAsync(DebounceKey, SendRefreshAsync);
 
     private async Task SendRefreshAsync(CancellationToken cancellationToken)
     {

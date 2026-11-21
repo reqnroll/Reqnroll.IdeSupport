@@ -135,4 +135,33 @@ public class InlayHintRefreshHandlerTests : IDisposable
 
         _languageServer.Client.Received(1).SendRequest(WorkspaceNames.InlayHintRefresh);
     }
+
+    [Fact]
+    public async Task With_the_gate_a_refresh_is_not_sent_while_the_previous_one_is_unanswered_and_follows_its_answer()
+    {
+        SetRefreshSupport(true);
+        var answer = new TaskCompletionSource();
+        var returns = Substitute.For<IResponseRouterReturns>();
+        returns.ReturningVoid(Arg.Any<CancellationToken>()).Returns(answer.Task);
+        _languageServer.Client.SendRequest(Arg.Any<string>()).Returns(returns);
+        var gate = new RefreshGate(_logger);
+        var uri = DocumentUri.From("file:///f.feature");
+
+        await new InlayHintRefreshHandler(_languageServer, _logger, _debouncer, gate: gate)
+            .Handle(new MatchCacheChangedNotification(uri, 1), CancellationToken.None);
+        await Task.Delay(800);
+        await new InlayHintRefreshHandler(_languageServer, _logger, _debouncer, gate: gate)
+            .Handle(new MatchCacheChangedNotification(uri, 2), CancellationToken.None);
+        await Task.Delay(800);
+
+        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.InlayHintRefresh);
+
+        answer.SetResult();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_languageServer.Client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == "SendRequest") < 2
+               && DateTime.UtcNow < deadline)
+            await Task.Delay(10);
+
+        _languageServer.Client.Received(2).SendRequest(WorkspaceNames.InlayHintRefresh);
+    }
 }

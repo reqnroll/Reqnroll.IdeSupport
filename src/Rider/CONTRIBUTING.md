@@ -350,7 +350,8 @@ Applies regardless of which track launched the sandbox.
 
 ## Logging
 
-VS and VS Code both tee every LSP JSON-RPC message (both directions) into an
+VS and VS Code can both tee every LSP JSON-RPC message (both directions), when their opt-in switch is on
+(`REQNROLLVS_TRACE_SERVER` in VS, `reqnroll.trace.server` in VS Code), into an
 `[LSP - HH:mm:ss] {"isLSPMessage":true,...}` file consumable by
 [lsp-viewer](https://lampepfl.github.io/lsp-viewer/) — `LspInspectorLogger` on each
 side. **That isn't replicable on Rider**: `com.intellij.platform.lsp.api`'s

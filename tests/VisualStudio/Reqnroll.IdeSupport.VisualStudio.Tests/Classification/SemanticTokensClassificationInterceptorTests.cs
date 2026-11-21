@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
@@ -228,5 +230,133 @@ public class SemanticTokensClassificationInterceptorTests
         result.Should().Be(LspInterceptorResult.PassThrough);
         logger.WarningLogged.Should().BeFalse("a non-JObject result is a routine case, not a failure");
         store.TryGetTokens(SemanticTokenClassificationStore.NormalizeKey("file:///c:/w/A.feature")!, out _).Should().BeFalse();
+    }
+
+    private static LspMessage RangedPush(string uri, int[] data, int startLine, int endLine, int? tokenCount = null)
+    {
+        var parameters = new JObject
+        {
+            ["uri"] = uri,
+            ["version"] = 2,
+            ["data"] = JArray.FromObject(data),
+            ["startLine"] = startLine,
+            ["endLine"] = endLine,
+        };
+        if (tokenCount is not null)
+            parameters["tokenCount"] = tokenCount.Value;
+
+        return Receive(new JObject { ["jsonrpc"] = "2.0", ["method"] = "reqnroll/semanticTokens", ["params"] = parameters });
+    }
+
+    [Fact]
+    public async Task Ranged_push_replaces_only_the_tokens_on_its_lines()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var (store, sut) = Create();
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+        // Lines 0, 1 and 2 each hold one token.
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 8, 0, 0, 1, 0, 5, 1, 0, 1, 0, 3, 3, 0 }), CancellationToken.None);
+
+        // Line 1's token becomes a longer keyword; lines 0 and 2 are not part of the push.
+        await sut.InterceptAsync(RangedPush(uri, new[] { 1, 0, 9, 0, 0 }, startLine: 1, endLine: 1, tokenCount: 3), CancellationToken.None);
+
+        var key = SemanticTokenClassificationStore.NormalizeKey(uri)!;
+        store.TryGetTokens(key, out var tokens).Should().BeTrue();
+        tokens.Select(t => (t.Line, t.Length, t.TokenType)).Should().Equal(
+            (0, 8, "reqnroll.keyword"),
+            (1, 9, "reqnroll.keyword"),
+            (2, 3, "reqnroll.comment"));
+    }
+
+    [Fact]
+    public async Task Ranged_push_with_no_tokens_clears_those_lines()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var (store, sut) = Create();
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 8, 0, 0, 1, 0, 5, 1, 0 }), CancellationToken.None);
+
+        await sut.InterceptAsync(RangedPush(uri, Array.Empty<int>(), startLine: 1, endLine: 1, tokenCount: 1), CancellationToken.None);
+
+        store.TryGetTokens(SemanticTokenClassificationStore.NormalizeKey(uri)!, out var tokens).Should().BeTrue();
+        tokens.Should().ContainSingle().Which.Line.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Ranged_push_raises_TokensChanged_for_its_lines_only()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var (store, sut) = Create();
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 8, 0, 0, 4, 0, 5, 1, 0 }), CancellationToken.None);
+        var raised = new List<(int Start, int End)>();
+        store.TokensChanged += (_, start, end) => raised.Add((start, end));
+
+        await sut.InterceptAsync(RangedPush(uri, new[] { 4, 0, 9, 1, 0 }, startLine: 4, endLine: 4), CancellationToken.None);
+
+        raised.Should().Equal((4, 4));
+    }
+
+    [Fact]
+    public async Task Ranged_push_before_any_complete_set_is_ignored_and_logged()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var store = new SemanticTokenClassificationStore();
+        var logger = new WarningTrackingLogger();
+        var sut = new SemanticTokensClassificationInterceptor(store, logger);
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+
+        var result = await sut.InterceptAsync(RangedPush(uri, new[] { 1, 0, 9, 0, 0 }, startLine: 1, endLine: 1), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+        store.TryGetTokens(SemanticTokenClassificationStore.NormalizeKey(uri)!, out _).Should().BeFalse(
+            "a ranged push must never be stored as if it were the whole file");
+        logger.WarningLogged.Should().BeTrue("the missing complete set is worth a diagnostic");
+    }
+
+    [Fact]
+    public async Task Ranged_push_leaving_the_expected_token_count_logs_no_warning()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var store = new SemanticTokenClassificationStore();
+        var logger = new WarningTrackingLogger();
+        var sut = new SemanticTokensClassificationInterceptor(store, logger);
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 8, 0, 0, 1, 0, 5, 1, 0 }), CancellationToken.None);
+
+        await sut.InterceptAsync(RangedPush(uri, new[] { 1, 0, 9, 0, 0 }, startLine: 1, endLine: 1, tokenCount: 2), CancellationToken.None);
+
+        logger.WarningLogged.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Ranged_push_leaving_a_different_token_count_than_the_server_reports_is_applied_and_logged()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var store = new SemanticTokenClassificationStore();
+        var logger = new WarningTrackingLogger();
+        var sut = new SemanticTokensClassificationInterceptor(store, logger);
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 8, 0, 0, 1, 0, 5, 1, 0 }), CancellationToken.None);
+
+        await sut.InterceptAsync(RangedPush(uri, new[] { 1, 0, 9, 0, 0 }, startLine: 1, endLine: 1, tokenCount: 7), CancellationToken.None);
+
+        logger.WarningLogged.Should().BeTrue("the client and server disagree about what the file holds");
+        store.TryGetTokens(SemanticTokenClassificationStore.NormalizeKey(uri)!, out var tokens).Should().BeTrue();
+        tokens.Select(t => t.Length).Should().Equal(8, 9);
+    }
+
+    [Fact]
+    public async Task Push_without_a_line_range_still_replaces_the_whole_set()
+    {
+        const string uri = "file:///c:/w/A.feature";
+        var (store, sut) = Create();
+        await sut.InterceptAsync(InitializeResponse(Legend), CancellationToken.None);
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 8, 0, 0, 1, 0, 5, 1, 0, 1, 0, 3, 3, 0 }), CancellationToken.None);
+
+        await sut.InterceptAsync(PushNotification(uri, new[] { 0, 0, 4, 0, 0 }), CancellationToken.None);
+
+        store.TryGetTokens(SemanticTokenClassificationStore.NormalizeKey(uri)!, out var tokens).Should().BeTrue();
+        tokens.Should().ContainSingle().Which.Length.Should().Be(4);
     }
 }
