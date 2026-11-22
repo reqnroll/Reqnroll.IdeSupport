@@ -101,8 +101,8 @@ src/Rider/dotnet/
   version we target.
 - **SDK reference**: `JetBrains.Rider.SDK` from nuget.org, pinned per Rider version. Versions 2024.3.x
   through 2026.3.0 are published there *(verified)*. The legacy plugin instead uses
-  `lib/DotNetSdkForRdPlugins` inside the downloaded Rider as a package source; nuget.org avoids a
-  second Rider download per CI leg when the Kotlin side keeps compiling against 2024.3.5.
+  `lib/DotNetSdkForRdPlugins` inside the downloaded Rider as a package source; nuget.org keeps the .NET
+  build independent of the Gradle-managed Rider download, so CI can build the backend in a job without one.
 - **Zone marker**: declare the zones the components need, copying the SDK template / legacy plugin;
   the exact zone interfaces are to be confirmed during the spike.
 
@@ -208,8 +208,8 @@ side.
 
 ### 6.1 Today *(verified)*
 
-- `src/Rider/gradle.properties`: `platformVersion = 2024.3.5`, `pluginSinceBuild = 243`,
-  `pluginUntilBuild = 262.*`. One universal `.zip` for all six server RIDs.
+- `src/Rider/gradle.properties`: `riderSdkVersion = 2026.2.3.1` is the only Rider setting (range 262 to 262.*,
+  see §6.2). One universal `.zip` for all six server RIDs.
 - `.github/workflows/ci.yml`: `build-rider-plugin` (ubuntu) runs `./gradlew buildPlugin` and
   `verifyPlugin`; Gradle **never runs `dotnet` in CI** (server and test logger arrive as artifacts via
   `-PlspServerBuildDir` / `-PlspTestLoggerBuildDir`). `test-rider-plugin` runs Gradle tests.
@@ -220,25 +220,24 @@ side.
 
 ### 6.2 Gradle
 
-- **One setting drives everything:** `riderSdkVersion` in `gradle.properties` (for example `2026.2.3.1`). A
-  `-PwithBackend=true` build derives from it the wave (`262`: two-digit year, then release number), the
-  `-p:RiderSdkVersion` passed to `dotnet`, `sinceBuild` (`262`) and `untilBuild` (`262.*`), the plugin version
-  suffix (`<main>.<run>.262`) and the releases `verifyPlugin` checks. They cannot disagree with the SDK the
-  backend was built against *(implemented and checked locally)*.
-- **The range is closed on purpose.** The build fails if `-PpluginSinceBuild` or `-PpluginUntilBuild` is combined
-  with `withBackend=true`, and if `riderSdkVersion` is not a Rider release number. An open upper bound would let
-  Rider install the backend on a newer release it was never built for.
-- **`withBackend` defaults to `false`** until the CI job lands, so CI as it stands still produces the
-  frontend-only plugin for the whole range and never runs `dotnet` in Gradle. A backend build is opt-in.
-  Under the release policy the backend build becomes the only build: `withBackend` then defaults to `true`, or
-  is removed along with `pluginSinceBuild` / `pluginUntilBuild` in `gradle.properties`.
+- **One setting drives everything:** `riderSdkVersion` in `gradle.properties` (for example `2026.2.3.1`). Every
+  build derives from it the Rider the Kotlin code compiles and tests against, the `runIde` sandbox, the one IDE
+  `verifyPlugin` checks (`current()`), the wave (`262`: two-digit year, then release number), `sinceBuild`
+  (`262`) and `untilBuild` (`262.*`). A `-PwithBackend=true` build also passes it to `dotnet` as
+  `-p:RiderSdkVersion` and adds the wave to the plugin version (`<main>.<run>.262`). Nothing can disagree with
+  the SDK the backend is built against, and the build needs one Rider download *(implemented and checked
+  locally)*.
+- **The range is closed on purpose.** `platformVersion`, `pluginSinceBuild` and `pluginUntilBuild` are gone; the
+  build fails if one is passed with `-P`, and if `riderSdkVersion` is not a Rider release number. An open upper
+  bound would let Rider install the plugin on a newer release it was never built for.
+- **`withBackend` defaults to `false`** until the CI job lands, so CI never runs `dotnet` in Gradle; its plugin
+  targets the same single release, without the module. A backend build is opt-in.
 - New `compileBackend` task (`dotnet build -c Release -p:RiderSdkVersion=…`) for local builds, plus an
   external `-PbackendBuildDir` override for CI, mirroring the existing `publishServer` /
   `lspServerBuildDir` pattern so Gradle still never runs `dotnet` in CI.
 - `prepareSandbox` copies `Reqnroll.IdeSupport.Rider.Backend.dll` (and `.pdb`) into
   `<plugin>/dotnet/` when `withBackend` is true; `buildPlugin` fails if it is missing.
-- The Kotlin jar is still compiled against 2024.3.5 with Kotlin API level 2.0. Under the release policy it moves
-  to the same Rider release as the backend: `platformVersion` follows `riderSdkVersion`.
+- The Kotlin jar is compiled against the `riderSdkVersion` release, still at Kotlin API level 2.0.
 
 ### 6.3 Workflow
 

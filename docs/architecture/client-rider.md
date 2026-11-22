@@ -102,8 +102,9 @@ produced, so Gradle never invokes `dotnet`. Key tasks: `buildPlugin`, `verifyPlu
 the substring "rider", which the Verifier rejects), `runIde`, `test`. Test logger and MTP reporter bundles are handled
 the same way (`publishTestLogger`).
 
-**Compatibility.** `pluginSinceBuild` 243 to `pluginUntilBuild` 262.* (`gradle.properties`); developed and verified
-against Rider 2024.3.5.
+**Compatibility.** One Rider release, set by `riderSdkVersion` in `gradle.properties` (2026.2.3.1, so builds 262 to
+262.*). The Kotlin code is compiled and tested against it and `verifyPlugin` checks only it; the backend module is
+compiled against the same release's SDK.
 
 **Extension points used:** `platform.lsp.serverSupportProvider`, `fileType`, three `postStartupActivity` sync
 listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvider` (×4), `editorFactoryListener` (×3),
