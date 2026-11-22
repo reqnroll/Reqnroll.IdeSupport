@@ -19,7 +19,7 @@ class NativeLspFoldingTest {
     }
 
     @Test
-    fun `the Rider the plugin is compiled against has no native folding, so the controller runs`() {
-        assertFalse(NativeLspFolding.isAvailable)
+    fun `the Rider the plugin is compiled against has native folding, so the controller stands down`() {
+        assertTrue(NativeLspFolding.isAvailable)
     }
 }

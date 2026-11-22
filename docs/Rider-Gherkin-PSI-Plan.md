@@ -244,9 +244,10 @@ What the policy changes in this plan:
 - **No compatibility range to keep.** The rule that every extension point must exist in 2024.3 goes, and so
   does `verifyPlugin` across 243 – 262.\*. Platform APIs can be called directly instead of being detected by
   class name (for example `LspDocumentLinkDisabled`).
-- **New work: move the Kotlin build to the current SDK.** It compiles against 2024.3.5 today. Moving it costs a
-  one-time migration of deprecated or removed APIs, then a small amount each release. It is part of the
-  release infrastructure in Phase 1.
+- **Done: the Kotlin build targets the backend's release.** It compiles, tests and verifies against
+  `riderSdkVersion` only, one Rider download. Moving from 2024.3.5 to 2026.2.3.1 needed two `bundledModule`
+  lines (`Project.solution` and the spellchecker API now ship as separate module jars) and one test whose
+  premise was the old release's missing native folding. Each later bump costs whatever that release changes.
 
 ## 5. Dependency order
 
@@ -531,7 +532,6 @@ Live, in Rider, on a sample Reqnroll project (Windows first).
 - That Rider's frontend has no usable PSI for C# files, which decides whether Phase 8's navigation
   go/no-go can be a go.
 - Whether the semantic-token overlay and the lexer highlighter composite without flicker.
-- How much of the Kotlin code needs changing to compile against the current Rider SDK instead of 2024.3.5.
 - Phase 10:
   - That a plugin's `IUnitTestExplorerFromFile` can report another provider's elements from a `.feature`
     file without disturbing their discovery from `.feature.cs`.

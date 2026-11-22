@@ -1,9 +1,7 @@
 import org.gradle.internal.os.OperatingSystem
 import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.process.ExecOperations
-import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
-import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
@@ -15,21 +13,17 @@ plugins {
 
 group = providers.gradleProperty("pluginGroup").get()
 
-// ── Which Rider releases this build supports ──
+// ── Which Rider release this build targets ──
 //
-// Default: the frontend-only plugin, one build for the whole range in gradle.properties
-// (pluginSinceBuild .. pluginUntilBuild), checked by verifyPlugin.
+// One setting, `riderSdkVersion` (gradle.properties), decides everything: the Rider the Kotlin code compiles
+// and tests against, the sandbox `runIde` starts, the only IDE verifyPlugin checks, the SDK the backend module
+// is compiled against, and the since/until range ("2026.2.3.1" -> wave 262, so 262 .. 262.*). The range is a
+// closed one-release range on purpose: the backend is binary-tied to its release, and an open upper bound
+// would let Rider install the plugin on a newer release nothing was built or tested against. Building against
+// one release also keeps the build to a single Rider download.
 //
-// -PwithBackend=true bundles the Rider backend module, which is compiled against exactly one Rider SDK and so
-// works on exactly one Rider release. That build is derived from the one setting `riderSdkVersion`: the release
-// number ("2026.2.3.1" -> wave 262) gives the since/until range, the plugin version suffix, and the releases
-// verifyPlugin checks, so none of them can disagree with the SDK the backend was built against. The range is a
-// closed one-release range on purpose: an open upper bound would let Rider install the backend on a newer
-// release it was never built for.
-//
-// `runIdeWithBackend` launches a sandbox of that one release (the plain `runIde` sandbox runs `platformVersion`, the
-// oldest release in the frontend-only range, which a backend build refuses to load). Asking for that task turns
-// the backend on by itself, so `./gradlew runIdeWithBackend` needs no -PwithBackend=true.
+// -PwithBackend=true bundles the backend module (and adds the wave to the plugin version). `runIdeWithBackend`
+// is `runIde` with the backend turned on, so `./gradlew runIdeWithBackend` needs no -PwithBackend=true.
 val runIdeWithBackendTaskName = "runIdeWithBackend"
 val requestedTaskNames: List<String> = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }
 val withBackend = (findProperty("withBackend") as String? ?: "false").toBoolean() ||
@@ -44,19 +38,12 @@ fun riderWaveOf(sdkVersion: String): String {
 }
 
 val riderWave = riderWaveOf(riderSdkVersion)
-if (withBackend) {
-    listOf("pluginSinceBuild", "pluginUntilBuild").forEach { name ->
-        require(name !in gradle.startParameter.projectProperties) {
-            "-P$name cannot be combined with -PwithBackend=true: the supported range is derived from " +
-                "riderSdkVersion ($riderSdkVersion, wave $riderWave), and an explicit range could be wider " +
-                "than the one Rider release the backend module is built for."
-        }
+listOf("pluginSinceBuild", "pluginUntilBuild", "platformVersion").forEach { name ->
+    require(name !in gradle.startParameter.projectProperties) {
+        "-P$name is no longer supported: the build targets the one Rider release riderSdkVersion names " +
+            "($riderSdkVersion, wave $riderWave). Pass -PriderSdkVersion=<release> to target another."
     }
 }
-val pluginSinceBuildValue: Provider<String> =
-    if (withBackend) provider { riderWave } else providers.gradleProperty("pluginSinceBuild")
-val pluginUntilBuildValue: Provider<String> =
-    if (withBackend) provider { "$riderWave.*" } else providers.gradleProperty("pluginUntilBuild")
 
 // CI passes -PpluginVersion=<ReqnrollIdeSupportMainVersion>.<run number>. A local build falls back to the
 // same <ReqnrollIdeSupportMainVersion>.99999 that build/Version.props gives the .NET projects, so a local
@@ -85,11 +72,16 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        rider(providers.gradleProperty("platformVersion")) {
+        rider(riderSdkVersion) {
             // Rider isn't distributed through the installer channel the plugin defaults to;
             // useInstaller = true (the default) triggers "not supported" at sync/build time.
             useInstaller = false
         }
+        // Platform modules the plugin compiles against that newer Rider releases ship as separate module jars,
+        // outside the default compile classpath: `Project.solution` (com.jetbrains.rider.projectView) and the
+        // spellchecker API. At run time both are part of the Rider product plugin, which plugin.xml depends on.
+        bundledModule("intellij.rider.rdclient.dotnet")
+        bundledModule("intellij.spellchecker")
         // instrumentationTools() was a compatibility helper for the 1.x plugin, removed in 2.12.0 --
         // build/test/verify now pull the required instrumentation dependencies automatically.
 
@@ -132,14 +124,12 @@ kotlin {
 
     // The plugin runs against the IDE's own bundled Kotlin runtime (kotlin.stdlib.default.dependency
     // = false, gradle.properties), not a copy we ship -- so compiled bytecode must not reference
-    // stdlib/coroutines symbols newer than what the *oldest* supported Rider bundles. Compiling at
-    // the default (compiler-version) API/language level with kotlin("jvm") 2.4.x emitted a
-    // reference to kotlin.coroutines.jvm.internal.SpillingKt (a suspend-fn codegen helper added
-    // after 2.0) that RD-243 (Rider 2024.3, this plugin's pluginSinceBuild) doesn't have, and
-    // verifyPlugin caught it as a COMPATIBILITY_PROBLEMS NoSuchClassError risk. Pinning to 2.0 --
-    // matching the Kotlin version this project targeted before the compiler bump -- keeps the
-    // newer compiler's fixes without emitting bytecode the oldest supported IDE can't load. Bump
-    // this only alongside pluginSinceBuild.
+    // stdlib/coroutines symbols newer than what the targeted Rider bundles. Compiling at the default
+    // (compiler-version) API/language level with kotlin("jvm") 2.4.x once emitted a reference to
+    // kotlin.coroutines.jvm.internal.SpillingKt (a suspend-fn codegen helper added after 2.0) that an
+    // older Rider didn't have, which verifyPlugin caught as a COMPATIBILITY_PROBLEMS NoSuchClassError
+    // risk. Pinned to 2.0, which every Rider since 2024.3 bundles; raising it is safe only up to the
+    // Kotlin version riderSdkVersion's Rider bundles, which verifyPlugin checks.
     compilerOptions {
         apiVersion.set(KotlinVersion.KOTLIN_2_0)
         languageVersion.set(KotlinVersion.KOTLIN_2_0)
@@ -163,24 +153,16 @@ intellijPlatform {
         version = pluginVersionValue
 
         ideaVersion {
-            sinceBuild = pluginSinceBuildValue
-            untilBuild = pluginUntilBuildValue
+            sinceBuild = riderWave
+            untilBuild = "$riderWave.*"
         }
     }
 
-    // `recommended()` picks a couple of IDE versions from JetBrains' own heuristic -- without
-    // this block, `verifyPlugin` fails immediately with "No IDE resolved for verification".
-    // `select` adds every RELEASE-channel Rider build across the declared pluginSinceBuild-
-    // pluginUntilBuild compatibility range (see issue #271; range widened to 262.* in #368 to
-    // catch up with the then-current Rider 2026.2 release) -- in practice this resolves to just
-    // the earliest and latest builds published on that channel in range, which is exactly the
-    // "spread across the declared range" the issue asked for. Unlike hardcoding specific build
-    // numbers, this stays correct as new patch releases land without needing manual upkeep, and
-    // RELEASE-only avoids pulling in every EAP/nightly, which would multiply this already-slow CI
-    // job (#149) for little benefit. Every API this plugin depends on (LspServerManager,
-    // LspServerDescriptor, LspServerSupportProvider) is @Experimental, so this is a cheap, static,
-    // bytecode-level early warning if one of those APIs changes or disappears somewhere in the
-    // declared range.
+    // Verified against the one Rider the plugin is built for (`current()`: the riderSdkVersion platform the
+    // build already downloaded), not a spread of releases: the plugin's range is that release alone, and a
+    // second IDE download per verification costs CI time and developer disk for no coverage the range needs.
+    // Every API this plugin depends on (LspServerManager, LspServerDescriptor, LspServerSupportProvider) is
+    // @Experimental, so this is still the cheap, bytecode-level early warning when riderSdkVersion is bumped.
     pluginVerification {
         // The JetBrains Marketplace rejects a plugin that uses @ApiStatus.Internal API, so any such
         // usage fails the build here instead of at publish time. Spelled out rather than relying on
@@ -192,13 +174,7 @@ intellijPlatform {
         )
 
         ides {
-            recommended()
-            select {
-                types = listOf(IntelliJPlatformType.Rider)
-                channels = listOf(ProductRelease.Channel.RELEASE)
-                sinceBuild = pluginSinceBuildValue
-                untilBuild = pluginUntilBuildValue
-            }
+            current()
         }
     }
 }
@@ -312,9 +288,8 @@ val publishServer by tasks.registering(Exec::class) {
 //
 // A small .NET module that runs in Rider's ReSharper backend process and lets the debugger offer
 // breakpoints in .feature files (see docs/Rider-Feature-Breakpoints-Plan.md). Unlike the Kotlin code, it is
-// compiled against one Rider SDK version (`riderSdkVersion`), so a build that includes it is only compatible
-// with that Rider release; the range at the top of this file is derived from it. Without -PwithBackend=true
-// the build is the frontend-only plugin that works across the whole range.
+// compiled against one Rider SDK version (`riderSdkVersion`), the same release the Kotlin code targets (see the
+// top of this file). Without -PwithBackend=true the plugin is built without it.
 //
 // Pre-built by CI and passed in with -PbackendBuildDir (a directory holding the module's DLLs), in
 // which case compileBackend is skipped, mirroring -PlspServerBuildDir above. The module references
@@ -521,30 +496,16 @@ tasks {
 // JavaExec-derived task in the IntelliJ Platform Gradle Plugin, so `systemProperty` applies to
 // the JVM it launches (the sandboxed IDE itself, not our LSP server subprocess — the plugin
 // code reads it and passes the corresponding --log-level through when it spawns the server).
-tasks.matching { it.name == "runIde" || it.name == runIdeWithBackendTaskName }.configureEach {
+tasks.matching { it.name == "runIde" }.configureEach {
     (this as? JavaExec)?.systemProperty("reqnroll.devSandbox", "true")
 }
 
-// A backend build supports only the riderSdkVersion release (see the top of this file), so it needs a sandbox of
-// that release rather than the platformVersion one `runIde` starts. The plugin is still compiled against
-// platformVersion; only the IDE that runs it differs.
-intellijPlatformTesting {
-    runIde {
-        register(runIdeWithBackendTaskName) {
-            type = IntelliJPlatformType.Rider
-            version = riderSdkVersion
-        }
-    }
-}
-
-// Fail early instead of launching a sandbox that rejects the plugin as incompatible.
-tasks.named("runIde") {
-    doFirst {
-        check(!withBackend) {
-            "A -PwithBackend=true build only loads in Rider $riderSdkVersion (wave $riderWave), but runIde starts " +
-                "the platformVersion sandbox. Run ./gradlew $runIdeWithBackendTaskName instead."
-        }
-    }
+// `runIde` with the backend bundled (asking for this task turns withBackend on, see the top of this file). It shares
+// runIde's sandbox, so there is one sandbox for the targeted release rather than one per entry point.
+tasks.register(runIdeWithBackendTaskName) {
+    group = "intellij platform"
+    description = "Runs runIde with the Rider backend module bundled."
+    dependsOn("runIde")
 }
 
 // ── Built-in Application Insights resource (issue #1160) ──
