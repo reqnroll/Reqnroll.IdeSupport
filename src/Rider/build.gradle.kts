@@ -142,6 +142,20 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
+
+    // Tests that start the platform (BasePlatformTestCase) make Rider look for a .NET runtime while it loads path
+    // macros. The Rider artifact Gradle downloads bundles none, so Rider runs its dotnet-sdk.cmd bootstrap script,
+    // which downloads a .NET SDK and runs `dotnet fsi`; on the Linux CI runner that exits non-zero, Rider logs it as
+    // an error, and the test logger fails the test. Pointing Rider at the machine's own dotnet skips the script.
+    // Without a dotnet on PATH nothing is set and Rider falls back to the script as before.
+    val dotnetName = if (OperatingSystem.current().isWindows) "dotnet.exe" else "dotnet"
+    val machineDotnet = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+        .filter { it.isNotBlank() }
+        .map { File(it, dotnetName) }
+        .firstOrNull { it.isFile }
+    if (machineDotnet != null) {
+        systemProperty("rider.backend.dotnet.runtime.path", machineDotnet.canonicalPath)
+    }
 }
 
 intellijPlatform {
