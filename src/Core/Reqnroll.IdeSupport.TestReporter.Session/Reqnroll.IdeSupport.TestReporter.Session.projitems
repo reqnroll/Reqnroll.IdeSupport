@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  How a test reporter finds the LSP server it should send outcomes to: the per-OS sessions directory and
+  the session breadcrumbs the server writes there. Compiled as source into every reporter that needs it:
+
+    - Reqnroll.IdeSupport.TestReporter.MTP, and through its source bundle into users' test projects;
+    - Reqnroll.IdeSupport.Rider.Backend (src/Rider/dotnet), which reports the test runs Rider starts itself.
+
+  A shared project rather than an assembly: the MTP reporter is injected into user projects as source, and
+  SessionBreadcrumbMatcher needs System.Text.Json, which Reqnroll.IdeSupport.TestReporter.Common must not
+  reference. Keep these files to the template rules of the MTP source bundle (usings before a file-scoped
+  namespace, no other top-level content).
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>4EFAA216-06E6-449F-BA9A-23F371DE29C4</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>Reqnroll.IdeSupport.TestReporter.Session</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)SessionBreadcrumbMatcher.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SessionsDirectory.cs" />
+  </ItemGroup>
+</Project>

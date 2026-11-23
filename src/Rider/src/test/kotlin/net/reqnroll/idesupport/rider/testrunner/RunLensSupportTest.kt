@@ -95,6 +95,16 @@ class RunLensSupportTest {
         assertEquals(emptyList(), RunLensSupport.collectContainerSymbols(emptyList()))
     }
 
+    @Test
+    fun `collectContainerSymbols with rulesOnly keeps nested Rules and drops the Feature`() {
+        val rule = namespaceSymbol("Totals", listOf(methodSymbol("Add two numbers", 3)))
+        val tree = listOf(featureSymbol("Add numbers", listOf(rule, methodSymbol("Subtract", 9))))
+
+        val result = RunLensSupport.collectContainerSymbols(tree, rulesOnly = true)
+
+        assertEquals(listOf("Totals"), result.map { it.name })
+    }
+
     // ── renderTitle ──────────────────────────────────────────────────────────
 
     @Test

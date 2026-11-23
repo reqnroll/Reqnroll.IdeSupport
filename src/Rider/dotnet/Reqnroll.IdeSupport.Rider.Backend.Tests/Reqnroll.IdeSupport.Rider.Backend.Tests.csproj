@@ -16,5 +16,34 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\Debugger\BreakpointLineFilter.cs" Link="BreakpointLineFilter.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\GeneratedTestLines.cs" Link="GeneratedTestLines.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\RiderTestRunReport.cs" Link="RiderTestRunReport.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\UnitTestHighlightingContract.cs" Link="UnitTestHighlightingContract.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\CodeBehindPaths.cs" Link="CodeBehindPaths.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Common\Reqnroll.IdeSupport.TestReporter.Common.csproj" />
+    <!-- Not referenced for its output (it is net472 against the Rider SDK): only so that restoring and building
+         these tests also restores the module, whose resolved SDK reference the target below asks for. -->
+    <ProjectReference Include="..\Reqnroll.IdeSupport.Rider.Backend\Reqnroll.IdeSupport.Rider.Backend.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <!-- Records where the module's Rider SDK keeps JetBrains.ReSharper.UnitTestFramework.dll, as assembly metadata the
+       Rider SDK contract test reads. RiderSdkVersion and the other global properties flow into the call, so the
+       test checks the same SDK the module is built with. -->
+  <Target Name="AddRiderUnitTestFrameworkPath" BeforeTargets="GetAssemblyAttributes">
+    <MSBuild Projects="..\Reqnroll.IdeSupport.Rider.Backend\Reqnroll.IdeSupport.Rider.Backend.csproj"
+             Targets="GetRiderUnitTestFrameworkReference">
+      <Output TaskParameter="TargetOutputs" ItemName="_RiderUnitTestFrameworkReference" />
+    </MSBuild>
+    <Error Condition="'@(_RiderUnitTestFrameworkReference)' == ''"
+           Text="The Rider backend module resolved no JetBrains.ReSharper.UnitTestFramework.dll from the Rider SDK." />
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>RiderSdkUnitTestFramework</_Parameter1>
+        <_Parameter2>@(_RiderUnitTestFrameworkReference->'%(FullPath)')</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
 </Project>

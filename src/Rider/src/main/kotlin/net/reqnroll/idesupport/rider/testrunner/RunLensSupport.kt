@@ -44,14 +44,14 @@ internal object RunLensSupport {
      * lens renders on (see `DocumentSymbolHandler.cs`'s `ToSymbolKind`, the same mapping VS's
      * `RunTestCodeLensService.CollectContainerNodes` uses). Mirror of [collectMethodSymbols]'s
      * shape for the container half of the run lens. `internal` so it's unit-testable without a
-     * platform fixture.
+     * platform fixture. With [rulesOnly], Features are left out.
      */
-    internal fun collectContainerSymbols(symbols: List<DocumentSymbol>): List<DocumentSymbol> {
+    internal fun collectContainerSymbols(symbols: List<DocumentSymbol>, rulesOnly: Boolean = false): List<DocumentSymbol> {
         val result = mutableListOf<DocumentSymbol>()
         for (symbol in symbols) {
-            if (symbol.kind == SymbolKind.Module || symbol.kind == SymbolKind.Namespace) result.add(symbol)
+            if (symbol.kind == SymbolKind.Namespace || (!rulesOnly && symbol.kind == SymbolKind.Module)) result.add(symbol)
             val children = symbol.children
-            if (!children.isNullOrEmpty()) result.addAll(collectContainerSymbols(children))
+            if (!children.isNullOrEmpty()) result.addAll(collectContainerSymbols(children, rulesOnly))
         }
         return result
     }
@@ -75,17 +75,21 @@ internal object RunLensSupport {
      * inside Features) and resolves each one's whole contained scenario set in a single
      * `reqnroll/resolveContainerTestTargets` call, cached under the same (uri, line) identity rule
      * as scenarios.
+     *
+     * With [rulesOnly], only Rule lines get an entry: Rider's own test gutter marks
+     * ([BackendTestGutterMarks]) run the Feature and its scenarios, and Rider has no test element for a Rule.
      */
     fun computeEntries(
         project: Project,
         document: Document,
         filePath: String,
         providerId: String,
+        rulesOnly: Boolean = false,
     ): List<Pair<TextRange, CodeVisionEntry>> {
         val uri = localPathToLspUri(filePath)
         val symbols = ReqnrollRequestSender.documentSymbol(project, uri) ?: return emptyList()
-        val scenarioSymbols = collectMethodSymbols(symbols)
-        val containerSymbols = collectContainerSymbols(symbols)
+        val scenarioSymbols = if (rulesOnly) emptyList() else collectMethodSymbols(symbols)
+        val containerSymbols = collectContainerSymbols(symbols, rulesOnly)
         if (scenarioSymbols.isEmpty() && containerSymbols.isEmpty()) return emptyList()
 
         val result = mutableListOf<Pair<TextRange, CodeVisionEntry>>()
@@ -95,17 +99,7 @@ internal object RunLensSupport {
             val startLine = selectionRange.start.line
             if (startLine < 0 || startLine >= document.lineCount) continue
 
-            val identity = "${symbol.detail}|${symbol.name}"
-            val targets = RunTestTargetCache.get(uri, startLine, identity) ?: run {
-                val response = ReqnrollRequestSender.resolveTestTargets(
-                    project, uri,
-                    selectionRange.start.line, selectionRange.start.character,
-                    selectionRange.end.line, selectionRange.end.character,
-                )
-                val resolved = response?.targets.orEmpty()
-                RunTestTargetCache.put(uri, startLine, identity, resolved)
-                resolved
-            }
+            val targets = scenarioTargets(project, uri, symbol)
             if (targets.isEmpty()) continue
             resolvedScenarios.add(ScenarioRunTarget(startLine, targets))
 
@@ -148,6 +142,27 @@ internal object RunLensSupport {
             result.add(TextRange(offset, offset) to entry)
         }
         return result
+    }
+
+    /**
+     * The generated test method(s) of one scenario/Outline [symbol] (which has a selection range), from
+     * [RunTestTargetCache] while the scenario's identity (kind + name) is unchanged, otherwise resolved with
+     * `reqnroll/resolveTestTargets` and cached. Empty when none resolve (not built yet).
+     */
+    fun scenarioTargets(project: Project, uri: String, symbol: DocumentSymbol): List<ScenarioTestTargetItem> {
+        val selectionRange = symbol.selectionRange ?: return emptyList()
+        val startLine = selectionRange.start.line
+        val identity = "${symbol.detail}|${symbol.name}"
+        return RunTestTargetCache.get(uri, startLine, identity) ?: run {
+            val response = ReqnrollRequestSender.resolveTestTargets(
+                project, uri,
+                selectionRange.start.line, selectionRange.start.character,
+                selectionRange.end.line, selectionRange.end.character,
+            )
+            val resolved = response?.targets.orEmpty()
+            RunTestTargetCache.put(uri, startLine, identity, resolved)
+            resolved
+        }
     }
 
     /**

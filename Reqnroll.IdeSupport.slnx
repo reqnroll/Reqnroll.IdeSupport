@@ -8,6 +8,7 @@
         <Project Path="src/Core/Reqnroll.IdeSupport.Common/Reqnroll.IdeSupport.Common.csproj" Id="9b9365f9-b9e0-48cf-a611-af594033611e" />
         <Project Path="src/Core/Reqnroll.IdeSupport.TestReporter.Common/Reqnroll.IdeSupport.TestReporter.Common.csproj" />
         <Project Path="src/Core/Reqnroll.IdeSupport.TestReporter.MTP/Reqnroll.IdeSupport.TestReporter.MTP.csproj" />
+        <Project Path="src/Core/Reqnroll.IdeSupport.TestReporter.Session/Reqnroll.IdeSupport.TestReporter.Session.shproj" />
         <Project Path="src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj" />
     </Folder>
     <Folder Name="/LSP/">

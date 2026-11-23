@@ -82,7 +82,7 @@ sequenceDiagram
 | `ReqnrollCommentByLineCommentAction` | Overrides the platform's `CommentByLineComment` action by ID. |
 | `ReqnrollGoToDefinitionAction`, `ReqnrollGoToDefinitionPromoter` | Make F12 / Ctrl+B / Ctrl+click reach the server on Rider 2026.2+. |
 | `RunTestRunner`, `RunLensSupport`, `FailedStepGutterMarks` | Run lens and execution; see [../Test-Runner-Integration-Design.md](../Test-Runner-Integration-Design.md). |
-| `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionPromoter`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
+| `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionInstaller`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
 | `ReqnrollToggleFeatureInlayHintsAction` | "Show Feature Inlay Hints" toggle. |
 | `ReqnrollDebugLogger` | File logging gated on the dev-sandbox property. |
 
@@ -129,7 +129,17 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    folder scanning.
 6. **Shared projects need explicit handling.** Rider's baseline is a project-folder walk, so it reads imported
    `.projitems` directly and sends no delta for a file added to a shared project.
-7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc.
+7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc. Builds with the
+   backend module get it from the backend instead: `FeatureTestGutterStage` adds Rider's own test gutter marks
+   (an internal highlighting type, created by reflection and checked against the pinned SDK by
+   `RiderSdkContractTests`) for the tests discovered in `.feature.cs`, mapped to
+   lines through `#line` directives and the position of each outline row attribute (`GeneratedTestLines`). The backend daemon only
+   runs on `.feature` because `META-INF/reqnroll-backend.xml`, packaged in backend builds only, associates the
+   `Gherkin` frontend language with the backend's `REQNROLL_FEATURE`. The Run lens then keeps only Rule lines
+   (`BackendTestGutterMarks`). Rider's runners ignore runsettings loggers, so the bundled test logger never sees
+   a run started from those marks. The backend's `FeatureTestResultReporter` sends Rider's own results to the
+   server's outcome listener instead, and `GutterRunOutcomes` applies them to the failed-step marks on the
+   `changed` push (see the outcomes pipeline doc).
 8. **The plugin ID must not contain "rider".**
 9. **Native lenses ignore `workspace/codeLens/refresh` (Rider 2026.2+).** The platform caches each file's lenses
    and asks the server again only when the project's PSI modification count has changed; its refresh handler does
@@ -143,12 +153,18 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    `LspCodeVisionProvider` in every invalidation it sends, since a signal for this plugin's providers alone can
    cancel the platform's recompute in progress.
 10. **Rider's Step Into cannot reach a step definition** from a `.feature` step (it steps over the step, or into
-    Reqnroll's `ExecutionEngine` with external source debugging on). `StepIntoStepDefinitionAction` takes Step
-    Into's shortcuts while the debugger is stopped on a `.feature` line and runs to the definition's body instead.
+    Reqnroll's `ExecutionEngine` with external source debugging on). `StepIntoStepDefinitionAction` wraps the
+    registered `StepInto` action (Rider's own, which it registers at startup), so the toolbar button, the Run menu
+    and every keymap reach it. From a `.feature` line it runs to the definition's body; anywhere else it is Rider's
+    Step Into. Competing for the shortcuts alone left the toolbar and menu on Rider's Step Into.
 
 ## 8. Known limitations
 
-- No Debug action for scenarios; no native Unit Tests tool window presence.
+- Frontend-only builds: no Debug action for scenarios and no native Unit Tests tool window presence. Backend builds
+  have both through Rider's test gutter marks, except on Rule lines (Rider has no Rule test element), which keep
+  the `dotnet test` Run lens. Runs started from the gutter reach the failed-step marks through the backend's
+  reporter (not yet checked live). A multi-target project reports each result under its own target framework's
+  output, while the editor looks up the first, so results of the other targets are not shown.
 - Rider before 2025.3 has no outline (the native Structure view renders the standard `documentSymbol` response from
   2025.3).
 - Lenses are inline, not gutter icons.

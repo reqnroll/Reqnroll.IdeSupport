@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Reqnroll.IdeSupport.TestReporter.Session;
 
 namespace Reqnroll.IdeSupport.TestReporter.MTP;
 

@@ -1,4 +1,4 @@
-<idea-plugin url="https://reqnroll.net">
+<idea-plugin url="https://reqnroll.net" xmlns:xi="http://www.w3.org/2001/XInclude">
   <id>net.reqnroll.idesupport</id>
   <name>Reqnroll Extension (Preview)</name>
   <vendor url="https://github.com/reqnroll/Reqnroll.IdeSupport">Reqnroll</vendor>
@@ -100,15 +100,17 @@ for what is available in each IDE.</p>
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollProjectFilesSync" />
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollDocumentActivationSync" />
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.testrunner.GutterRunOutcomesActivity" />
 
     <!-- Rider 2026.2 routes the Go to Declaration shortcuts (F12, Ctrl+B, Ctrl+click) through its
          ReSharper backend first, which knows nothing about Gherkin; ReqnrollGoToDefinitionAction runs
          the frontend action directly for .feature files instead (issue #909). -->
     <actionPromoter implementation="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionPromoter" />
 
-    <!-- Rider's Step Into from a .feature step line skips the step definition; StepIntoStepDefinitionAction
-         takes Step Into's shortcuts only while the debugger is stopped on a .feature line. -->
-    <actionPromoter implementation="net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionPromoter" />
+    <!-- Rider's Step Into from a .feature step line skips the step definition. StepIntoStepDefinitionInstaller
+         wraps the registered Step Into (toolbar, Run menu and every keymap) in StepIntoStepDefinitionAction,
+         which runs to the step definition from a .feature line and is Rider's Step Into everywhere else. -->
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionInstaller" />
 
     <!-- Rider's generic LSP client has no rendering-side consumer for textDocument/codeLens or
          textDocument/inlayHint at all (confirmed by decompiling — only capability-name
@@ -124,10 +126,15 @@ for what is available in each IDE.</p>
     <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.codevision.StepHooksCodeVisionProvider" />
 
     <!-- "▶ Run" lens on each Scenario/Scenario Outline line (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — same
-         PSI-free CodeVisionProvider mechanism as the hook-match lenses above; see
-         RunTestCodeVisionProvider's doc comment for why RunLineMarkerContributor (the design doc's
-         original recommendation, a PSI-based gutter-icon API) isn't viable for this plugin. -->
+         PSI-free CodeVisionProvider mechanism as the hook-match lenses above. With the backend module,
+         Rider's own test gutter marks take over Feature and Scenario lines (see RunTestCodeVisionProvider). -->
     <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider" />
+    <!-- Where the backend module adds Rider's own test gutter marks, the Run lens keeps only Rule lines; this key
+         brings it back on every line (see BackendTestGutterMarks). -->
+    <registryKey
+        key="reqnroll.feature.showRunLensWithGutterMarks"
+        defaultValue="false"
+        description="Reqnroll: show the inline Run lens on Feature and Scenario lines even when Rider's test gutter marks are there" />
 
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see
@@ -182,6 +189,9 @@ for what is available in each IDE.</p>
     <!-- Arms Command.GoToStepDefinition telemetry when Go To Declaration runs in a .feature file. -->
     <listener class="net.reqnroll.idesupport.rider.navigation.GoToStepDefinitionActionListener"
               topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />
+    <!-- Puts Rider's own Step Into back before the plugin is unloaded (see StepIntoStepDefinitionInstaller). -->
+    <listener class="net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionUnloadListener"
+              topic="com.intellij.ide.plugins.DynamicPluginListener" />
   </applicationListeners>
 
   <actions>
@@ -242,17 +252,6 @@ for what is available in each IDE.</p>
       <mouse-shortcut keymap="Visual Studio 2022" keystroke="ctrl button1" />
     </action>
 
-    <action id="Reqnroll.StepIntoStepDefinition"
-        class="net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionAction"
-        text="Step Into Step Definition"
-        description="Run to the step definition of the .feature step the debugger is stopped on">
-      <!-- Step Into's own bindings, copied explicitly for the same reason as Reqnroll.GoToDefinition's. -->
-      <keyboard-shortcut keymap="$default" first-keystroke="F7" />
-      <keyboard-shortcut keymap="Visual Studio" first-keystroke="F11" />
-      <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F11" />
-      <add-to-group group-id="XDebugger.ToolWindow.TopToolbar3.Extra" anchor="first" />
-    </action>
-
     <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI
          language is registered for Gherkin in this plugin, so nothing else (native or
          otherwise) is bound to that shortcut for .feature files. -->
@@ -291,4 +290,9 @@ for what is available in each IDE.</p>
       <separator />
     </group>
   </actions>
+  <!-- Rider test gutter marks on .feature scenarios. Only builds that bundle the backend module (-PwithBackend=true)
+       package this file; elsewhere the fallback leaves the editor frontend-only, as before. -->
+  <xi:include href="/META-INF/reqnroll-backend.xml" xpointer="xpointer(/idea-plugin/*)">
+    <xi:fallback />
+  </xi:include>
 </idea-plugin>

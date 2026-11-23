@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace Reqnroll.IdeSupport.TestReporter.MTP;
+namespace Reqnroll.IdeSupport.TestReporter.Session;
 
 /// <summary>
 /// Resolves <c>&lt;Reqnroll application dir&gt;\test-outcomes\sessions</c> — the directory the LSP

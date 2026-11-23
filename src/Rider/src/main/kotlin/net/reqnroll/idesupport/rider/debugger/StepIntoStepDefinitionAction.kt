@@ -1,7 +1,8 @@
 package net.reqnroll.idesupport.rider.debugger
 
-import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionWrapper
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataContext
@@ -22,8 +23,9 @@ import net.reqnroll.idesupport.rider.lsp.lspUriToLocalPath
 import org.eclipse.lsp4j.Location
 
 /**
- * Step Into for a debugger stopped on a `.feature` step line: runs to the first line of the step definition the
- * step binds to.
+ * Step Into, as registered under the platform's `StepInto` action ID. For a debugger stopped on a `.feature` step
+ * line it runs to the first line of the step definition the step binds to; everywhere else it is the action it wraps
+ * (Rider's own Step Into), unchanged.
  *
  * Rider's own Step Into cannot get there. The step's generated code awaits `testRunner.GivenAsync(...)`, and the
  * step definition is reached through Reqnroll's asynchronous execution engine. With external source debugging off,
@@ -35,24 +37,18 @@ import org.eclipse.lsp4j.Location
  * say) still stop the run. When the step has no single definition with source on this machine (undefined,
  * ambiguous, or bound to an external assembly), it falls back to the platform's Step Into.
  *
- * It shares Step Into's shortcuts; [StepIntoStepDefinitionPromoter] makes it win them only while the debugger is
- * stopped on a `.feature` line, so everywhere else the shortcut keeps its normal meaning.
+ * It takes over the `StepInto` registration itself ([install]) rather than competing for its shortcuts, so the
+ * toolbar button, the Run menu item and every keymap's shortcut all reach it. Rider registers its own Step Into
+ * under that ID at startup (which also starts a session and breaks at the entry point when none is running), so
+ * this wraps whatever is registered instead of replacing it.
  */
-class StepIntoStepDefinitionAction : AnAction() {
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-
-    override fun update(e: AnActionEvent) {
-        val session = sessionOf(e.dataContext)
-        e.presentation.isVisible = session != null
-        e.presentation.isEnabled = session != null && isStoppedOnFeatureLine(session)
-    }
-
+class StepIntoStepDefinitionAction(platformStepInto: AnAction) : AnActionWrapper(platformStepInto) {
     override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: return
-        val session = sessionOf(e.dataContext) ?: return
-        val position = session.currentPosition ?: return
-        if (!isStoppedOnFeatureLine(session)) {
-            session.stepInto()
+        val project = e.project
+        val session = sessionOf(e.dataContext)
+        val position = session?.currentPosition
+        if (project == null || session == null || position == null || !isStoppedOnFeatureLine(session)) {
+            super.actionPerformed(e)
             return
         }
         val suspendContext = session.suspendContext
@@ -137,6 +133,31 @@ class StepIntoStepDefinitionAction : AnAction() {
     }
 
     companion object {
+        /** The platform's Step Into action ID, under which Rider registers its own Step Into. */
+        internal const val STEP_INTO_ACTION_ID = "StepInto"
+
+        /**
+         * Wraps the action registered as Step Into, once. Call after the action manager has started, by which time
+         * Rider has registered its Step Into; replacing the registration also updates the toolbar and menu groups
+         * that show it.
+         */
+        @Synchronized
+        fun install() {
+            val manager = ActionManager.getInstance()
+            val current = manager.getAction(STEP_INTO_ACTION_ID) ?: return
+            if (current is StepIntoStepDefinitionAction) return
+            manager.replaceAction(STEP_INTO_ACTION_ID, StepIntoStepDefinitionAction(current))
+            ReqnrollDebugLogger.info("StepIntoStepDefinitionAction: wrapped ${current.javaClass.name} as $STEP_INTO_ACTION_ID")
+        }
+
+        /** Puts the wrapped action back, so unloading the plugin leaves Rider's own Step Into registered. */
+        @Synchronized
+        fun uninstall() {
+            val manager = ActionManager.getInstance()
+            val current = manager.getAction(STEP_INTO_ACTION_ID) as? StepIntoStepDefinitionAction ?: return
+            manager.replaceAction(STEP_INTO_ACTION_ID, current.delegate)
+        }
+
         /** The session the action applies to: the one in the context, else the project's current one. */
         internal fun sessionOf(context: DataContext): XDebugSession? =
             XDebugSession.DATA_KEY.getData(context)
