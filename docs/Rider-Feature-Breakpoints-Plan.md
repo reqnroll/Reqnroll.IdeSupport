@@ -178,8 +178,12 @@ step definition.
   body with `XDebugSession.runToPosition`.
 - An undefined or ambiguous step, or a binding without source, falls back to the platform's Step Into with a
   message in the debugger tool window.
-- It carries Step Into's shortcuts (F7 in `$default`, F11 in the Visual Studio keymaps).
-  `StepIntoStepDefinitionPromoter` makes it win them only while the debugger is stopped on a `.feature` line.
+- It is Step Into itself: `StepIntoStepDefinitionInstaller` (a startup activity) wraps the action registered as
+  `StepInto`, so the toolbar button, the Run menu and every keymap's shortcut reach it. Off a `.feature` line it
+  calls the wrapped action, Rider's `RiderStepIntoAction`, which Rider registers in place of the platform's at
+  startup and which also starts debugging and breaks at the entry point when no session runs. *(It first took only
+  Step Into's shortcuts, through an action promoter; a live check found the toolbar and menu still ran Rider's
+  Step Into.)*
 - It needs no backend module.
 
 ## 5. Coexistence with the legacy plugin
