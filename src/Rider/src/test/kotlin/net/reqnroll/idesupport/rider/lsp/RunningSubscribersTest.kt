@@ -142,4 +142,22 @@ class RunningSubscribersTest {
 
         assertEquals(listOf("once"), calls)
     }
+
+    @Test
+    fun aFailingDispatchDoesNotEscapeAndIsReported() {
+        val subscribers = RunningSubscribers(
+            dispatch = { throw IllegalStateException("pool is shutting down") },
+            isCancelled = { cancelled },
+            log = { logs.add(it) },
+            logFailure = { message, error -> failures.add(message to error) },
+            nanoTime = { now },
+        )
+        subscribers.subscribe { }
+
+        subscribers.notifyRunning()
+
+        assertEquals(1, failures.size)
+        assertEquals("pool is shutting down", failures.single().second.message)
+        assertTrue(logs.isEmpty())
+    }
 }

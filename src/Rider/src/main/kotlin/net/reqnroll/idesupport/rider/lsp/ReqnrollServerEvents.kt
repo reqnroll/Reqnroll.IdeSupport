@@ -3,6 +3,7 @@ package net.reqnroll.idesupport.rider.lsp
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerManager
@@ -86,8 +87,16 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
     }
 
     override fun serverInitialized(params: InitializeResult) {
-        telemetry.onStateChanged(LspServerState.Running)
-        // Returns at once: the platform waits for this callback before it lets the handshake finish.
+        // Must not throw: the platform finishes the handshake only after this callback returns, so an
+        // escaping exception would leave it waiting for the connect timeout.
+        try {
+            telemetry.onStateChanged(LspServerState.Running)
+        } catch (e: ProcessCanceledException) {
+            throw e
+        } catch (e: Exception) {
+            ReqnrollDebugLogger.error("ReqnrollServerEvents: reporting the server start failed", e)
+        }
+        // Returns at once, for the same reason.
         runningSubscribers.notifyRunning()
     }
 
