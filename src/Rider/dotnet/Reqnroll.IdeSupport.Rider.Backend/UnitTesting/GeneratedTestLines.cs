@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.Rider.Backend.UnitTesting;
 /// <para>
 /// Free of the Rider SDK so it can be unit-tested. Keyword-free, so it needs no Gherkin dialect: scenario lines come
 /// from the generator's <c>#line</c> directives, and outline example rows from the table rows that follow the
-/// outline's last step.
+/// outline's last step, matched to the test's data rows by position.
 /// </para>
 /// </summary>
 public static class GeneratedTestLines
@@ -126,81 +126,75 @@ public static class GeneratedTestLines
     }
 
     /// <summary>
-    /// The example-row number (the generator's "pickle index") passed by a generated row attribute, such as
-    /// <c>[DataRow("1", "Guitar pick", "0", null)]</c>. Reqnroll passes it as the second-to-last positional
-    /// argument, before the example tags, in every framework. Null if the text is not such an attribute.
+    /// The row attributes (<c>DataRow</c>, <c>TestCase</c>, <c>InlineData</c>) of a generated test method, in
+    /// declaration order. The generator writes one per example row in document order, so the n-th attribute is the
+    /// n-th row of <see cref="ExampleRowLines"/>. Nothing is read from their positional arguments, whose layout belongs
+    /// to the generator (it has carried an internal row index there, which it may drop).
     /// </summary>
-    public static int? PickleIndexOfRowAttribute(string attributeText)
+    public static IReadOnlyList<GeneratedRow> RowAttributes(string methodDeclaration)
     {
-        if (string.IsNullOrEmpty(attributeText))
-            return null;
-
-        var match = RowAttribute.Match(attributeText);
-        if (!match.Success)
-            return null;
-
-        var arguments = PositionalArguments(attributeText, match.Index + match.Length);
-        return arguments.Count >= 2 ? DigitStringLiteral(arguments[arguments.Count - 2]) : null;
-    }
-
-    /// <summary>The pickle indexes of every row attribute in a generated test method, in declaration order.</summary>
-    public static IReadOnlyList<int> PickleIndexesOfRowAttributes(string methodDeclaration)
-    {
-        var indexes = new List<int>();
+        var rows = new List<GeneratedRow>();
         if (string.IsNullOrEmpty(methodDeclaration))
-            return indexes;
+            return rows;
 
         foreach (Match match in RowAttribute.Matches(methodDeclaration))
         {
-            var arguments = PositionalArguments(methodDeclaration, match.Index + match.Length);
-            var index = arguments.Count >= 2 ? DigitStringLiteral(arguments[arguments.Count - 2]) : null;
-            if (index != null)
-                indexes.Add(index.Value);
+            var arguments = Arguments(methodDeclaration, match.Index + match.Length, out var end);
+            if (arguments == null)
+                continue; // Unterminated: not an attribute we understand.
+
+            rows.Add(new GeneratedRow(match.Index, end, NamedString(arguments, "DisplayName")));
         }
 
-        return indexes;
+        return rows;
     }
 
     /// <summary>
-    /// The pickle index at the end of an MSTest row's display name, which Reqnroll generates as
-    /// <c>Title(value, value, ..., pickleIndex)</c>. Null if the name does not end that way.
+    /// The position of one data row among <paramref name="rows"/> (<see cref="RowAttributes"/> of its method), or -1
+    /// if it cannot be told:
+    /// <list type="bullet">
+    ///   <item>by its own location, when that is one row attribute (NUnit, xUnit); exact even for rows with identical
+    ///   values;</item>
+    ///   <item>otherwise by its display name, against the attributes' <c>DisplayName</c> (MSTest, whose rows have no
+    ///   location of their own).</item>
+    /// </list>
     /// </summary>
-    public static int? PickleIndexOfDisplayName(string displayName)
+    /// <param name="rows">The row attributes of the row's method.</param>
+    /// <param name="rowOffset">Where the row's own location starts within the method declaration, or null.</param>
+    /// <param name="rowText">The text of the row's own location, or null.</param>
+    /// <param name="displayName">The row's display name.</param>
+    public static int RowPosition(IReadOnlyList<GeneratedRow> rows, int? rowOffset, string rowText, string displayName)
     {
-        if (string.IsNullOrEmpty(displayName))
-            return null;
-
-        var name = displayName.TrimEnd();
-        if (name.Length < 3 || name[name.Length - 1] != ')')
-            return null;
-
-        var separator = name.LastIndexOf(',');
-        var open = name.LastIndexOf('(');
-        var start = Math.Max(separator, open) + 1;
-        if (start <= 0)
-            return null;
-
-        var digits = name.Substring(start, name.Length - 1 - start).Trim();
-        return ParseDigits(digits);
-    }
-
-    /// <summary>
-    /// The zero-based <c>.feature</c> line of one example row of an outline, given its pickle index and the pickle
-    /// indexes of all the outline's rows. The generator numbers rows consecutively in document order, so the row's
-    /// position is its index minus the outline's lowest. -1 if it falls outside <paramref name="rowLines"/>.
-    /// </summary>
-    public static int RowLine(int pickleIndex, IReadOnlyList<int> outlinePickleIndexes, IReadOnlyList<int> rowLines)
-    {
-        if (outlinePickleIndexes == null || outlinePickleIndexes.Count == 0 || rowLines == null)
+        if (rows == null || rows.Count == 0)
             return -1;
 
-        var lowest = int.MaxValue;
-        foreach (var index in outlinePickleIndexes)
-            lowest = Math.Min(lowest, index);
+        // A location holding exactly one row attribute is that row's; one holding several is the whole method.
+        if (rowOffset != null && !string.IsNullOrEmpty(rowText) && RowAttribute.Matches(rowText).Count == 1)
+        {
+            var offset = rowOffset.Value + RowAttribute.Match(rowText).Index;
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (offset >= rows[i].Start && offset < rows[i].End)
+                    return i;
+            }
+        }
 
-        var position = pickleIndex - lowest;
-        return position >= 0 && position < rowLines.Count ? rowLines[position] : -1;
+        if (!string.IsNullOrEmpty(displayName))
+        {
+            var name = displayName.Trim();
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (string.Equals(rows[i].DisplayName, name, StringComparison.Ordinal))
+                    return i;
+            }
+        }
+
+        return -1;
     }
+
+    /// <summary>The <c>.feature</c> line of the example row at <paramref name="position"/>; -1 if there is none.</summary>
+    public static int RowLine(int position, IReadOnlyList<int> rowLines) =>
+        rowLines != null && position >= 0 && position < rowLines.Count ? rowLines[position] : -1;
 
     private static int SkipStepArgument(Func<int, string> getLine, int lineCount, int line)
     {
@@ -239,10 +233,11 @@ public static class GeneratedTestLines
     }
 
     /// <summary>
-    /// Splits the argument list that starts at <paramref name="start"/> (just after its opening parenthesis) into
-    /// top-level positional arguments. Named arguments (<c>Name = value</c> or <c>Name: value</c>) are dropped.
+    /// Splits the argument list that starts at <paramref name="start"/> (just after its opening parenthesis) into its
+    /// top-level arguments, positional and named, and gives the index just after its closing parenthesis. Null if the
+    /// list is not closed.
     /// </summary>
-    private static List<string> PositionalArguments(string text, int start)
+    private static List<string> Arguments(string text, int start, out int end)
     {
         var arguments = new List<string>();
         var current = new StringBuilder();
@@ -253,9 +248,9 @@ public static class GeneratedTestLines
             var c = text[i];
             if (c == '"' || (c == '@' && i + 1 < text.Length && text[i + 1] == '"'))
             {
-                var end = EndOfStringLiteral(text, i);
-                current.Append(text, i, end - i);
-                i = end;
+                var literalEnd = EndOfStringLiteral(text, i);
+                current.Append(text, i, literalEnd - i);
+                i = literalEnd;
                 continue;
             }
 
@@ -267,7 +262,8 @@ public static class GeneratedTestLines
             {
                 if (depth == 0)
                 {
-                    AddPositional(arguments, current);
+                    AddArgument(arguments, current);
+                    end = i + 1;
                     return arguments;
                 }
 
@@ -275,7 +271,7 @@ public static class GeneratedTestLines
             }
             else if (c == ',' && depth == 0)
             {
-                AddPositional(arguments, current);
+                AddArgument(arguments, current);
                 current.Clear();
                 i++;
                 continue;
@@ -285,17 +281,61 @@ public static class GeneratedTestLines
             i++;
         }
 
-        return new List<string>(); // Unterminated: not an attribute we understand.
+        end = text.Length;
+        return null;
     }
 
-    private static void AddPositional(List<string> arguments, StringBuilder argument)
+    private static void AddArgument(List<string> arguments, StringBuilder argument)
     {
         var text = argument.ToString().Trim();
-        if (text.Length == 0)
-            return;
-        if (Regex.IsMatch(text, @"^@?[A-Za-z_][A-Za-z0-9_]*\s*(=(?!=)|:)"))
-            return;
-        arguments.Add(text);
+        if (text.Length > 0)
+            arguments.Add(text);
+    }
+
+    /// <summary>The value of the named string argument <c>Name = "..."</c> (or <c>Name: "..."</c>); null if absent.</summary>
+    private static string NamedString(IEnumerable<string> arguments, string name)
+    {
+        var named = new Regex(@"^" + Regex.Escape(name) + @"\s*(?:=(?!=)|:)\s*(?<literal>@?"".*)$", RegexOptions.Singleline);
+        foreach (var argument in arguments)
+        {
+            var match = named.Match(argument);
+            if (match.Success)
+                return StringLiteralValue(match.Groups["literal"].Value.Trim());
+        }
+
+        return null;
+    }
+
+    /// <summary>The value of a C# string literal, regular or verbatim; null if the text is not one.</summary>
+    private static string StringLiteralValue(string literal)
+    {
+        if (literal.Length >= 3 && literal[0] == '@' && literal[1] == '"' && literal[literal.Length - 1] == '"')
+            return literal.Substring(2, literal.Length - 3).Replace("\"\"", "\"");
+        if (literal.Length < 2 || literal[0] != '"' || literal[literal.Length - 1] != '"')
+            return null;
+
+        var value = new StringBuilder();
+        for (var i = 1; i < literal.Length - 1; i++)
+        {
+            var c = literal[i];
+            if (c != '\\' || i + 1 >= literal.Length - 1)
+            {
+                value.Append(c);
+                continue;
+            }
+
+            var escaped = literal[++i];
+            value.Append(escaped switch
+            {
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                '0' => '\0',
+                _ => escaped,
+            });
+        }
+
+        return value.ToString();
     }
 
     /// <summary>The index just after the string literal starting at <paramref name="start"/>.</summary>
@@ -334,26 +374,6 @@ public static class GeneratedTestLines
         return text.Length;
     }
 
-    private static int? DigitStringLiteral(string argument)
-    {
-        if (argument.Length < 3 || argument[0] != '"' || argument[argument.Length - 1] != '"')
-            return null;
-        return ParseDigits(argument.Substring(1, argument.Length - 2));
-    }
-
-    private static int? ParseDigits(string text)
-    {
-        if (text.Length == 0)
-            return null;
-        foreach (var c in text)
-        {
-            if (c < '0' || c > '9')
-                return null;
-        }
-
-        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : (int?)null;
-    }
-
     private static bool IsBlankOrComment(string trimmed) => trimmed.Length == 0 || trimmed[0] == '#';
 
     private static string DocStringDelimiter(string trimmed)
@@ -366,4 +386,24 @@ public static class GeneratedTestLines
     }
 
     private static string Trim(string line) => (line ?? string.Empty).Trim().TrimStart('﻿');
+}
+
+/// <summary>One row attribute of a generated test method (<see cref="GeneratedTestLines.RowAttributes"/>).</summary>
+public sealed class GeneratedRow
+{
+    public GeneratedRow(int start, int end, string displayName)
+    {
+        Start = start;
+        End = end;
+        DisplayName = displayName;
+    }
+
+    /// <summary>Where the attribute's name starts in the method declaration.</summary>
+    public int Start { get; }
+
+    /// <summary>Just after the attribute's closing parenthesis.</summary>
+    public int End { get; }
+
+    /// <summary>The attribute's <c>DisplayName</c> argument (MSTest), or null.</summary>
+    public string DisplayName { get; }
 }

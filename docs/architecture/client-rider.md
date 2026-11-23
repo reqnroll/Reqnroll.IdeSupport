@@ -133,7 +133,7 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    backend module get it from the backend instead: `FeatureTestGutterStage` adds Rider's own test gutter marks
    (an internal highlighting type, created by reflection and checked against the pinned SDK by
    `RiderSdkContractTests`) for the tests discovered in `.feature.cs`, mapped to
-   lines through `#line` directives and outline pickle indexes (`GeneratedTestLines`). The backend daemon only
+   lines through `#line` directives and the position of each outline row attribute (`GeneratedTestLines`). The backend daemon only
    runs on `.feature` because `META-INF/reqnroll-backend.xml`, packaged in backend builds only, associates the
    `Gherkin` frontend language with the backend's `REQNROLL_FEATURE`. The Run lens then keeps only Rule lines
    (`BackendTestGutterMarks`). Rider's runners ignore runsettings loggers, so the bundled test logger never sees

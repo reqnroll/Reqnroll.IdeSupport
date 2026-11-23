@@ -248,7 +248,8 @@ public class FeatureTestGutterStage : IDaemonStage
     /// <summary>
     /// Finds the <c>.feature</c> line of each generated test. The test class (a root element) maps to the
     /// <c>Feature</c> line, a test method to its scenario's first <c>#line</c>, and a data row of an outline's method
-    /// to its example row by pickle index. Results per method are cached for the rows that share it.
+    /// to its example row by its position among the method's row attributes. Results per method are cached for the
+    /// rows that share it.
     /// </summary>
     private sealed class TestLines
     {
@@ -283,18 +284,16 @@ public class FeatureTestGutterStage : IDaemonStage
         private int RowLine(IUnitTestElement row)
         {
             var outline = OutlineOf(row.Parent);
-            if (outline.PickleIndexes.Count == 0)
+            if (outline.Rows.Count == 0)
                 return -1;
 
-            // A row located at its own attribute (NUnit, xUnit) carries its index there. MSTest rows have no location,
-            // and a row located at the whole method would show every row's attribute, so both use the display name.
-            var ownAttributes = GeneratedTestLines.PickleIndexesOfRowAttributes(DeclarationText(row));
-            var pickleIndex = ownAttributes.Count == 1
-                ? ownAttributes[0]
-                : GeneratedTestLines.PickleIndexOfDisplayName(row.ShortName);
-            return pickleIndex == null
-                ? -1
-                : GeneratedTestLines.RowLine(pickleIndex.Value, outline.PickleIndexes, outline.RowLines);
+            // The row's own location, relative to its method's declaration: NUnit and xUnit locate a row at its
+            // attribute. MSTest rows have none and are told by display name.
+            var rowRange = DeclarationRange(row);
+            int? rowOffset = rowRange.IsValid && outline.Range.IsValid ? rowRange.StartOffset - outline.Range.StartOffset : (int?)null;
+            var position = GeneratedTestLines.RowPosition(
+                outline.Rows, rowOffset, rowRange.IsValid ? _codeBehindDocument.GetText(rowRange) : null, row.ShortName);
+            return GeneratedTestLines.RowLine(position, outline.RowLines);
         }
 
         private Outline OutlineOf(IUnitTestElement method)
@@ -302,16 +301,17 @@ public class FeatureTestGutterStage : IDaemonStage
             if (_outlines.TryGetValue(method, out var outline))
                 return outline;
 
-            var declaration = DeclarationText(method);
+            var range = DeclarationRange(method);
+            var declaration = range.IsValid ? _codeBehindDocument.GetText(range) : string.Empty;
             var scenarioLine = GeneratedTestLines.ScenarioLine(declaration);
-            var pickleIndexes = GeneratedTestLines.PickleIndexesOfRowAttributes(declaration);
-            var rowLines = scenarioLine < 0 || pickleIndexes.Count == 0
+            var rows = GeneratedTestLines.RowAttributes(declaration);
+            var rowLines = scenarioLine < 0 || rows.Count == 0
                 ? (IReadOnlyList<int>)Array.Empty<int>()
                 : GeneratedTestLines.ExampleRowLines(
                     _feature.Line, _feature.LineCount,
-                    GeneratedTestLines.LastStepLine(declaration, scenarioLine), pickleIndexes.Count);
+                    GeneratedTestLines.LastStepLine(declaration, scenarioLine), rows.Count);
 
-            outline = new Outline(pickleIndexes, rowLines);
+            outline = new Outline(range, rows, rowLines);
             _outlines[method] = outline;
             return outline;
         }
@@ -319,16 +319,23 @@ public class FeatureTestGutterStage : IDaemonStage
         /// <summary>The text of the element's declaration in the code-behind, or empty if it has none there.</summary>
         private string DeclarationText(IUnitTestElement element)
         {
+            var range = DeclarationRange(element);
+            return range.IsValid ? _codeBehindDocument.GetText(range) : string.Empty;
+        }
+
+        /// <summary>The range of the element's declaration in the code-behind; invalid if it has none there.</summary>
+        private TextRange DeclarationRange(IUnitTestElement element)
+        {
             var locations = element.GetLocations();
             if (locations == null)
-                return string.Empty;
+                return TextRange.InvalidRange;
             foreach (var location in locations)
             {
                 if (location.ProjectFile.Equals(_codeBehind) && location.ContainingRange.IsValid)
-                    return _codeBehindDocument.GetText(location.ContainingRange);
+                    return location.ContainingRange;
             }
 
-            return string.Empty;
+            return TextRange.InvalidRange;
         }
 
         private static int Depth(IUnitTestElement element)
@@ -342,13 +349,18 @@ public class FeatureTestGutterStage : IDaemonStage
 
     private sealed class Outline
     {
-        public Outline(IReadOnlyList<int> pickleIndexes, IReadOnlyList<int> rowLines)
+        public Outline(TextRange range, IReadOnlyList<GeneratedRow> rows, IReadOnlyList<int> rowLines)
         {
-            PickleIndexes = pickleIndexes;
+            Range = range;
+            Rows = rows;
             RowLines = rowLines;
         }
 
-        public IReadOnlyList<int> PickleIndexes { get; }
+        /// <summary>The method's declaration range in the code-behind.</summary>
+        public TextRange Range { get; }
+
+        /// <summary>The method's row attributes, in declaration order (the example rows' order).</summary>
+        public IReadOnlyList<GeneratedRow> Rows { get; }
 
         public IReadOnlyList<int> RowLines { get; }
     }
