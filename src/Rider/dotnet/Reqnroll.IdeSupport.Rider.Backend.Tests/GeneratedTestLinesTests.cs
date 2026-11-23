@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Reqnroll.IdeSupport.Rider.Backend.UnitTesting;
 using Xunit;
 
@@ -69,52 +70,106 @@ public class GeneratedTestLinesTests
         Assert.Equal(5, GeneratedTestLines.LastStepLine("public void Foo() { }", 5));
     }
 
+    // A generated MSTest outline as Reqnroll writes it once its row attributes no longer carry the internal row index:
+    // only the example values (the last one numeric) and the tags.
+    private const string MsTestOutlineWithoutRowIndex = """
+                [global::Microsoft.VisualStudio.TestTools.UnitTesting.DataRowAttribute("1", "Guitar pick", "3", null, DisplayName="Amounts(1,Guitar pick,3)")]
+                [global::Microsoft.VisualStudio.TestTools.UnitTesting.DataRowAttribute("2", "Guitar pick", "0", null, DisplayName="Amounts(2,Guitar pick,0)")]
+                public async global::System.Threading.Tasks.Task Amounts(string num, string item, string amount, string[] exampleTags)
+                {
+                }
+        """;
+
+    private const string NUnitOutline = """
+                [global::NUnit.Framework.TestCaseAttribute("50", "70", null, Category="x")]
+                [global::NUnit.Framework.TestCaseAttribute("50", "70", null, Category="x")]
+                [global::NUnit.Framework.TestCaseAttribute("x,y", "(", new string[] { "a", "b" })]
+                public async global::System.Threading.Tasks.Task Add(string first, string second, string[] exampleTags)
+                {
+                }
+        """;
+
     [Fact]
-    public void MsTest_row_attributes_give_their_pickle_indexes_in_order()
+    public void Row_attributes_are_listed_in_declaration_order_with_their_display_names()
     {
-        Assert.Equal(new[] { 3, 4 }, GeneratedTestLines.PickleIndexesOfRowAttributes(MsTestOutline));
+        var rows = GeneratedTestLines.RowAttributes(MsTestOutline);
+
+        Assert.Equal(
+            new[] { "Different amounts calc correctly(1,Guitar pick,1.50,3)", "Different amounts calc correctly(2,Guitar pick,3,4)" },
+            rows.Select(row => row.DisplayName));
+        Assert.True(rows[0].End <= rows[1].Start);
+    }
+
+    [Fact]
+    public void Attributes_that_are_not_rows_or_are_unterminated_are_not_listed()
+    {
+        Assert.Empty(GeneratedTestLines.RowAttributes("[TestMethod(\"Title\")] [TestCaseSource(\"Rows\")] [DataRow(\"1\", \"2\""));
+        Assert.Empty(GeneratedTestLines.RowAttributes(null));
     }
 
     [Theory]
-    [InlineData("[global::NUnit.Framework.TestCaseAttribute(\"50\", \"70\", \"120\", \"0\", null)]", 0)]
-    [InlineData("[global::NUnit.Framework.TestCaseAttribute(\"a\", \"7\", null, Category=\"x\", TestName=\"T(a)\")]", 7)]
-    [InlineData("[global::Xunit.InlineDataAttribute(\"1\", \"Guitar pick\", \"12\", new string[0])]", 12)]
-    [InlineData("[InlineData(\"x,y\", \"(\", \"2\", new string[] { \"a\", \"b\" })]", 2)]
-    [InlineData("[DataRow(@\"a \"\"quoted\"\" value\", \"9\", null)]", 9)]
-    public void Row_attribute_pickle_index_is_the_second_to_last_positional_argument(string attribute, int expected)
+    [InlineData("Different amounts calc correctly(1,Guitar pick,1.50,3)", 0)]
+    [InlineData("Different amounts calc correctly(2,Guitar pick,3,4)", 1)]
+    [InlineData("  Different amounts calc correctly(2,Guitar pick,3,4) ", 1)]
+    [InlineData("Different amounts calc correctly(3,Guitar pick,3,5)", -1)]
+    [InlineData(null, -1)]
+    public void An_MsTest_row_is_found_by_its_display_name(string displayName, int expected)
     {
-        Assert.Equal(expected, GeneratedTestLines.PickleIndexOfRowAttribute(attribute));
+        var rows = GeneratedTestLines.RowAttributes(MsTestOutline);
+
+        Assert.Equal(expected, GeneratedTestLines.RowPosition(rows, rowOffset: null, rowText: null, displayName));
     }
 
     [Theory]
-    [InlineData("[global::Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute(\"Title\")]")]
-    [InlineData("[TestCaseSource(\"Rows\", \"1\", null)]")]
-    [InlineData("[DataRow(\"1\", \"not a number\", null)]")]
-    [InlineData("[DataRow(\"1\")]")]
-    [InlineData("[DataRow(\"1\", \"2\", null")]
-    [InlineData("")]
-    public void Other_attributes_have_no_pickle_index(string attribute)
+    [InlineData("Amounts(1,Guitar pick,3)", 0)]
+    [InlineData("Amounts(2,Guitar pick,0)", 1)]
+    public void Rows_without_the_internal_row_index_are_found_by_position_not_by_a_value(string displayName, int expected)
     {
-        Assert.Null(GeneratedTestLines.PickleIndexOfRowAttribute(attribute));
+        // The last example value is numeric; it must not be taken for a row number.
+        var rows = GeneratedTestLines.RowAttributes(MsTestOutlineWithoutRowIndex);
+
+        Assert.Equal(expected, GeneratedTestLines.RowPosition(rows, null, null, displayName));
     }
 
-    [Theory]
-    [InlineData("Different amounts calc correctly(1,Guitar pick,1.50,0)", 0)]
-    [InlineData("Different amounts calc correctly(2,Guitar, pick,3,17)", 17)]
-    [InlineData("Only a pickle(5)", 5)]
-    public void MsTest_display_name_ends_with_the_pickle_index(string displayName, int expected)
+    [Fact]
+    public void A_row_located_at_its_own_attribute_is_found_by_where_it_is_even_among_identical_rows()
     {
-        Assert.Equal(expected, GeneratedTestLines.PickleIndexOfDisplayName(displayName));
+        var rows = GeneratedTestLines.RowAttributes(NUnitOutline);
+        var second = NUnitOutline.IndexOf("[global::NUnit.Framework.TestCaseAttribute", NUnitOutline.IndexOf("TestCaseAttribute", StringComparison.Ordinal) + 1, StringComparison.Ordinal);
+        var secondText = NUnitOutline.Substring(second, NUnitOutline.IndexOf(']', second) + 1 - second);
+        var third = NUnitOutline.LastIndexOf("[global::NUnit.Framework.TestCaseAttribute", StringComparison.Ordinal);
+
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(1, GeneratedTestLines.RowPosition(rows, second, secondText, "Add(\"50\",\"70\",null)"));
+        Assert.Equal(2, GeneratedTestLines.RowPosition(rows, third, NUnitOutline.Substring(third), null));
     }
 
-    [Theory]
-    [InlineData("DifferentAmountsCalcCorrectly")]
-    [InlineData("Title(1,Guitar pick,x)")]
-    [InlineData("Title(1,2")]
-    [InlineData(null)]
-    public void Other_names_have_no_pickle_index(string displayName)
+    [Fact]
+    public void A_row_located_at_the_whole_method_is_found_by_its_display_name_instead()
     {
-        Assert.Null(GeneratedTestLines.PickleIndexOfDisplayName(displayName));
+        var rows = GeneratedTestLines.RowAttributes(MsTestOutline);
+
+        Assert.Equal(1, GeneratedTestLines.RowPosition(rows, 0, MsTestOutline, "Different amounts calc correctly(2,Guitar pick,3,4)"));
+    }
+
+    [Fact]
+    public void Display_names_are_read_from_regular_and_verbatim_string_literals()
+    {
+        var rows = GeneratedTestLines.RowAttributes(
+            "[DataRow(\"a\", null, DisplayName = \"T(\\\"a\\\", b\\\\c)\")] [DataRow(\"b\", null, DisplayName=@\"T(\"\"b\"\")\")]");
+
+        Assert.Equal(new[] { "T(\"a\", b\\c)", "T(\"b\")" }, rows.Select(row => row.DisplayName));
+    }
+
+    [Fact]
+    public void A_row_position_maps_to_the_example_row_line_at_that_position()
+    {
+        var rowLines = new[] { 10, 12, 18 };
+
+        Assert.Equal(10, GeneratedTestLines.RowLine(0, rowLines));
+        Assert.Equal(18, GeneratedTestLines.RowLine(2, rowLines));
+        Assert.Equal(-1, GeneratedTestLines.RowLine(3, rowLines));
+        Assert.Equal(-1, GeneratedTestLines.RowLine(-1, rowLines));
     }
 
     [Fact]
@@ -177,18 +232,5 @@ public class GeneratedTestLinesTests
             "    | 2 |");              // 4
 
         Assert.Equal(new[] { 3, 4 }, GeneratedTestLines.ExampleRowLines(getLine, count, lastStepLine: 0, maxRows: 2));
-    }
-
-    [Fact]
-    public void Row_line_is_found_by_position_among_the_outline_pickle_indexes()
-    {
-        var rows = new[] { 10, 12, 18 };
-        var indexes = new[] { 5, 6, 7 };
-
-        Assert.Equal(10, GeneratedTestLines.RowLine(5, indexes, rows));
-        Assert.Equal(18, GeneratedTestLines.RowLine(7, indexes, rows));
-        Assert.Equal(-1, GeneratedTestLines.RowLine(8, indexes, rows));
-        Assert.Equal(-1, GeneratedTestLines.RowLine(4, indexes, rows));
-        Assert.Equal(-1, GeneratedTestLines.RowLine(5, Array.Empty<int>(), rows));
     }
 }

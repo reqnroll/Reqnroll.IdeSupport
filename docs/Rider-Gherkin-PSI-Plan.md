@@ -452,13 +452,16 @@ unit-tested; **not yet run in a live Rider.**
   - The test class maps to the `Feature` line: the first line that is not blank, a comment, a tag or the
     `# language:` header. That needs no keywords, so it works in every dialect.
   - A test method maps to its first `#line N`.
-  - **Outline rows.** Each row maps to an Examples body row by its pickle index. Reqnroll passes the index as the
-    second-to-last positional argument of `DataRow` / `TestCase` / `InlineData`, and it ends an MSTest row's
-    display name.
-    - MSTest row elements have no location of their own (Rider's MSTest explorer never reports one), so for them
-      the display name is the fallback.
-    - Rows are numbered consecutively in document order, so a row's position is its index minus the outline's
-      lowest.
+  - **Outline rows.** Each row maps to an Examples body row by its position among the method's `DataRow` /
+    `TestCase` / `InlineData` attributes, which the generator writes in document order. No positional argument is
+    read: Reqnroll has passed an internal row index ("pickle index") there, and reqnroll/Reqnroll#938 removes it
+    because it shifts when a row is inserted above.
+    - A row located at its own attribute (NUnit, xUnit) is placed by where that attribute is, which also tells
+      identical rows apart.
+    - MSTest row elements have no location of their own (Rider's MSTest explorer never reports one), so they are
+      matched by display name against the attributes' `DisplayName`.
+    - Rider creates MSTest row elements only when the method has run, so an outline's row marks appear after its
+      first run. *Live-verified 2026-11-23 (Reqnroll.MsTest 3.3.4): 4 tests, 4 marks after the run.*
     - The Examples rows are found without keywords: the body rows of the tables after the outline's last step,
       skipping that step's own table or doc string, and stopping after as many rows as the outline has.
 - **Rule lines get no mark.** Rider has no test element for a Rule (the generator emits Rule scenarios as methods of
