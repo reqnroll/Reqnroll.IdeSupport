@@ -11,7 +11,6 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
 import org.eclipse.lsp4j.InitializeResult
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
 /**
@@ -22,12 +21,20 @@ import java.util.concurrent.TimeUnit
  * ([ReqnrollServerLifecycleTelemetry]).
  *
  * The platform sets [LspServerState.Running] before it calls [serverInitialized], so a subscriber
- * is never notified before the server is ready to receive notifications. Callbacks arrive on
- * whatever platform thread completes the transition, not the EDT.
+ * is never notified before the server is ready to receive notifications. The platform calls the
+ * listener on the thread that reads the server's messages and does not finish the handshake until
+ * the call returns, so [serverInitialized] only hands the subscribers to a pooled thread (one
+ * dispatch per transition, subscribers in registration order) rather than running them itself.
+ * Subscribers therefore run shortly *after* the handshake completes, never on the EDT.
  */
 @Service(Service.Level.PROJECT)
 class ReqnrollServerEvents(private val project: Project) : LspServerListener {
-    private val runningSubscribers = CopyOnWriteArrayList<() -> Unit>()
+    private val runningSubscribers = RunningSubscribers(
+        dispatch = { work -> ApplicationManager.getApplication().executeOnPooledThread(work) },
+        isCancelled = { project.isDisposed },
+        log = ReqnrollDebugLogger::verbose,
+        logFailure = ReqnrollDebugLogger::error,
+    )
     private val processTracker = ReqnrollServerProcessTracker()
     private val restartPolicy = ServerRestartPolicy()
     private val telemetry = ReqnrollServerLifecycleTelemetry(
@@ -80,14 +87,8 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
 
     override fun serverInitialized(params: InitializeResult) {
         telemetry.onStateChanged(LspServerState.Running)
-        // One failing subscriber must not starve the others, nor propagate into the platform's handshake.
-        runningSubscribers.forEach {
-            try {
-                it()
-            } catch (e: Exception) {
-                ReqnrollDebugLogger.error("ReqnrollServerEvents: a server-running subscriber failed", e)
-            }
-        }
+        // Returns at once: the platform waits for this callback before it lets the handshake finish.
+        runningSubscribers.notifyRunning()
     }
 
     override fun serverStopped(shutdownNormally: Boolean) {
@@ -119,12 +120,7 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
     }
 
     /** Calls [onRunning] after every transition to running until the returned handle is invoked. */
-    fun subscribeRunning(onRunning: () -> Unit): () -> Unit {
-        // Wrapped so removal is by this registration, not by lambda equality.
-        val registration: () -> Unit = { onRunning() }
-        runningSubscribers.add(registration)
-        return { runningSubscribers.remove(registration) }
-    }
+    fun subscribeRunning(onRunning: () -> Unit): () -> Unit = runningSubscribers.subscribe(onRunning)
 
     private companion object {
         const val RESTART_DELAY_MS = 1000L
