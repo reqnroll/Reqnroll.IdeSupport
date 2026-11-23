@@ -22,12 +22,9 @@ group = providers.gradleProperty("pluginGroup").get()
 // would let Rider install the plugin on a newer release nothing was built or tested against. Building against
 // one release also keeps the build to a single Rider download.
 //
-// -PwithBackend=true bundles the backend module (and adds the wave to the plugin version). `runIdeWithBackend`
-// is `runIde` with the backend turned on, so `./gradlew runIdeWithBackend` needs no -PwithBackend=true.
-val runIdeWithBackendTaskName = "runIdeWithBackend"
+// Every build bundles the .NET backend module (see "Rider backend module" below), so there is one plugin per
+// release and its version carries the wave.
 val requestedTaskNames: List<String> = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }
-val withBackend = (findProperty("withBackend") as String? ?: "false").toBoolean() ||
-    runIdeWithBackendTaskName in requestedTaskNames
 val riderSdkVersion: String = providers.gradleProperty("riderSdkVersion").get()
 
 /** The build-number prefix of a Rider release: 2026.2.3.1 -> 262 (two-digit year, then the release number). */
@@ -44,11 +41,16 @@ listOf("pluginSinceBuild", "pluginUntilBuild", "platformVersion").forEach { name
             "($riderSdkVersion, wave $riderWave). Pass -PriderSdkVersion=<release> to target another."
     }
 }
+require("withBackend" !in gradle.startParameter.projectProperties) {
+    "-PwithBackend is no longer supported: every build bundles the backend module. Pass -PbackendBuildDir=<dir> " +
+        "to bundle an already-built module instead of compiling it."
+}
 
 // CI passes -PpluginVersion=<ReqnrollIdeSupportMainVersion>.<run number>. A local build falls back to the
 // same <ReqnrollIdeSupportMainVersion>.99999 that build/Version.props gives the .NET projects, so a local
-// install always sorts newer than any CI build (issue #1163). A backend build adds the Rider wave, so each
-// release's upload of the same plugin ID has its own version.
+// install always sorts newer than any CI build. The Rider wave is appended, since the plugin
+// (through its backend module) is built for that one release, so each release's upload of the same plugin ID has
+// its own version.
 val basePluginVersion: String = providers.gradleProperty("pluginVersion").orNull
     ?: run {
         val versionProps = rootDir.resolve("../../build/Version.props").readText()
@@ -60,7 +62,7 @@ val basePluginVersion: String = providers.gradleProperty("pluginVersion").orNull
             ?: error("ReqnrollIdeSupportBuildNumber default not found in build/Version.props")
         "$mainVersion.$buildNumber"
     }
-val pluginVersionValue: String = if (withBackend) "$basePluginVersion.$riderWave" else basePluginVersion
+val pluginVersionValue: String = "$basePluginVersion.$riderWave"
 version = pluginVersionValue
 
 repositories {
@@ -244,7 +246,7 @@ val connectorProject = File(repoRoot, "src/LSP/Reqnroll.IdeSupport.LSP.Connector
 // distribution and should keep bundling the Release server). Checked via the requested task
 // names rather than a project property so plain `./gradlew runIde` does the right thing with
 // no extra flags.
-val isRunIdeInvocation = requestedTaskNames.any { it == "runIde" || it == runIdeWithBackendTaskName }
+val isRunIdeInvocation = "runIde" in requestedTaskNames
 val serverConfiguration = if (isRunIdeInvocation) "Debug" else "Release"
 
 // Directory containing one server-<rid>-shaped subdirectory per RID, pre-published
@@ -303,7 +305,8 @@ val publishServer by tasks.registering(Exec::class) {
 // A small .NET module that runs in Rider's ReSharper backend process and lets the debugger offer
 // breakpoints in .feature files (see docs/Rider-Feature-Breakpoints-Plan.md). Unlike the Kotlin code, it is
 // compiled against one Rider SDK version (`riderSdkVersion`), the same release the Kotlin code targets (see the
-// top of this file). Without -PwithBackend=true the plugin is built without it.
+// top of this file). Every build bundles it; it needs the .NET SDK, and NuGet restores the JetBrains.Rider.SDK
+// package. The test sandbox leaves it out: the Kotlin tests run no ReSharper backend.
 //
 // Pre-built by CI and passed in with -PbackendBuildDir (a directory holding the module's DLLs), in
 // which case compileBackend is skipped, mirroring -PlspServerBuildDir above. The module references
@@ -317,9 +320,8 @@ val externalBackendBuildDir = (findProperty("backendBuildDir") as String?)?.let 
 
 val compileBackend by tasks.registering(Exec::class) {
     group = "reqnroll"
-    description = "Builds the Rider backend module against the Rider SDK. Skipped when -PbackendBuildDir " +
-        "is set or -PwithBackend=false."
-    onlyIf { withBackend && externalBackendBuildDir == null }
+    description = "Builds the Rider backend module against the Rider SDK. Skipped when -PbackendBuildDir is set."
+    onlyIf { externalBackendBuildDir == null }
 
     inputs.files(
         fileTree(backendDir) { exclude("**/bin/**", "**/obj/**") },
@@ -452,7 +454,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
         }
     }
 
-    if (withBackend) {
+    if (!name.startsWith("prepareTest")) {
         val externalBackendDir = externalBackendBuildDir
         val backendFiles = listOf(
             "$backendAssemblyName.dll", "$backendAssemblyName.pdb",
@@ -514,14 +516,6 @@ tasks.matching { it.name == "runIde" }.configureEach {
     (this as? JavaExec)?.systemProperty("reqnroll.devSandbox", "true")
 }
 
-// `runIde` with the backend bundled (asking for this task turns withBackend on, see the top of this file). It shares
-// runIde's sandbox, so there is one sandbox for the targeted release rather than one per entry point.
-tasks.register(runIdeWithBackendTaskName) {
-    group = "intellij platform"
-    description = "Runs runIde with the Rider backend module bundled."
-    dependsOn("runIde")
-}
-
 // ── Built-in Application Insights resource (issue #1160) ──
 //
 // Which resource this build reports to is fixed at build time: `prod` for release builds, `dev`
@@ -569,12 +563,4 @@ val generateTelemetryBuildConfig by tasks.registering {
 
 kotlin.sourceSets.named("main") {
     kotlin.srcDir(generateTelemetryBuildConfig)
-}
-
-// META-INF/reqnroll-backend.xml binds .feature editors to the backend daemon (for its test gutter marks). plugin.xml
-// includes it with a fallback, so only a build that bundles the backend module packages it.
-if (withBackend) {
-    sourceSets.named("main") {
-        resources.srcDir("src/main/resources-backend")
-    }
 }

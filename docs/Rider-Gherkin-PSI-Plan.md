@@ -278,7 +278,7 @@ Sizes are rough estimates in working days and have not been validated.
 | Phase | Deliverable | Exit criterion | Est. |
 |---|---|---|---|
 | **0** | Live check of the backend spike in `runIde` | Go/no-go for Phase 1 (checks in [§8](#8-verification)) | 1 |
-| **1** | Backend module and Gradle wiring (**built and committed**; the `TEXT` shim is gone). Build now derives a closed one-release range from `riderSdkVersion` and defaults to frontend-only. Still to do, under the release policy in [§4.1](#41-release-policy-newest-rider-only): compile the Kotlin side against the current SDK, make the backend build the only build, a CI job for it, the per-release backend smoke test (also covering Phase 10's gutter marks), publishing automation with EAP builds, changelog-rendered change notes (breakpoints plan §6–7) | Breakpoint binds and hits in a live Rider | per earlier plan |
+| **1** | Backend module and Gradle wiring (**built and committed**; the `TEXT` shim is gone). Build now derives a closed one-release range from `riderSdkVersion`, compiles the Kotlin side against it, and always bundles the backend, which a CI job builds and unit-tests. Still to do, under the release policy in [§4.1](#41-release-policy-newest-rider-only): the per-release backend smoke test (also covering Phase 10's gutter marks), publishing automation with EAP builds, changelog-rendered change notes (breakpoints plan §6–7) | Breakpoint binds and hits in a live Rider | per earlier plan |
 | **2a** | **Parser bridge**: Java source set, Gherkin 39.1.0 dependency, same-package adapter, `PsiBuilder` builder, restartable lexer; no registration yet | Shared corpus passes; invalid files yield a full tree; spike confirms classloading in Rider | 3–4 |
 |  | *Status: built and unit-tested (corpus, lexer, `PsiBuilder` replay via `ParsingTestCase`); `ReqnrollFeatureParserDefinition` exists but is deliberately not registered in `plugin.xml`. Classloading in a real Rider is the open item.* | | |
 | **2b** | **PSI foundation**: `ParserDefinition`, typed elements, per-file default language, `SpellcheckingStrategy`, no behavioural change otherwise | Every existing feature still works with the language now real; no double rendering | 2–3 |
@@ -309,7 +309,7 @@ in Rider's Unit Tests window, and there is no way to start a Debug run from the 
 **Why it was out of reach, and why it no longer is.** Rider's .NET unit testing lives in the ReSharper backend,
 and the JVM frontend can only signal sessions the backend creates (pitfall 7 of
 `docs/Test-Runner-Integration-Design.md`). The plan was blocked on needing a C# backend plugin. This branch now
-has one (`src/Rider/dotnet`, built with `-PwithBackend=true`).
+has one (`src/Rider/dotnet`, bundled in every build).
 
 **No test elements need to be created.** Rider already discovers the MSTest, NUnit and xUnit methods Reqnroll
 generates in `.feature.cs`, so they are in its element repository. The backend only has to find the existing
@@ -465,9 +465,9 @@ unit-tested; **not yet run in a live Rider.**
 - **Lens stand-down** (decided: hide when the backend is installed). `BackendTestGutterMarks` checks that the backend
   assembly is in the installed plugin; if it is, the inline Run lens keeps only Rule lines. The registry key
   `reqnroll.feature.showRunLensWithGutterMarks` brings back the lens on Feature and Scenario lines.
-- **Frontend-only builds are unchanged.** The `rd.languageAssociation` and `backend.markup.adapterFactory`
-  registrations live in `META-INF/reqnroll-backend.xml`. `plugin.xml` pulls it in with an `xi:include` that has a
-  fallback, and only `-PwithBackend=true` builds package the file.
+- **Registrations.** The `rd.languageAssociation` and `backend.markup.adapterFactory` registrations are in
+  `plugin.xml`. *(They first lived in an optional `META-INF/reqnroll-backend.xml`, packaged only when the backend
+  was; every build bundles the backend now.)*
 - **Failed-step marks after a gutter run.** Injecting the test logger through runsettings (an
   `IRunSettingsPostProcessor`, which the SDK offers) was ruled out. Rider's MSTest, NUnit, xUnit and VSTest
   adapters host the frameworks' executors directly with their own framework handle, and none of them load a

@@ -223,38 +223,40 @@ side.
 - **One setting drives everything:** `riderSdkVersion` in `gradle.properties` (for example `2026.2.3.1`). Every
   build derives from it the Rider the Kotlin code compiles and tests against, the `runIde` sandbox, the one IDE
   `verifyPlugin` checks (`current()`), the wave (`262`: two-digit year, then release number), `sinceBuild`
-  (`262`) and `untilBuild` (`262.*`). A `-PwithBackend=true` build also passes it to `dotnet` as
-  `-p:RiderSdkVersion` and adds the wave to the plugin version (`<main>.<run>.262`). Nothing can disagree with
+  (`262`) and `untilBuild` (`262.*`). The build also passes it to `dotnet` as `-p:RiderSdkVersion` and adds
+  the wave to the plugin version (`<main>.<run>.262`). Nothing can disagree with
   the SDK the backend is built against, and the build needs one Rider download *(implemented and checked
   locally)*.
 - **The range is closed on purpose.** `platformVersion`, `pluginSinceBuild` and `pluginUntilBuild` are gone; the
   build fails if one is passed with `-P`, and if `riderSdkVersion` is not a Rider release number. An open upper
   bound would let Rider install the plugin on a newer release it was never built for.
-- **`withBackend` defaults to `false`** until the CI job lands, so CI never runs `dotnet` in Gradle; its plugin
-  targets the same single release, without the module. A backend build is opt-in.
+- **Every build bundles the module.** The `withBackend` switch and `runIdeWithBackend` are gone; passing
+  `-PwithBackend` fails the build. The test sandbox leaves the module out, since the Kotlin tests run no backend.
 - New `compileBackend` task (`dotnet build -c Release -p:RiderSdkVersion=…`) for local builds, plus an
   external `-PbackendBuildDir` override for CI, mirroring the existing `publishServer` /
   `lspServerBuildDir` pattern so Gradle still never runs `dotnet` in CI.
-- `prepareSandbox` copies `Reqnroll.IdeSupport.Rider.Backend.dll` (and `.pdb`) into
-  `<plugin>/dotnet/` when `withBackend` is true; `buildPlugin` fails if it is missing.
+- `prepareSandbox` copies `Reqnroll.IdeSupport.Rider.Backend.dll`, `Reqnroll.IdeSupport.TestReporter.Common.dll`
+  and their `.pdb` files into `<plugin>/dotnet/`. CI's "Verify plugin version and backend module" step fails if
+  the module's DLL is missing from the zip.
 - The Kotlin jar is compiled against the `riderSdkVersion` release, still at Kotlin API level 2.0.
 
 ### 6.3 Workflow
 
 ```mermaid
 flowchart LR
-    lsp --> B["build-rider-backend<br/>(current release)"]
+    B["build-rider-backend<br/>(current release)<br/>+ backend unit tests"]
     lsp --> R["build-rider-plugin"]
     B --> R
-    T["test-rider-plugin<br/>+ backend unit tests"] --> P["publish-rider-plugin"]
+    T["test-rider-plugin"] --> P["publish-rider-plugin"]
     R --> P
 ```
 
 Under the release policy there is one leg, the current Rider release, so no matrix. A second, temporary leg
 against the EAP SDK runs only ahead of a Rider release ([§7.2](#72-automation-and-ownership)).
 
-- **New `build-rider-backend` job**: `actions/setup-dotnet`, `dotnet build` with the current release's SDK
-  version, upload `rider-backend`. Cache `~/.nuget/packages`; the SDK packages are large.
+- **`build-rider-backend` job** *(added)*: `actions/setup-dotnet`, `dotnet test` of the SDK-free tests,
+  `dotnet build` with the current release's SDK version, upload `rider-backend`. Caches `~/.nuget/packages`; the
+  SDK packages are large. It needs nothing from the `lsp` job, so the two run side by side.
 - **`build-rider-plugin`** downloads the server/test-logger artifacts as today plus the backend artifact, then
   runs `buildPlugin` and `verifyPlugin`. `pluginVerification.ides` narrows to the one release.
 - **The Plugin Verifier does not check .NET code.** Compiling the backend against the release's SDK is

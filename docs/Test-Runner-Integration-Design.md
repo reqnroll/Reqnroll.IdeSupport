@@ -392,10 +392,10 @@ has from its Gherkin parse.
    the .NET backend (ReSharperHost) creates. A plugin cannot inject a test element from the JVM side. Native
    presence would need a separate C# ReSharper SDK backend plugin, a different project with its own build and
    packaging, so Rider keeps its own execution. *(The `.feature` breakpoints work added such a backend module,
-   built only with `-PwithBackend=true`. On those builds its `FeatureTestGutterStage` puts Rider's own test gutter
+   which every plugin build bundles. Its `FeatureTestGutterStage` puts Rider's own test gutter
    marks on Feature, Scenario and Examples-row lines, for the tests Rider already discovered in `.feature.cs`, so
    runs and debug sessions go through the Unit Tests window; see Phase 10 of `docs/Rider-Gherkin-PSI-Plan.md`.
-   Built and unit-tested, not yet verified live. Frontend-only builds keep their own execution.)*
+   Rule lines, which have no test element, keep the plugin's own execution.)*
 8. **Visual Studio's glyph reflection is guarded.** The Test Explorer proxy types used to read outcomes are
    `internal`, so the bridge degrades to "no glyph" on any failure and Run/Debug (public API only) is unaffected.
    See the outcomes pipeline.
