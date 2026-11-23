@@ -47,8 +47,13 @@ public static class CodeBehindPaths
         if (relativeDirectory == null)
             return null;
 
+        // MSBuild spells IntermediateOutputPath with backslashes on every OS (obj\Debug\net8.0\); on Linux and macOS a
+        // backslash is an ordinary file-name character, so convert it before combining.
+        var intermediateDirectory = intermediateOutputPath
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
         return Path.GetFullPath(Path.Combine(
-            projectDirectory, intermediateOutputPath, relativeDirectory.Replace("..", "_"), codeBehindName));
+            projectDirectory, intermediateDirectory, relativeDirectory.Replace("..", "_"), codeBehindName));
     }
 
     /// <summary>Whether two full paths name the same file, ignoring separators and case.</summary>
