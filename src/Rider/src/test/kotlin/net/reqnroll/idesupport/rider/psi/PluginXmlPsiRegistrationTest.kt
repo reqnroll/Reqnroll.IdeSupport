@@ -1,5 +1,6 @@
 package net.reqnroll.idesupport.rider.psi
 
+import net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionInstaller
 import net.reqnroll.idesupport.rider.testrunner.BackendTestGutterMarks
 import net.reqnroll.idesupport.rider.testrunner.GutterRunOutcomesActivity
 import org.w3c.dom.Element
@@ -89,6 +90,15 @@ class PluginXmlPsiRegistrationTest {
         val activities = registrations("postStartupActivity").map { it.getAttribute("implementation") }
 
         assertTrue(GutterRunOutcomesActivity::class.java.name in activities, activities.toString())
+    }
+
+    @Test
+    fun `the Step Into installer is registered and the old shortcut promoter is gone`() {
+        val activities = registrations("postStartupActivity").map { it.getAttribute("implementation") }
+        val promoters = registrations("actionPromoter").map { it.getAttribute("implementation") }
+
+        assertTrue(StepIntoStepDefinitionInstaller::class.java.name in activities, activities.toString())
+        assertTrue(promoters.none { it.endsWith(".StepIntoStepDefinitionPromoter") }, promoters.toString())
     }
 
     @Test

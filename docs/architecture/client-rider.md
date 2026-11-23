@@ -82,7 +82,7 @@ sequenceDiagram
 | `ReqnrollCommentByLineCommentAction` | Overrides the platform's `CommentByLineComment` action by ID. |
 | `ReqnrollGoToDefinitionAction`, `ReqnrollGoToDefinitionPromoter` | Make F12 / Ctrl+B / Ctrl+click reach the server on Rider 2026.2+. |
 | `RunTestRunner`, `RunLensSupport`, `FailedStepGutterMarks` | Run lens and execution; see [../Test-Runner-Integration-Design.md](../Test-Runner-Integration-Design.md). |
-| `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionPromoter`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
+| `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionInstaller`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
 | `ReqnrollToggleFeatureInlayHintsAction` | "Show Feature Inlay Hints" toggle. |
 | `ReqnrollDebugLogger` | File logging gated on the dev-sandbox property. |
 
@@ -153,8 +153,10 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    `LspCodeVisionProvider` in every invalidation it sends, since a signal for this plugin's providers alone can
    cancel the platform's recompute in progress.
 10. **Rider's Step Into cannot reach a step definition** from a `.feature` step (it steps over the step, or into
-    Reqnroll's `ExecutionEngine` with external source debugging on). `StepIntoStepDefinitionAction` takes Step
-    Into's shortcuts while the debugger is stopped on a `.feature` line and runs to the definition's body instead.
+    Reqnroll's `ExecutionEngine` with external source debugging on). `StepIntoStepDefinitionAction` wraps the
+    registered `StepInto` action (Rider's own, which it registers at startup), so the toolbar button, the Run menu
+    and every keymap reach it. From a `.feature` line it runs to the definition's body; anywhere else it is Rider's
+    Step Into. Competing for the shortcuts alone left the toolbar and menu on Rider's Step Into.
 
 ## 8. Known limitations
 
