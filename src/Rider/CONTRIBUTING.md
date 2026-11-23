@@ -45,7 +45,8 @@ There are two tracks, depending on what's already on your machine — pick one:
   uses (`ubuntu-latest` + `actions/setup-java`), so it's the better-trodden, faster path
   if it's available to you:
   - JDK 21 on `PATH` (or `JAVA_HOME` pointing at one) — matches `kotlin { jvmToolchain(21) }`.
-  - `dotnet` SDK on `PATH`, for `publishServer` (see "Bundling the LSP server" below).
+  - `dotnet` SDK on `PATH`, for `publishServer` (see "Bundling the LSP server" below) and
+    `compileBackend` (see "Rider backend module" below).
   - **No local Rider install needed even here** — the IntelliJ Platform Gradle plugin
     downloads the one Rider release the build targets (`riderSdkVersion` in `gradle.properties`)
     into `~/.gradle/caches` automatically on first `runIde`/build. Compile, tests, `runIde` and
@@ -196,17 +197,16 @@ is a small `net472` module, loaded by Rider's backend process, that gives `.feat
 a line-breakpoint provider. It parses no Gherkin; the language server does all of that. The design and the
 reasoning behind it are in [docs/Rider-Feature-Breakpoints-Plan.md](../../docs/Rider-Feature-Breakpoints-Plan.md).
 
-- `./gradlew buildPlugin -PwithBackend=true` builds it (`compileBackend`) and copies the DLLs into the plugin's
-  `dotnet/` folder; `./gradlew runIdeWithBackend` does the same for the sandbox. It needs the .NET SDK and the
-  `JetBrains.Rider.SDK` NuGet package.
+- Every build bundles it: `buildPlugin` and `runIde` build it (`compileBackend`) and copy the DLLs into the
+  plugin's `dotnet/` folder. It needs the .NET SDK, and NuGet restores the `JetBrains.Rider.SDK` package. `test`
+  leaves it out of the test sandbox, since the Kotlin tests run no ReSharper backend.
 - The whole plugin targets one Rider release, `riderSdkVersion` in `gradle.properties` (override with
   `-PriderSdkVersion=<version>`): the Kotlin code compiles and tests against it, `verifyPlugin` checks only it, the
   module is compiled against its SDK, and the plugin's range is that release alone (2026.2.3.1 -> 262 .. 262.*).
   Keep the default in `dotnet/Directory.Build.props` the same.
-- Without `-PwithBackend=true` the plugin is built without the module: same single-release range, no `.feature`
-  breakpoints or test gutter marks.
 - `-PbackendBuildDir=<dir>` bundles an already-built module from `<dir>` instead of running `dotnet build`, the
-  same way `-PlspServerBuildDir` does for the server.
+  same way `-PlspServerBuildDir` does for the server. CI's `build-rider-backend` job builds it and runs its unit
+  tests, and `build-rider-plugin` bundles the result this way.
 - Unit tests for the SDK-free logic: `dotnet test dotnet/Reqnroll.IdeSupport.Rider.Backend.Tests`.
 - The `rider.debuggerSupportPolicy` registration in `plugin.xml` is for the `Gherkin` language, which is the PSI
   language of `.feature` files now that the file type has a `ParserDefinition`. Rider's breakpoint check keys on

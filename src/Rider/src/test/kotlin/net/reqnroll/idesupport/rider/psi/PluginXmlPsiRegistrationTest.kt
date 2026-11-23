@@ -4,12 +4,10 @@ import net.reqnroll.idesupport.rider.debugger.StepIntoStepDefinitionInstaller
 import net.reqnroll.idesupport.rider.testrunner.BackendTestGutterMarks
 import net.reqnroll.idesupport.rider.testrunner.GutterRunOutcomesActivity
 import org.w3c.dom.Element
-import java.nio.file.Paths
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -70,29 +68,14 @@ class PluginXmlPsiRegistrationTest {
     }
 
     @Test
-    fun `the backend descriptor is included optionally and binds Gherkin to the backend language`() {
-        val stream = javaClass.getResourceAsStream("/META-INF/plugin.xml")!!
-        val document = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-            .newDocumentBuilder().parse(stream)
-        val includes = document.getElementsByTagNameNS("http://www.w3.org/2001/XInclude", "include")
-        val include = (0 until includes.length).map { includes.item(it) as Element }
-            .single { it.getAttribute("href") == "/META-INF/reqnroll-backend.xml" }
-        assertEquals(1, include.getElementsByTagNameNS("http://www.w3.org/2001/XInclude", "fallback").length)
-
-        val backendXml = Paths.get("src/main/resources-backend/META-INF/reqnroll-backend.xml")
-        val backend = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(backendXml.toFile())
-        val association = backend.getElementsByTagName("rd.languageAssociation").item(0) as Element
-        val markup = backend.getElementsByTagName("backend.markup.adapterFactory").item(0) as Element
+    fun `Gherkin editors are bound to the backend language`() {
+        val association = registrations("rd.languageAssociation").single()
+        val markup = registrations("backend.markup.adapterFactory").single()
 
         // Must match FeatureProjectFileType.Name in the backend module and this plugin's language id.
         assertEquals("REQNROLL_FEATURE", association.getAttribute("backendLanguage"))
         assertEquals("Gherkin", association.getAttribute("frontendLanguage"))
         assertEquals("Gherkin", markup.getAttribute("language"))
-    }
-
-    @Test
-    fun `the backend descriptor is not on the frontend-only classpath`() {
-        assertNull(javaClass.getResource("/META-INF/reqnroll-backend.xml"))
     }
 
     @Test

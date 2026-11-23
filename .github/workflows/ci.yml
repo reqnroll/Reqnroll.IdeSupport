@@ -31,6 +31,7 @@
 #           │                       └─> test-vs-wizards ─────┴─> publish-vsix
 #           ├─> build-vscode-extension (VSIX)                 [if vscode]
 #           └─> build-rider-plugin ─┐                         [if rider]
+#   build-rider-backend (no LSP dependency; also feeds build-rider-plugin)  [if rider]
 #   tsc-only (VS Code, no LSP dependency)                      [if vscode]
 #   test-rider-plugin (Rider, no LSP dependency) ────────────┴─> publish-rider-plugin
 #
@@ -642,13 +643,82 @@ jobs:
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
+  # Backend module — builds the plugin's .NET backend module
+  # (src/Rider/dotnet) against the Rider SDK package for riderSdkVersion in
+  # src/Rider/gradle.properties, runs its unit tests, and uploads the DLLs
+  # build-rider-plugin bundles with -PbackendBuildDir. Every plugin build
+  # bundles the module. Runs alongside the lsp job: it needs none of its
+  # artifacts.
+  # ---------------------------------------------------------------------------
+  build-rider-backend:
+    name: Rider / Backend
+    needs: [changes]
+    if: needs.changes.outputs.rider == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-rider-backend-${{ runner.os }}-${{ hashFiles('src/Rider/dotnet/**/*.csproj', 'src/Rider/dotnet/Directory.Build.props', 'src/Rider/gradle.properties', 'src/Core/Reqnroll.IdeSupport.TestReporter.Common/*.csproj') }}
+          restore-keys: |
+            nuget-rider-backend-${{ runner.os }}-
+
+      - name: Read Rider SDK version
+        id: rider-sdk
+        run: |
+          version=$(sed -n 's/^riderSdkVersion *= *//p' gradle.properties | tr -d '[:space:]')
+          if [ -z "$version" ]; then
+            echo "::error::riderSdkVersion not found in src/Rider/gradle.properties"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ env.RIDER_DIR }}
+
+      - name: Test
+        run: dotnet test dotnet/Reqnroll.IdeSupport.Rider.Backend.Tests --configuration Release --nologo
+        working-directory: ${{ env.RIDER_DIR }}
+
+      # The same command build.gradle.kts's compileBackend runs for a local build.
+      - name: Build
+        run: >-
+          dotnet build dotnet/Reqnroll.IdeSupport.Rider.Backend/Reqnroll.IdeSupport.Rider.Backend.csproj
+          --configuration Release --nologo
+          -p:RiderSdkVersion=${{ steps.rider-sdk.outputs.version }}
+        working-directory: ${{ env.RIDER_DIR }}
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: rider-backend
+          path: |
+            ${{ env.RIDER_DIR }}/dotnet/Reqnroll.IdeSupport.Rider.Backend/bin/Release/net472/Reqnroll.IdeSupport.Rider.Backend.dll
+            ${{ env.RIDER_DIR }}/dotnet/Reqnroll.IdeSupport.Rider.Backend/bin/Release/net472/Reqnroll.IdeSupport.Rider.Backend.pdb
+            ${{ env.RIDER_DIR }}/dotnet/Reqnroll.IdeSupport.Rider.Backend/bin/Release/net472/Reqnroll.IdeSupport.TestReporter.Common.dll
+            ${{ env.RIDER_DIR }}/dotnet/Reqnroll.IdeSupport.Rider.Backend/bin/Release/net472/Reqnroll.IdeSupport.TestReporter.Common.pdb
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
   # Plugin build — bundles the server binaries published by the lsp job for
-  # every RID and produces the plugin .zip, then runs the Plugin Verifier
-  # against it. Uploads a *candidate* artifact; publish-rider-plugin below
+  # every RID and the backend module from build-rider-backend, produces the
+  # plugin .zip, then runs the Plugin Verifier against it. Uploads a *candidate* artifact; publish-rider-plugin below
   # promotes it to the final artifact name once test-rider-plugin has also
   # passed, mirroring the VS extension's build/test/publish-vsix chain.
   #
-  # Gradle never invokes `dotnet` in CI: -PlspServerBuildDir tells
+  # Gradle never invokes `dotnet` in CI: -PbackendBuildDir bundles the
+  # downloaded backend module in place of the local-dev-only compileBackend
+  # task, -PlspServerBuildDir tells
   # build.gradle.kts's prepareSandbox task to bundle the already-downloaded
   # server-<rid> directories directly instead of running its local-dev-only
   # publishServer task, and -PlspTestLoggerBuildDir does the same for the
@@ -676,7 +746,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-rider-plugin:
     name: Rider / Build
-    needs: [changes, lsp]
+    needs: [changes, lsp, build-rider-backend]
     if: needs.changes.outputs.rider == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -731,6 +801,12 @@ jobs:
           name: testlogger
           path: ${{ env.RIDER_DIR }}/downloaded-testlogger
 
+      - name: Download backend module
+        uses: actions/download-artifact@v8
+        with:
+          name: rider-backend
+          path: ${{ env.RIDER_DIR }}/downloaded-backend
+
       - name: Restore executable bit on downloaded server/connector binaries
         # Artifact zips don't preserve the Unix executable bit (see the VS Code job's equivalent
         # step, issue #252), so without this the plugin zip would ship non-executable
@@ -742,18 +818,22 @@ jobs:
         working-directory: ${{ env.RIDER_DIR }}
 
       # -PpluginVersion overrides gradle.properties' placeholder with the build version, so Rider
-      # treats each CI build as an upgrade of the last (issue #746).
+      # treats each CI build as an upgrade of the last. build.gradle.kts appends the
+      # Rider wave (2026.2.3.1 -> 262), which the next step expects.
       - name: Build plugin
         run: >-
           ./gradlew buildPlugin
           -PpluginVersion="${{ needs.changes.outputs.build_version }}"
           -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
           -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
+          -PbackendBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-backend"
         working-directory: ${{ env.RIDER_DIR }}
 
-      - name: Verify plugin version
+      - name: Verify plugin version and backend module
         run: |
-          expected="${{ needs.changes.outputs.build_version }}"
+          sdk=$(sed -n 's/^riderSdkVersion *= *//p' gradle.properties | tr -d '[:space:]')
+          wave=$(echo "$sdk" | awk -F. '{ printf "%d%s", $1 - 2000, $2 }')
+          expected="${{ needs.changes.outputs.build_version }}.$wave"
           zip=$(ls build/distributions/*.zip)
           jar=$(unzip -Z1 "$zip" | grep -E '^[^/]+/lib/reqnroll-ide-support-rider-[^/]*\.jar$' | grep -v -- '-searchableOptions\.jar$')
           actual=$(unzip -p "$zip" "$jar" > plugin.jar && unzip -p plugin.jar META-INF/plugin.xml | sed -n 's:.*<version>\(.*\)</version>.*:\1:p' | head -1)
@@ -763,6 +843,10 @@ jobs:
             exit 1
           fi
           echo "Plugin version: $actual"
+          if ! unzip -Z1 "$zip" | grep -qx '[^/]*/dotnet/Reqnroll.IdeSupport.Rider.Backend.dll'; then
+            echo "::error::the plugin zip has no dotnet/Reqnroll.IdeSupport.Rider.Backend.dll"
+            exit 1
+          fi
         working-directory: ${{ env.RIDER_DIR }}
 
       - name: Verify plugin
@@ -771,6 +855,7 @@ jobs:
           -PpluginVersion="${{ needs.changes.outputs.build_version }}"
           -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
           -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
+          -PbackendBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-backend"
         working-directory: ${{ env.RIDER_DIR }}
 
       # Gradle names the zip after the plugin; stage a copy under the consolidated package name

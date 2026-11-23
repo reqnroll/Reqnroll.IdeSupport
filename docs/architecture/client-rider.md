@@ -103,8 +103,8 @@ the substring "rider", which the Verifier rejects), `runIde`, `test`. Test logge
 the same way (`publishTestLogger`).
 
 **Compatibility.** One Rider release, set by `riderSdkVersion` in `gradle.properties` (2026.2.3.1, so builds 262 to
-262.*). The Kotlin code is compiled and tested against it and `verifyPlugin` checks only it; the backend module is
-compiled against the same release's SDK.
+262.*). The Kotlin code is compiled and tested against it and `verifyPlugin` checks only it; the backend module, which
+every build bundles, is compiled against the same release's SDK.
 
 **Extension points used:** `platform.lsp.serverSupportProvider`, `fileType`, three `postStartupActivity` sync
 listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvider` (×4), `editorFactoryListener` (×3),
@@ -129,13 +129,13 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    folder scanning.
 6. **Shared projects need explicit handling.** Rider's baseline is a project-folder walk, so it reads imported
    `.projitems` directly and sends no delta for a file added to a shared project.
-7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc. Builds with the
-   backend module get it from the backend instead: `FeatureTestGutterStage` adds Rider's own test gutter marks
+7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc. The plugin's
+   backend module provides it instead: `FeatureTestGutterStage` adds Rider's own test gutter marks
    (an internal highlighting type, created by reflection and checked against the pinned SDK by
    `RiderSdkContractTests`) for the tests discovered in `.feature.cs`, mapped to
    lines through `#line` directives and the position of each outline row attribute (`GeneratedTestLines`). The backend daemon only
-   runs on `.feature` because `META-INF/reqnroll-backend.xml`, packaged in backend builds only, associates the
-   `Gherkin` frontend language with the backend's `REQNROLL_FEATURE`. The Run lens then keeps only Rule lines
+   runs on `.feature` because `plugin.xml`'s `rd.languageAssociation` associates the `Gherkin` frontend language
+   with the backend's `REQNROLL_FEATURE`. The Run lens then keeps only Rule lines
    (`BackendTestGutterMarks`). Rider's runners ignore runsettings loggers, so the bundled test logger never sees
    a run started from those marks. The backend's `FeatureTestResultReporter` sends Rider's own results to the
    server's outcome listener instead, and `GutterRunOutcomes` applies them to the failed-step marks on the
@@ -160,9 +160,9 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
 
 ## 8. Known limitations
 
-- Frontend-only builds: no Debug action for scenarios and no native Unit Tests tool window presence. Backend builds
-  have both through Rider's test gutter marks, except on Rule lines (Rider has no Rule test element), which keep
-  the `dotnet test` Run lens. Runs started from the gutter reach the failed-step marks through the backend's
+- Rule lines have no Debug action and no native Unit Tests tool window presence (Rider has no Rule test element),
+  so they keep the `dotnet test` Run lens; Feature, Scenario and Examples-row lines have both through Rider's test
+  gutter marks. Runs started from the gutter reach the failed-step marks through the backend's
   reporter (not yet checked live). A multi-target project reports each result under its own target framework's
   output, while the editor looks up the first, so results of the other targets are not shown.
 - Rider before 2025.3 has no outline (the native Structure view renders the standard `documentSymbol` response from

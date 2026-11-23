@@ -1,4 +1,4 @@
-<idea-plugin url="https://reqnroll.net" xmlns:xi="http://www.w3.org/2001/XInclude">
+<idea-plugin url="https://reqnroll.net">
   <id>net.reqnroll.idesupport</id>
   <name>Reqnroll Extension (Preview)</name>
   <vendor url="https://github.com/reqnroll/Reqnroll.IdeSupport">Reqnroll</vendor>
@@ -176,6 +176,13 @@ for what is available in each IDE.</p>
          platform's own "Language Servers" tool window already covers for every running server. -->
     <toolWindow id="Reqnroll" anchor="bottom"
         factoryClass="net.reqnroll.idesupport.rider.console.ReqnrollConsoleToolWindowFactory" />
+    <!-- Bind .feature editors to the backend module's REQNROLL_FEATURE document and show the backend's markup
+         (Razor's pattern). Without these, a frontend PSI language keeps the editor frontend-only, so the backend
+         daemon never runs on .feature files and FeatureTestGutterStage's unit-test gutter marks never appear. -->
+    <rd.languageAssociation backendLanguage="REQNROLL_FEATURE" frontendLanguage="Gherkin" />
+    <backend.markup.adapterFactory
+        language="Gherkin"
+        implementationClass="com.jetbrains.rdclient.daemon.FrontendMarkupAdapterFactory" />
   </extensions>
 
   <applicationListeners>
@@ -290,9 +297,4 @@ for what is available in each IDE.</p>
       <separator />
     </group>
   </actions>
-  <!-- Rider test gutter marks on .feature scenarios. Only builds that bundle the backend module (-PwithBackend=true)
-       package this file; elsewhere the fallback leaves the editor frontend-only, as before. -->
-  <xi:include href="/META-INF/reqnroll-backend.xml" xpointer="xpointer(/idea-plugin/*)">
-    <xi:fallback />
-  </xi:include>
 </idea-plugin>
