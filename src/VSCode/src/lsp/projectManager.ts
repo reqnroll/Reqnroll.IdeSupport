@@ -69,6 +69,29 @@ export function findOwningProjectFile(
   return best;
 }
 
+/** Top-level project folders that hold build output: the SDK's default `bin/` and `obj/`. */
+const BUILD_OUTPUT_FOLDER_NAMES: ReadonlySet<string> = new Set(['bin', 'obj']);
+
+/**
+ * Whether `filePath` sits under its project's own `bin/` or `obj/` folder — the default build
+ * output locations, which the SDK's default item excludes keep out of the project's file set. A
+ * file created or deleted there (a generated `*.AssemblyInfo.cs`, a code-behind that Reqnroll
+ * writes under `obj/` when `ReqnrollUseIntermediateOutputPathForCodeBehind` is `true`) therefore
+ * can't change the project's membership, and re-evaluating the project for it would be wasted work.
+ *
+ * Deliberately narrow: only the first path segment below the project folder counts, so a
+ * `bin`/`obj` folder nested deeper in the source tree, or a code-behind written next to its
+ * `.feature` file (the default), is still treated as a membership change. Case-insensitive, like
+ * {@link findOwningProjectFile}. Pure function so it's directly testable without an Extension Host.
+ */
+export function isInProjectBuildOutput(filePath: string, projectFile: string): boolean {
+  const folder = path.dirname(projectFile) + path.sep;
+  if (!filePath.toLowerCase().startsWith(folder.toLowerCase())) return false;
+
+  const firstSegment = filePath.slice(folder.length).split(/[\\/]/, 1)[0];
+  return BUILD_OUTPUT_FOLDER_NAMES.has(firstSegment.toLowerCase());
+}
+
 /** Workspace scanning and MSBuild evaluation, injectable so tests needn't run `dotnet msbuild`. */
 export interface ProjectManagerDeps {
   findProjectFiles(): Promise<vscode.Uri[]>;
@@ -164,10 +187,12 @@ export class ProjectManager {
 
     // Re-evaluate a project's file membership when a .cs/.feature file is added or removed
     // under it, so the server's membership index doesn't go stale after the initial baseline
-    // (e.g. a new step-definition file, or a deleted/renamed .feature file).
+    // (e.g. a new step-definition file, or a deleted/renamed .feature file). Files a build writes
+    // under the project's bin/ or obj/ are ignored: the SDK's default excludes keep them out of
+    // the membership set, so re-evaluating for them would only repeat the last result.
     this._fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{cs,feature}');
-    this._fileWatcher.onDidCreate((uri) => this.scheduleResend(uri));
-    this._fileWatcher.onDidDelete((uri) => this.scheduleResend(uri));
+    this._fileWatcher.onDidCreate((uri) => this.scheduleResendUnlessBuildOutput(uri));
+    this._fileWatcher.onDidDelete((uri) => this.scheduleResendUnlessBuildOutput(uri));
 
     // Re-run discovery when a workspace folder is added (e.g. a multi-root workspace gains a
     // folder with its own .csproj/.feature files), and drop projects under a removed folder.
@@ -297,6 +322,21 @@ export class ProjectManager {
     const projectFile = findOwningProjectFile(uri.fsPath, this._knownProjects);
     if (!projectFile) return;
 
+    this.scheduleProjectResend(projectFile);
+  }
+
+  /**
+   * {@link scheduleResend} for a `.cs`/`.feature` file event, skipping files under the owning
+   * project's own `bin/` or `obj/` (see {@link isInProjectBuildOutput}).
+   */
+  private scheduleResendUnlessBuildOutput(uri: vscode.Uri): void {
+    const projectFile = findOwningProjectFile(uri.fsPath, this._knownProjects);
+    if (!projectFile || isInProjectBuildOutput(uri.fsPath, projectFile)) return;
+
+    this.scheduleProjectResend(projectFile);
+  }
+
+  private scheduleProjectResend(projectFile: string): void {
     this.clearResendTimer(projectFile);
 
     this._resendTimers.set(

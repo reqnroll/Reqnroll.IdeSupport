@@ -59,7 +59,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
     }
 
     /// <summary>
-    /// Mimics Reqnroll 3.3.0's <c>GenerateFeatureFileCodeBehindInProjectDirectory=false</c> option:
+    /// Mimics Reqnroll 3.3's <c>ReqnrollUseIntermediateOutputPathForCodeBehind=true</c> property:
     /// the <c>.feature</c> file sits directly under a fresh temp "project folder", but its
     /// code-behind lands under that folder's <c>obj/</c> tree (at an arbitrary nested depth, since
     /// the real layout varies by configuration/TFM) instead of beside it.

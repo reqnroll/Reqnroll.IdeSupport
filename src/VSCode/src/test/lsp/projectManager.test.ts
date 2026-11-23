@@ -6,6 +6,7 @@ import { LanguageClient, StateChangeEvent } from 'vscode-languageclient/node';
 import {
   resolveWorkspaceFolder,
   findOwningProjectFile,
+  isInProjectBuildOutput,
   ProjectManager,
 } from '../../lsp/projectManager';
 import { ReqnrollMethods } from '../../lsp/lspMethods';
@@ -128,6 +129,8 @@ async function withStubbedProjectEnvironment(
     fireCreate: (uri: vscode.Uri) => void;
     fireChange: (uri: vscode.Uri) => void;
     fireDelete: (uri: vscode.Uri) => void;
+    fireSourceCreate: (uri: vscode.Uri) => void;
+    fireSourceDelete: (uri: vscode.Uri) => void;
   }) => Promise<void>,
 ): Promise<void> {
   const originalMembers = STUBBED_WORKSPACE_MEMBERS.map(
@@ -135,12 +138,15 @@ async function withStubbedProjectEnvironment(
   );
 
   const projectWatcherListeners: WatcherListeners = {};
+  const sourceWatcherListeners: WatcherListeners = {};
 
   const makeWatcher = (pattern: vscode.GlobPattern): vscode.FileSystemWatcher => {
-    // ProjectManager arms two watchers: the project/solution one (*.csproj) this test drives,
-    // and a *.cs/*.feature one whose events it does not need to fire.
+    // ProjectManager arms two watchers: the project/solution one (*.csproj) and the
+    // *.cs/*.feature one. Each gets its own listener slots so a test can drive either.
     const listeners: WatcherListeners =
-      typeof pattern === 'string' && pattern.includes('csproj') ? projectWatcherListeners : {};
+      typeof pattern === 'string' && pattern.includes('csproj')
+        ? projectWatcherListeners
+        : sourceWatcherListeners;
     return {
       onDidCreate: (listener: UriListener) => {
         listeners.create = listener;
@@ -176,6 +182,8 @@ async function withStubbedProjectEnvironment(
       fireCreate: (uri) => projectWatcherListeners.create?.(uri),
       fireChange: (uri) => projectWatcherListeners.change?.(uri),
       fireDelete: (uri) => projectWatcherListeners.delete?.(uri),
+      fireSourceCreate: (uri) => sourceWatcherListeners.create?.(uri),
+      fireSourceDelete: (uri) => sourceWatcherListeners.delete?.(uri),
     });
   } finally {
     for (const [name, descriptor] of originalMembers) {
@@ -347,6 +355,59 @@ suite('ProjectManager', () => {
     });
   });
 
+  suite('isInProjectBuildOutput', () => {
+    const projectFile = path.join('C:', 'work', 'App', 'App.csproj');
+    const inProject = (...segments: string[]) => path.join('C:', 'work', 'App', ...segments);
+
+    test('is true for files under the project-level obj/ folder', () => {
+      // Where Reqnroll writes a code-behind when ReqnrollUseIntermediateOutputPathForCodeBehind is true.
+      assert.ok(
+        isInProjectBuildOutput(
+          inProject('obj', 'Debug', 'net8.0', 'Features', 'Login.feature.cs'),
+          projectFile,
+        ),
+      );
+      assert.ok(
+        isInProjectBuildOutput(
+          inProject('obj', 'Debug', 'net8.0', 'App.AssemblyInfo.cs'),
+          projectFile,
+        ),
+      );
+    });
+
+    test('is true for files under the project-level bin/ folder', () => {
+      assert.ok(isInProjectBuildOutput(inProject('bin', 'Debug', 'Generated.cs'), projectFile));
+    });
+
+    test('is case-insensitive', () => {
+      assert.ok(isInProjectBuildOutput(inProject('OBJ', 'Debug', 'A.cs'), projectFile));
+      assert.ok(isInProjectBuildOutput(inProject('Bin', 'A.cs'), projectFile));
+    });
+
+    test('is false for a code-behind next to its .feature file (the default placement)', () => {
+      assert.ok(!isInProjectBuildOutput(inProject('Features', 'Login.feature.cs'), projectFile));
+      assert.ok(!isInProjectBuildOutput(inProject('Login.feature.cs'), projectFile));
+    });
+
+    test('is false for a bin/ or obj/ folder nested deeper in the source tree', () => {
+      assert.ok(!isInProjectBuildOutput(inProject('Features', 'obj', 'Steps.cs'), projectFile));
+      assert.ok(!isInProjectBuildOutput(inProject('Hooks', 'bin', 'Hooks.cs'), projectFile));
+    });
+
+    test('is false for names that merely start with bin or obj', () => {
+      assert.ok(!isInProjectBuildOutput(inProject('binding', 'Steps.cs'), projectFile));
+      assert.ok(!isInProjectBuildOutput(inProject('objects', 'Model.cs'), projectFile));
+      assert.ok(!isInProjectBuildOutput(inProject('obj.cs'), projectFile));
+    });
+
+    test('is false for a file outside the project folder, even in a sibling obj/', () => {
+      assert.ok(
+        !isInProjectBuildOutput(path.join('C:', 'work', 'Other', 'obj', 'A.cs'), projectFile),
+      );
+      assert.ok(!isInProjectBuildOutput(path.join('C:', 'work', 'obj', 'A.cs'), projectFile));
+    });
+  });
+
   suite('project/solution file watcher (issue #1009)', () => {
     test('re-evaluates the owning project when a .csproj is edited', async function () {
       this.timeout(15000);
@@ -414,6 +475,121 @@ suite('ProjectManager', () => {
           manager.dispose();
         }
       });
+    });
+  });
+
+  suite('.cs/.feature watcher and build output', () => {
+    // Longer than the 500 ms resend debounce plus the (stubbed, immediate) evaluation, so a
+    // resend that was going to happen has happened by the time the negative cases assert.
+    const PAST_DEBOUNCE_MS = 1200;
+
+    /** Registers `projectFile`, runs `fire`, and returns how many projectLoaded re-sends followed. */
+    async function resendsAfter(
+      projectFile: string,
+      fire: (env: {
+        fireSourceCreate: (uri: vscode.Uri) => void;
+        fireSourceDelete: (uri: vscode.Uri) => void;
+      }) => void,
+    ): Promise<number> {
+      let resends = 0;
+      await withStubbedProjectEnvironment(async (env) => {
+        const { client, notifications } = fakeClient();
+        const manager = new ProjectManager(client, stubDeps);
+        try {
+          env.fireCreate(fakeProjectUri(projectFile));
+          await waitFor(
+            () =>
+              countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) === 1,
+          );
+
+          fire(env);
+          await new Promise((resolve) => setTimeout(resolve, PAST_DEBOUNCE_MS));
+
+          resends =
+            countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) - 1;
+        } finally {
+          manager.dispose();
+        }
+      });
+      return resends;
+    }
+
+    const projectFile = path.join('C:', 'work', 'App', 'App.csproj');
+    const inProject = (...segments: string[]) =>
+      fakeProjectUri(path.join('C:', 'work', 'App', ...segments));
+
+    test('a code-behind created under obj/ does not re-evaluate the project', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceCreate }) => {
+        fireSourceCreate(inProject('obj', 'Debug', 'net8.0', 'Features', 'Login.feature.cs'));
+        fireSourceCreate(inProject('obj', 'Debug', 'net8.0', 'App.AssemblyInfo.cs'));
+      });
+
+      assert.strictEqual(resends, 0, 'files created under obj/ must not trigger a re-evaluation');
+    });
+
+    test('deleting build output under bin/ or obj/ (a clean) does not re-evaluate the project', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceDelete }) => {
+        fireSourceDelete(inProject('obj', 'Debug', 'net8.0', 'Features', 'Login.feature.cs'));
+        fireSourceDelete(inProject('bin', 'Debug', 'net8.0', 'Generated.cs'));
+      });
+
+      assert.strictEqual(resends, 0, 'deleting build output must not trigger a re-evaluation');
+    });
+
+    test('a code-behind created next to its .feature file re-evaluates the project once', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceCreate }) => {
+        fireSourceCreate(inProject('Features', 'Login.feature.cs'));
+      });
+
+      assert.strictEqual(resends, 1);
+    });
+
+    test('a new step-definition file re-evaluates the project once', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceCreate }) => {
+        fireSourceCreate(inProject('StepDefinitions', 'LoginSteps.cs'));
+      });
+
+      assert.strictEqual(resends, 1);
+    });
+
+    test('a deleted .feature file re-evaluates the project once', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceDelete }) => {
+        fireSourceDelete(inProject('Features', 'Login.feature'));
+      });
+
+      assert.strictEqual(resends, 1);
+    });
+
+    test('a source folder named obj below the project root still re-evaluates the project', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceCreate }) => {
+        fireSourceCreate(inProject('Features', 'obj', 'Steps.cs'));
+      });
+
+      assert.strictEqual(resends, 1);
+    });
+
+    test('a burst mixing build output and a real source file re-evaluates once', async function () {
+      this.timeout(15000);
+
+      const resends = await resendsAfter(projectFile, ({ fireSourceCreate }) => {
+        fireSourceCreate(inProject('obj', 'Debug', 'net8.0', 'App.AssemblyInfo.cs'));
+        fireSourceCreate(inProject('StepDefinitions', 'LoginSteps.cs'));
+        fireSourceCreate(inProject('obj', 'Debug', 'net8.0', 'Features', 'Login.feature.cs'));
+      });
+
+      assert.strictEqual(resends, 1);
     });
   });
 
