@@ -442,6 +442,12 @@ a `[DaemonStage]` of our own runs on `.feature` files and adds Rider's own `Unit
 
 **Production (2026-11-13, branch `feature/453-rider-test-gutter`, stacked on the PSI branch).** Built and
 unit-tested; **not yet run in a live Rider.**
+- **Finding the code-behind** follows Reqnroll's MSBuild rule (`CodeBehindPaths`, SDK-free and unit-tested): next
+  to the feature by default, or under `$(IntermediateOutputPath)` with `..` steps of the feature's folder turned
+  into `_` when the project sets `ReqnrollUseIntermediateOutputPathForCodeBehind` (Reqnroll 3.3+). Both
+  properties are read per target framework through an `IProjectPropertiesRequest`. Rider's project model holds the
+  `obj` code-behind with its tests, so the file is matched by full path. *Live-verified 2026-11-23 with the
+  property on (Reqnroll.MsTest 3.3.4): 3 tests, 3 marks from `obj/Debug/net8.0/Features`.*
 - **Mapping is SDK-free and unit-tested** (`GeneratedTestLines`, linked into the backend test project):
   - The test class maps to the `Feature` line: the first line that is not blank, a comment, a tag or the
     `# language:` header. That needs no keywords, so it works in every dialect.

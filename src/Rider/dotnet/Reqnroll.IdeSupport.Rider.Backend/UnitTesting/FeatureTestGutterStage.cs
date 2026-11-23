@@ -5,6 +5,7 @@ using JetBrains.Application.Parts;
 using JetBrains.Application.Settings;
 using JetBrains.DocumentModel;
 using JetBrains.ProjectModel;
+using JetBrains.ProjectModel.Properties;
 using JetBrains.ReSharper.Feature.Services.Daemon;
 using JetBrains.ReSharper.Psi;
 using JetBrains.ReSharper.UnitTestFramework;
@@ -15,6 +16,7 @@ using JetBrains.ReSharper.UnitTestFramework.Exploration.Daemon.Highlighting;
 using JetBrains.ReSharper.UnitTestFramework.Persistence;
 using JetBrains.Util;
 using JetBrains.Util.dataStructures.TypedIntrinsics;
+using JetBrains.Util.Dotnet.TargetFrameworkIds;
 using JetBrains.Util.Logging;
 using Reqnroll.IdeSupport.Rider.Backend.FeatureFiles;
 
@@ -119,7 +121,7 @@ public class FeatureTestGutterStage : IDaemonStage
         private void Collect(List<HighlightingInfo> into)
         {
             var featureProjectFile = DaemonProcess.SourceFile.ToProjectFile();
-            var codeBehind = CodeBehindOf(featureProjectFile);
+            var codeBehind = CodeBehindOf(featureProjectFile, DaemonProcess.SourceFile.PsiModule.TargetFrameworkId);
             var codeBehindDocument = codeBehind?.ToSourceFile()?.Document;
             if (featureProjectFile == null || codeBehindDocument == null)
                 return;
@@ -162,9 +164,47 @@ public class FeatureTestGutterStage : IDaemonStage
             return new HighlightingInfo(markRange, highlighting);
         }
 
-        private static IProjectFile CodeBehindOf(IProjectFile featureProjectFile)
+        /// <summary>
+        /// The code-behind Reqnroll generated for <paramref name="featureProjectFile"/>: next to it, or under the
+        /// intermediate output path when the project sets <c>ReqnrollUseIntermediateOutputPathForCodeBehind</c>
+        /// (<see cref="CodeBehindPaths"/>), with the properties read for the feature's target framework. Rider's project
+        /// model holds the generated file either way.
+        /// </summary>
+        private static IProjectFile CodeBehindOf(IProjectFile featureProjectFile, TargetFrameworkId targetFramework)
         {
-            var siblings = featureProjectFile?.ParentFolder?.GetSubItems(featureProjectFile.Name + ".cs");
+            var project = featureProjectFile?.GetProject();
+            var projectDirectory = project?.ProjectFileLocation.Directory;
+            if (project == null || projectDirectory == null || projectDirectory.IsEmpty)
+                return null;
+
+            var name = featureProjectFile.Name + ".cs";
+            var useIntermediateOutputPath = string.Equals(
+                project.GetRequestedProjectProperty(targetFramework, CodeBehindPaths.UseIntermediateOutputPathProperty),
+                "true", StringComparison.OrdinalIgnoreCase);
+            if (!useIntermediateOutputPath)
+                return SiblingOf(featureProjectFile, name);
+
+            // A stale code-behind next to the feature is not compiled when the property is set, so it is not looked for.
+            var path = CodeBehindPaths.Locate(
+                projectDirectory.FullPath,
+                featureProjectFile.Location.FullPath,
+                useIntermediateOutputPath,
+                project.GetRequestedProjectProperty(targetFramework, CodeBehindPaths.IntermediateOutputPathProperty));
+            if (path == null)
+                return null;
+
+            foreach (var file in project.GetAllProjectFiles(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (CodeBehindPaths.SamePath(file.Location.FullPath, path))
+                    return file;
+            }
+
+            return null;
+        }
+
+        private static IProjectFile SiblingOf(IProjectFile featureProjectFile, string name)
+        {
+            var siblings = featureProjectFile.ParentFolder?.GetSubItems(name);
             if (siblings == null)
                 return null;
             foreach (var item in siblings)
