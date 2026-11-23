@@ -21,6 +21,7 @@
 * In Visual Studio, the Run and hook-count CodeLens on a `.feature` file now follow the file when it is renamed or saved under a new name with Save As; previously they kept asking the language server about the old file name until the file was closed and reopened (VS) - see #1033
 * In Visual Studio, renaming, deleting or adding a folder in a project now updates the language server's list of the project's `.feature` and binding files straight away; previously it stayed stale until the next build or restore, because Visual Studio raises only a folder event, not one per file inside it (VS) - see #1235
 * A project whose `.csproj` sets `AppConfig` to a file that does not exist no longer logs a configuration warning on every reload; the setting is ignored until the file exists (LSP server) - see #972
+* In Rider and VS Code, a language server whose connection stops while its process is still alive (or is not known to have ended) is no longer counted as a crash: it is now reported as the new `Server.Process.ConnectionLost` event, and `Server.Process.ExitedUnexpectedly` is sent only when an exit code, an exit signal or a crash report shows the process ended. The `Server.Process.Restarted` that follows a lost connection carries `Reason = ConnectionLost`. `error-rates.kql` shows it as its own kind and `crash-triage.kql` is unchanged (Rider, VS Code) - see #1312
 
 # v2026.2 - 2026-10-25
 

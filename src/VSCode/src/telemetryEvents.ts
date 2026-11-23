@@ -19,6 +19,8 @@ export const TelemetryEvents = {
   serverProcessStartFailed: 'Server.Process.StartFailed',
   /** A running language server stopped without the client asking it to. `Reason`, `AttemptNumber`. */
   serverProcessExitedUnexpectedly: 'Server.Process.ExitedUnexpectedly',
+  /** A running language server stopped without the client asking it to, but its process had not ended when last checked: a lost or stalled connection, not a crash. `Reason`, `AttemptNumber`, `ServerSessionId`, `UptimeMs`. */
+  serverProcessConnectionLost: 'Server.Process.ConnectionLost',
   /** The client started the language server again after a failure or exit. `Reason`, `AttemptNumber`. */
   serverProcessRestarted: 'Server.Process.Restarted',
   /** An exception thrown in this extension's own code: the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
@@ -41,6 +43,7 @@ export const ServerFailureReason = {
   executableNotFound: 'ExecutableNotFound',
   startFailed: 'StartFailed',
   processExited: 'ProcessExited',
+  connectionLost: 'ConnectionLost',
   sessionEnded: 'SessionEnded',
 } as const;
 

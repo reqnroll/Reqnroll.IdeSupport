@@ -66,6 +66,7 @@ let LegacyEventNames = dynamic({
     "ServerSessionEnded": "Server.Session.Ended",
     "ServerStartFailed": "Server.Process.StartFailed",
     "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerConnectionLost": "Server.Process.ConnectionLost",
     "ServerRestarted": "Server.Process.Restarted",
     "ProjectCharacteristics": "Project.Characteristics.Reported",
     "PerfSample": "Perf.Sample",

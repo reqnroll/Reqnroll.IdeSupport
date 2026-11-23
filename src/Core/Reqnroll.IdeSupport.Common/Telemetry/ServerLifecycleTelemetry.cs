@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <summary>
 /// Vocabulary shared by the client-originated server-lifecycle events
 /// (<see cref="TelemetryEvents.ServerProcessStartFailed"/>, <see cref="TelemetryEvents.ServerProcessExitedUnexpectedly"/>,
-/// <see cref="TelemetryEvents.ServerProcessRestarted"/>). A dead server cannot report itself, so each
+/// <see cref="TelemetryEvents.ServerProcessConnectionLost"/>, <see cref="TelemetryEvents.ServerProcessRestarted"/>). A dead server cannot report itself, so each
 /// IDE client sends these. Property names and values are mirrored in
 /// <c>src/VSCode/src/telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>: keep all three in sync.
 /// </summary>
@@ -99,6 +99,13 @@ public static class ServerFailureReason
 
     /// <summary>A running server process exited without the client having asked it to.</summary>
     public const string ProcessExited = "ProcessExited";
+
+    /// <summary>
+    /// A running server's connection stopped without the client having asked for it, but the server process
+    /// was not known to have ended (Rider and VS Code; Visual Studio only reports once the process has exited).
+    /// Sent on <see cref="TelemetryEvents.ServerProcessConnectionLost"/>, and on the <c>Restarted</c> event that follows it.
+    /// </summary>
+    public const string ConnectionLost = "ConnectionLost";
 
     /// <summary>
     /// The previous server session ended cleanly (a normal shutdown) and a new one was started. Whether the

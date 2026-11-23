@@ -3,7 +3,10 @@ import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import { State } from 'vscode-languageclient';
 import { LanguageClient, StateChangeEvent } from 'vscode-languageclient/node';
-import { ServerLifecycleTelemetry } from '../../lsp/serverLifecycleTelemetry';
+import {
+  EXIT_DETAILS_TIMEOUT_MS,
+  ServerLifecycleTelemetry,
+} from '../../lsp/serverLifecycleTelemetry';
 import { ServerProcessTracker } from '../../lsp/serverProcessTracker';
 
 interface Sent {
@@ -211,6 +214,83 @@ suite('ServerLifecycleTelemetry', () => {
       assert.strictEqual(sent[0].properties.ExitCode, -1073741571);
       assert.strictEqual(sent[0].properties.CrashKind, 'StackOverflow');
       assert.strictEqual(sent[0].properties.StackFrames, 'Reqnroll.IdeSupport.X.Y.Recurse');
+    });
+
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+    test('a stop with a process that never ended is a lost connection, and a restart before the wait is over carries that reason', async function () {
+      this.timeout(10000);
+      const { sent, move } = setupTracked();
+      move(State.Starting);
+      move(State.Running);
+      move(State.Stopped);
+      move(State.Starting);
+      assert.deepStrictEqual(sent.slice(), [
+        {
+          eventName: 'Server.Process.Restarted',
+          properties: { Reason: 'ConnectionLost', AttemptNumber: 2 },
+        },
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, EXIT_DETAILS_TIMEOUT_MS + 250));
+
+      assert.strictEqual(sent.length, 2);
+      assert.strictEqual(sent[1].eventName, 'Server.Process.ConnectionLost');
+      assert.strictEqual(sent[1].properties.Reason, 'ConnectionLost');
+      assert.strictEqual(sent[1].properties.AttemptNumber, 1);
+      assert.strictEqual(sent[1].properties.ServerSessionId, 'id-1');
+      assert.strictEqual(typeof sent[1].properties.UptimeMs, 'number');
+      assert.ok(!('ExitCode' in sent[1].properties));
+    });
+
+    test('a stop with an exit code and no crash report is an unexpected exit', async () => {
+      const { sent, move, process } = setupTracked();
+      move(State.Starting);
+      move(State.Running);
+      move(State.Stopped);
+      process.emit('exit', 1, null);
+      process.stderr.end();
+      process.emit('close', 1, null);
+      await flush();
+
+      assert.deepStrictEqual(
+        sent.map((e) => e.eventName),
+        ['Server.Process.ExitedUnexpectedly'],
+      );
+      assert.strictEqual(sent[0].properties.ExitCode, 1);
+      assert.strictEqual(sent[0].properties.Reason, 'ProcessExited');
+    });
+
+    test('a stop with a crash report but no exit code is still an unexpected exit', async () => {
+      const { sent, move, process } = setupTracked();
+      move(State.Starting);
+      move(State.Running);
+      move(State.Stopped);
+      process.stderr.write('Stack overflow.\n   at Reqnroll.IdeSupport.X.Y.Recurse(Int32)\n');
+      process.stderr.end();
+      process.emit('close', null, null);
+      await flush();
+
+      assert.deepStrictEqual(
+        sent.map((e) => e.eventName),
+        ['Server.Process.ExitedUnexpectedly'],
+      );
+      assert.strictEqual(sent[0].properties.CrashKind, 'StackOverflow');
+      assert.ok(!('ExitCode' in sent[0].properties));
+    });
+
+    test('a restart after the exit details are known carries ProcessExited', async () => {
+      const { sent, move, process } = setupTracked();
+      move(State.Starting);
+      move(State.Running);
+      move(State.Stopped);
+      process.emit('exit', 134, null);
+      process.emit('close', 134, null);
+      await flush();
+      move(State.Starting);
+
+      assert.strictEqual(sent[sent.length - 1].eventName, 'Server.Process.Restarted');
+      assert.strictEqual(sent[sent.length - 1].properties.Reason, 'ProcessExited');
     });
   });
 });

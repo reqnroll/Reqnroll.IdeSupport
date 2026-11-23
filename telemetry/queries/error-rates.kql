@@ -7,15 +7,18 @@
 //
 // Status: verified 2026-10-16 in the dev resource using the classic names (customEvents): returned Rider
 // client-origin UnhandledException rows with Sessions and EventsPer100Sessions populated. The
-// ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted paths and the AppEvents form below have not
-// been run yet. The ExtensionVersion split has not been run against live data yet.
+// ServerStartFailed / ServerExitedUnexpectedly / ServerConnectionLost / ServerRestarted paths and the AppEvents
+// form below have not been run yet. The ExtensionVersion split has not been run against live data yet.
 //
 // Sources
 // - UnhandledException: exceptions are sent as EVENTS (not to the Application Insights exceptions table), by the
 //   server and by the VS Code / Rider clients. Origin is "Client" when ExceptionOrigin = "Client", else "Server".
 //   Other properties available for drill-down: ExceptionType, Source (component), IsFatal, StackFrames.
 //   Client-origin rows carry ClientSessionId (not SessionId; #1199), the same property every server event carries.
-// - ServerStartFailed / ServerExitedUnexpectedly / ServerRestarted: sent by each IDE client; Reason is a closed enum.
+// - ServerStartFailed / ServerExitedUnexpectedly / ServerConnectionLost / ServerRestarted: sent by each IDE client;
+//   Reason is a closed enum. ServerExitedUnexpectedly is a server whose process is known to have ended (an exit
+//   code, signal or crash report); ServerConnectionLost is a stop with no sign the process ended (Rider, VS Code),
+//   a lost or stalled connection to a server that may still be alive, so it is its own kind here, not a crash.
 //
 // Reading the numbers
 // - Events: how many were sent. AffectedUsers: distinct UserId, so one user in a failure loop is one affected user.
@@ -72,6 +75,7 @@ let LegacyEventNames = dynamic({
     "ServerSessionEnded": "Server.Session.Ended",
     "ServerStartFailed": "Server.Process.StartFailed",
     "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerConnectionLost": "Server.Process.ConnectionLost",
     "ServerRestarted": "Server.Process.Restarted",
     "ProjectCharacteristics": "Project.Characteristics.Reported",
     "PerfSample": "Perf.Sample",
@@ -81,7 +85,7 @@ let CanonicalEventName = (n:string) {
     let s = tostring(split(n, "/")[-1]);
     iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
 };
-let failureEvents = dynamic(["Error.UnhandledException", "Server.Process.StartFailed", "Server.Process.ExitedUnexpectedly", "Server.Process.Restarted"]);
+let failureEvents = dynamic(["Error.UnhandledException", "Server.Process.StartFailed", "Server.Process.ExitedUnexpectedly", "Server.Process.ConnectionLost", "Server.Process.Restarted"]);
 let sessionsPerDay = AppEvents
     | where TimeGenerated > ago(lookback)
     | where CanonicalEventName(Name) == "Server.Session.Started"
