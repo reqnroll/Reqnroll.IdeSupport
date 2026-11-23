@@ -19,6 +19,7 @@
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\GeneratedTestLines.cs" Link="GeneratedTestLines.cs" />
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\RiderTestRunReport.cs" Link="RiderTestRunReport.cs" />
     <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\UnitTestHighlightingContract.cs" Link="UnitTestHighlightingContract.cs" />
+    <Compile Include="..\Reqnroll.IdeSupport.Rider.Backend\UnitTesting\CodeBehindPaths.cs" Link="CodeBehindPaths.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Core\Reqnroll.IdeSupport.TestReporter.Common\Reqnroll.IdeSupport.TestReporter.Common.csproj" />
