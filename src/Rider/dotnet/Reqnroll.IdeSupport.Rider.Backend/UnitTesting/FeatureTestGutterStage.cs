@@ -35,8 +35,8 @@ namespace Reqnroll.IdeSupport.Rider.Backend.UnitTesting;
 [DaemonStage(Instantiation.DemandAnyThreadSafe)]
 public class FeatureTestGutterStage : IDaemonStage
 {
-    private const string HighlightingTypeName =
-        "JetBrains.ReSharper.UnitTestFramework.Exploration.Daemon.Highlighting.UnitTestElementHighlighting";
+    // Checked against the SDK the module is built with by the backend tests (UnitTestHighlightingContract).
+    private const string HighlightingTypeName = UnitTestHighlightingContract.TypeName;
 
     private static readonly ILogger Log = Logger.GetLogger<FeatureTestGutterStage>();
 

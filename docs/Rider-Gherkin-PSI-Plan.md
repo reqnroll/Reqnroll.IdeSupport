@@ -416,7 +416,9 @@ a `[DaemonStage]` of our own runs on `.feature` files and adds Rider's own `Unit
 **real** element, with a `UnitTestElementDisposition` pointing at the scenario line in the `.feature` file.
 - The highlighting class is internal, so it is created by reflection. Its constructor
   `(IUnitTestLikeElementDisposition, DocumentRange)` is public. The backend module is built for one Rider release,
-  so a per-release smoke test catches a change to it.
+  and `RiderSdkContractTests` (backend tests) checks the type, that constructor and its `IHighlighting` interface
+  against that release's SDK assembly, so a `riderSdkVersion` bump that changes them fails the build. The stage
+  still checks at run time and logs a warning, in case a bug-fix update of the release changes the internal type.
 - Because it is Rider's own highlighting:
   - `AttributeId` reads the real element's result from `IUnitTestResultManager`, so the mark shows pass/fail.
   - The gutter menu (`UnitTestElementGutterMarkBase` with `UnitTestBulbItemsCollector`) is the native C# one.

@@ -16,4 +16,13 @@
     <PackageReference Include="JetBrains.Rider.SDK" Version="$(RiderSdkVersion)" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
   </ItemGroup>
+
+  <!-- Returns the resolved JetBrains.ReSharper.UnitTestFramework.dll of the Rider SDK this module builds against.
+       The backend tests read it to check the internal type FeatureTestGutterStage creates by reflection
+       (UnitTestHighlightingContract). -->
+  <Target Name="GetRiderUnitTestFrameworkReference" DependsOnTargets="ResolveAssemblyReferences" Returns="@(_RiderUnitTestFrameworkReference)">
+    <ItemGroup>
+      <_RiderUnitTestFrameworkReference Include="@(ReferencePath)" Condition="'%(Filename)' == 'JetBrains.ReSharper.UnitTestFramework'" />
+    </ItemGroup>
+  </Target>
 </Project>

@@ -131,7 +131,8 @@ listeners plus lifecycle and telemetry activities, `codeInsight.codeVisionProvid
    `.projitems` directly and sends no delta for a file added to a shared project.
 7. **Native Unit Tests window presence is out of reach** from the JVM; see the test runner doc. The plugin's
    backend module provides it instead: `FeatureTestGutterStage` adds Rider's own test gutter marks
-   (an internal highlighting type, created by reflection) for the tests discovered in `.feature.cs`, mapped to
+   (an internal highlighting type, created by reflection and checked against the pinned SDK by
+   `RiderSdkContractTests`) for the tests discovered in `.feature.cs`, mapped to
    lines through `#line` directives and outline pickle indexes (`GeneratedTestLines`). The backend daemon only
    runs on `.feature` because `plugin.xml`'s `rd.languageAssociation` associates the `Gherkin` frontend language
    with the backend's `REQNROLL_FEATURE`. The Run lens then keeps only Rule lines
