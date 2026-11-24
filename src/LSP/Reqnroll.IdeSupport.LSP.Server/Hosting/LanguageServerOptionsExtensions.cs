@@ -79,22 +79,29 @@ public static class LanguageServerOptionsExtensions
     /// Because OmniSharp's LSP parameter types (e.g., ReferenceParams, SemanticTokensParams) 
     /// do not implement MediatR's IRequest, we must use OnRequest/OnNotification delegates 
     /// for custom method routing. This method encapsulates the service resolution in a 
-    /// strongly-typed resolver initialized during OnStarted, eliminating nullable IServiceProvider 
+    /// strongly-typed resolver bound during OnInitialized, eliminating nullable IServiceProvider 
     /// captures and null-forgiving operators.
     /// </summary>
+    /// <remarks>
+    /// The binding must happen in <c>OnInitialized</c>, not <c>OnStarted</c>. OmniSharp releases the
+    /// requests it deferred during the handshake as soon as the initialize exchange completes, which
+    /// is <i>before</i> <c>LanguageServer.Initialize()</c> goes on to run the <c>OnStarted</c>
+    /// delegates. <c>OnInitialized</c> delegates are awaited before that release, so every routed
+    /// request is guaranteed to find the resolver (and the seeded workspace folders) in place.
+    /// </remarks>
     public static void InitializeCustomProtocolRouting(this LanguageServerOptions options)
     {
         // Encapsulate service resolution to avoid nullable IServiceProvider? anti-pattern
-        LspHandlerResolver? resolver = null;
+        var resolver = new LspHandlerResolver();
 
-        options.OnStarted((languageServer, _) =>
+        options.OnInitialized((languageServer, clientSettings, _, _) =>
         {
-            resolver = new LspHandlerResolver(languageServer.Services);
-            
+            resolver.Bind(languageServer.Services);
+
             var scopeManager = resolver.Get<ILspWorkspaceScopeManager>();
-            if (languageServer.ClientSettings.WorkspaceFolders is not null)
+            if (clientSettings.WorkspaceFolders is not null)
             {
-                foreach (var folder in languageServer.ClientSettings.WorkspaceFolders)
+                foreach (var folder in clientSettings.WorkspaceFolders)
                 {
                     var path = folder.Uri.GetFileSystemPath();
                     if (!string.IsNullOrEmpty(path))
@@ -124,17 +131,17 @@ public static class LanguageServerOptionsExtensions
 
         options.OnNotification<ReqnrollProjectLoadedParams>(
             CustomLspMethodNames.ReqnrollProjectLoaded,
-            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectLoadedAsync(p, ct),
+            (p, ct) => resolver.Get<ILspWorkspaceScopeManager>().HandleProjectLoadedAsync(p, ct),
             serialOptions);
 
         options.OnNotification<ReqnrollProjectUnloadedParams>(
             CustomLspMethodNames.ReqnrollProjectUnloaded,
-            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectUnloadedAsync(p, ct),
+            (p, ct) => resolver.Get<ILspWorkspaceScopeManager>().HandleProjectUnloadedAsync(p, ct),
             serialOptions);
 
         options.OnNotification<ReqnrollProjectFilesParams>(
             CustomLspMethodNames.ReqnrollProjectFiles,
-            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectFilesAsync(p, ct),
+            (p, ct) => resolver.Get<ILspWorkspaceScopeManager>().HandleProjectFilesAsync(p, ct),
             serialOptions);
 
         // VS-side tab-activation backstop — forces a fresh binding-match recompute and
@@ -142,7 +149,7 @@ public static class LanguageServerOptionsExtensions
         // becoming the active tab, independent of whatever normally triggers that.
         options.OnNotification<DocumentActivatedParams>(
             CustomLspMethodNames.ReqnrollDocumentActivated,
-            (p, ct) => resolver!.Get<DocumentActivatedHandler>().HandleAsync(p, ct));
+            (p, ct) => resolver.Get<DocumentActivatedHandler>().HandleAsync(p, ct));
 
         // ── Manual request routing to bypass dynamic registration limitations ─────────
         // semanticTokens/full is an interactive performance target; wrap it (and its delta sibling)
@@ -150,26 +157,26 @@ public static class LanguageServerOptionsExtensions
         // at one site. The same helper can wrap the other manual routes below as needed.
         options.OnRequest<SemanticTokensParams, SemanticTokens>(
             LspStandardMethodNames.TextDocumentSemanticTokensFull,
-            (request, ct) => MeasuredAsync(resolver!, LspStandardMethodNames.TextDocumentSemanticTokensFull,
-                request.TextDocument.Uri, () => resolver!.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
+            (request, ct) => MeasuredAsync(resolver, LspStandardMethodNames.TextDocumentSemanticTokensFull,
+                request.TextDocument.Uri, () => resolver.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
 
         options.OnRequest<SemanticTokensDeltaParams, SemanticTokensFullOrDelta>(
             LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
-            (request, ct) => MeasuredAsync(resolver!, LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
-                request.TextDocument.Uri, () => resolver!.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
+            (request, ct) => MeasuredAsync(resolver, LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
+                request.TextDocument.Uri, () => resolver.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
 
         options.OnRequest<SemanticTokensRangeParams, SemanticTokens>(
             LspStandardMethodNames.TextDocumentSemanticTokensRange,
-            (request, ct) => MeasuredAsync(resolver!, LspStandardMethodNames.TextDocumentSemanticTokensRange,
-                request.TextDocument.Uri, () => resolver!.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
+            (request, ct) => MeasuredAsync(resolver, LspStandardMethodNames.TextDocumentSemanticTokensRange,
+                request.TextDocument.Uri, () => resolver.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
 
         options.OnRequest<ReferenceParams, LocationOrLocationLinks>(
             LspStandardMethodNames.TextDocumentReferences,
-            (request, ct) => resolver!.Get<ReferencesHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<ReferencesHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ReferenceParams, FindStepUsagesResponse>(
             CustomLspMethodNames.ReqnrollFindStepUsages,
-            (request, ct) => resolver!.Get<FindStepUsagesHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<FindStepUsagesHandler>().HandleAsync(request, ct));
 
         // Always-hierarchical documentSymbol for the VS extension's own Navigation Bar (Navigation Bar symbol
         // source design, Option B) — distinct from
@@ -178,40 +185,40 @@ public static class LanguageServerOptionsExtensions
         // DocumentSymbolHandler.HandleHierarchicalAsync.
         options.OnRequest<DocumentSymbolParams, IReadOnlyList<DocumentSymbol>>(
             CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical,
-            (request, ct) => resolver!.Get<DocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
+            (request, ct) => resolver.Get<DocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
 
         options.OnRequest<FindHooksParams, FindHooksResponse>(
             CustomLspMethodNames.ReqnrollFindHooks,
-            (request, ct) => resolver!.Get<FindHooksHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<FindHooksHandler>().HandleAsync(request, ct));
 
         // Go to Step Definition with per-binding detail for the VS extension's results list:
         // textDocument/definition only carries Locations. Same bindings as DefinitionHandler.
         options.OnRequest<TextDocumentPositionParams, FindStepDefinitionsResponse>(
             CustomLspMethodNames.ReqnrollFindStepDefinitions,
-            (request, ct) => resolver!.Get<FindStepDefinitionsHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<FindStepDefinitionsHandler>().HandleAsync(request, ct));
 
         options.OnRequest<TextDocumentPositionParams, FindMatchingScenariosResponse>(
             CustomLspMethodNames.ReqnrollFindMatchingScenarios,
-            (request, ct) => resolver!.Get<FindMatchingScenariosHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<FindMatchingScenariosHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ResolveTestTargetsParams, ResolveTestTargetsResponse>(
             CustomLspMethodNames.ReqnrollResolveTestTargets,
-            (request, ct) => resolver!.Get<ResolveTestTargetsHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<ResolveTestTargetsHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ResolveContainerTestTargetsParams, ResolveContainerTestTargetsResponse>(
             CustomLspMethodNames.ReqnrollResolveContainerTestTargets,
-            (request, ct) => resolver!.Get<ResolveContainerTestTargetsHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<ResolveContainerTestTargetsHandler>().HandleAsync(request, ct));
 
         // LSP-server outcome pipeline (VSTest logger → server → every connected IDE): the run
         // registration and outcome lookup are custom requests any IDE's
         // glue component can call the same way.
         options.OnRequest<RegisterTestRunParams, RegisterTestRunResponse>(
             CustomLspMethodNames.ReqnrollRegisterTestRun,
-            (request, ct) => resolver!.Get<RegisterTestRunHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<RegisterTestRunHandler>().HandleAsync(request, ct));
 
         options.OnRequest<GetTestOutcomeParams, GetTestOutcomeResponse>(
             CustomLspMethodNames.ReqnrollGetTestOutcome,
-            (request, ct) => resolver!.Get<GetTestOutcomeHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<GetTestOutcomeHandler>().HandleAsync(request, ct));
 
         // A single manual registration handles textDocument/codeLens for every lens kind:
         // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches),
@@ -224,9 +231,9 @@ public static class LanguageServerOptionsExtensions
         // list below: adding a future lens kind only needs a new list entry, not a new branch).
         var codeLensHandlers = new List<Func<CodeLensParams, CancellationToken, Task<CodeLens[]>>>
         {
-            (req, ct) => resolver!.Get<StepCodeLensHandler>().HandleAsync(req, ct),
-            (req, ct) => resolver!.Get<HookCodeLensHandler>().HandleAsync(req, ct),
-            (req, ct) => resolver!.Get<HookMatchCountCodeLensHandler>().HandleAsync(req, ct),
+            (req, ct) => resolver.Get<StepCodeLensHandler>().HandleAsync(req, ct),
+            (req, ct) => resolver.Get<HookCodeLensHandler>().HandleAsync(req, ct),
+            (req, ct) => resolver.Get<HookMatchCountCodeLensHandler>().HandleAsync(req, ct),
         };
         options.OnRequest<CodeLensParams, CodeLens[]>(
             LspStandardMethodNames.TextDocumentCodeLens,
@@ -240,26 +247,26 @@ public static class LanguageServerOptionsExtensions
         // "kind" discriminator embedded in CodeLens.Data (non-VS deferred-resolve path).
         options.OnRequest<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens, global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>(
             LspStandardMethodNames.CodeLensResolve,
-            (lens, ct) => resolver!.Get<CodeLensResolveHandler>().ResolveAsync(lens, ct));
+            (lens, ct) => resolver.Get<CodeLensResolveHandler>().ResolveAsync(lens, ct));
 
         // inlayHint/foldingRange are routed manually (rather than via AddHandler's dynamic
         // registration) so that inlayHintProvider/foldingRangeProvider can be declared
         // statically in the initialize response — see Program.ConfigureServer for why.
         options.OnRequest<InlayHintParams, InlayHintContainer?>(
             LspStandardMethodNames.TextDocumentInlayHint,
-            (request, ct) => resolver!.Get<InlayHintHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<InlayHintHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FoldingRangeRequestParam, Container<FoldingRange>?>(
             LspStandardMethodNames.TextDocumentFoldingRange,
-            (request, ct) => resolver!.Get<FoldingRangeHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<FoldingRangeHandler>().HandleAsync(request, ct));
 
         options.OnRequest<DocumentLinkParams, DocumentLinkContainer?>(
             LspStandardMethodNames.TextDocumentDocumentLink,
-            (request, ct) => resolver!.Get<DocumentLinkHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver.Get<DocumentLinkHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FindUnusedStepDefinitionsParams, FindUnusedStepDefinitionsResponse>(
             CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions,
-            (_, ct) => resolver!.Get<FindUnusedStepDefinitionsHandler>().HandleAsync(ct));
+            (_, ct) => resolver.Get<FindUnusedStepDefinitionsHandler>().HandleAsync(ct));
 
         // ── Step Rename refactoring ──────────────────────────────────────────────
         // prepareRename null → null: per the LSP spec, a null prepareRename result means
@@ -281,7 +288,7 @@ public static class LanguageServerOptionsExtensions
             LspStandardMethodNames.TextDocumentPrepareRename,
             async (request, ct) =>
             {
-                var result = await resolver!.Get<RenameHandler>().HandlePrepareRenameAsync(request, ct);
+                var result = await resolver.Get<RenameHandler>().HandlePrepareRenameAsync(request, ct);
                 return result != null ? (JToken)JObject.FromObject(result, CamelCaseSerializer) : JValue.CreateNull();
             });
 
@@ -304,23 +311,23 @@ public static class LanguageServerOptionsExtensions
         options.OnRequest<RenameParams, WorkspaceEdit>(
             LspStandardMethodNames.TextDocumentRename,
             async (request, ct) =>
-                await resolver!.Get<RenameHandler>().HandleRenameAsync(request, ct)
+                await resolver.Get<RenameHandler>().HandleRenameAsync(request, ct)
                 ?? new WorkspaceEdit(),
             serialOptions);
 
         options.OnRequest<RenameTargetsParams, RenameTargetsResponse>(
             CustomLspMethodNames.ReqnrollRenameTargets,
             async (request, ct) =>
-                await resolver!.Get<RenameTargetsHandler>().HandleRenameTargetsAsync(request, ct)
+                await resolver.Get<RenameTargetsHandler>().HandleRenameTargetsAsync(request, ct)
                 ?? new RenameTargetsResponse());
 
         options.OnNotification<SelectRenameTargetParams>(
             CustomLspMethodNames.ReqnrollSelectRenameTarget,
-            (request, ct) => resolver!.Get<RenameHandler>().HandleSelectRenameTargetAsync(request, ct));
+            (request, ct) => resolver.Get<RenameHandler>().HandleSelectRenameTargetAsync(request, ct));
 
         options.OnNotification<RenameAppliedParams>(
             CustomLspMethodNames.ReqnrollRenameApplied,
-            (request, ct) => resolver!.Get<RenameHandler>().HandleRenameAppliedAsync(request, ct));
+            (request, ct) => resolver.Get<RenameHandler>().HandleRenameAppliedAsync(request, ct));
     }
 
     /// <summary>
@@ -336,16 +343,21 @@ public static class LanguageServerOptionsExtensions
 
     /// <summary>
     /// Strongly-typed resolver for LSP handlers, eliminating nullable IServiceProvider captures.
+    /// Created unbound because the routing lambdas are registered before the server's services
+    /// exist; <see cref="Bind"/> supplies them from the <c>OnInitialized</c> callback.
     /// </summary>
     private sealed class LspHandlerResolver
     {
-        private readonly IServiceProvider _serviceProvider;
+        private volatile IServiceProvider? _serviceProvider;
 
-        public LspHandlerResolver(IServiceProvider serviceProvider)
+        public void Bind(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+
+        public T Get<T>() where T : notnull
         {
-            _serviceProvider = serviceProvider;
+            var serviceProvider = _serviceProvider
+                ?? throw new InvalidOperationException(
+                    "Custom protocol routing was invoked before the language server finished initializing.");
+            return serviceProvider.GetRequiredService<T>();
         }
-
-        public T Get<T>() where T : notnull => _serviceProvider.GetRequiredService<T>();
     }
 }

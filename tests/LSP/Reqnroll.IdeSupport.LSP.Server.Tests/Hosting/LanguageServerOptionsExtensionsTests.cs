@@ -1,5 +1,7 @@
 using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
@@ -50,6 +52,24 @@ public class LanguageServerOptionsExtensionsTests
 
         var description = options.Handlers.Single(d => GetMethod(d) == CustomLspMethodNames.ReqnrollResolveTestTargets);
         description.Options?.RequestProcessType.Should().NotBe(RequestProcessType.Serial);
+    }
+
+    /// <summary>
+    /// OmniSharp releases the requests it deferred during the handshake as soon as the initialize
+    /// exchange completes, but only runs <c>OnStarted</c> delegates afterwards. Binding the routing
+    /// resolver in <c>OnStarted</c> let the first requests run with no resolver and fail with a
+    /// <see cref="NullReferenceException"/>; <c>OnInitialized</c> delegates are awaited before the
+    /// release, so that is where the binding has to live.
+    /// </summary>
+    [Fact]
+    public void Routing_resolver_is_bound_in_OnInitialized_not_OnStarted()
+    {
+        var options = new LanguageServerOptions();
+
+        options.InitializeCustomProtocolRouting();
+
+        options.Services.Count(d => d.ServiceType == typeof(OnLanguageServerInitializedDelegate)).Should().BeGreaterThan(0);
+        options.Services.Count(d => d.ServiceType == typeof(OnLanguageServerStartedDelegate)).Should().Be(0);
     }
 
     private static string? GetMethod(JsonRpcHandlerDescription description) => description switch
