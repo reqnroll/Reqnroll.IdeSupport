@@ -218,29 +218,48 @@ suite('ServerLifecycleTelemetry', () => {
 
     const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-    test('a stop with a process that never ended is a lost connection, and a restart before the wait is over carries that reason', async function () {
+    test('a stop with a process that never ended is a lost connection, and the restart that came first follows it with the same reason', async function () {
       this.timeout(10000);
       const { sent, move } = setupTracked();
       move(State.Starting);
       move(State.Running);
       move(State.Stopped);
       move(State.Starting);
-      assert.deepStrictEqual(sent.slice(), [
-        {
-          eventName: 'Server.Process.Restarted',
-          properties: { Reason: 'ConnectionLost', AttemptNumber: 2 },
-        },
-      ]);
+      assert.strictEqual(sent.length, 0, 'the restart is held until the stop is classified');
 
       await new Promise((resolve) => setTimeout(resolve, EXIT_DETAILS_TIMEOUT_MS + 250));
 
-      assert.strictEqual(sent.length, 2);
-      assert.strictEqual(sent[1].eventName, 'Server.Process.ConnectionLost');
-      assert.strictEqual(sent[1].properties.Reason, 'ConnectionLost');
-      assert.strictEqual(sent[1].properties.AttemptNumber, 1);
-      assert.strictEqual(sent[1].properties.ServerSessionId, 'id-1');
-      assert.strictEqual(typeof sent[1].properties.UptimeMs, 'number');
-      assert.ok(!('ExitCode' in sent[1].properties));
+      assert.deepStrictEqual(
+        sent.map((e) => e.eventName),
+        ['Server.Process.ConnectionLost', 'Server.Process.Restarted'],
+      );
+      assert.strictEqual(sent[0].properties.Reason, 'ConnectionLost');
+      assert.strictEqual(sent[0].properties.AttemptNumber, 1);
+      assert.strictEqual(sent[0].properties.ServerSessionId, 'id-1');
+      assert.strictEqual(typeof sent[0].properties.UptimeMs, 'number');
+      assert.ok(!('ExitCode' in sent[0].properties));
+      assert.deepStrictEqual(sent[1].properties, { Reason: 'ConnectionLost', AttemptNumber: 2 });
+    });
+
+    test('a restart that comes before the process exits waits, then follows the exit event with ProcessExited', async () => {
+      const { sent, move, process } = setupTracked();
+      move(State.Starting);
+      move(State.Running);
+      move(State.Stopped);
+      move(State.Starting);
+      assert.strictEqual(sent.length, 0, 'the restart is held until the stop is classified');
+
+      process.emit('exit', 1, null);
+      process.stderr.end();
+      process.emit('close', 1, null);
+      await flush();
+
+      assert.deepStrictEqual(
+        sent.map((e) => e.eventName),
+        ['Server.Process.ExitedUnexpectedly', 'Server.Process.Restarted'],
+      );
+      assert.strictEqual(sent[0].properties.ExitCode, 1);
+      assert.deepStrictEqual(sent[1].properties, { Reason: 'ProcessExited', AttemptNumber: 2 });
     });
 
     test('a stop with an exit code and no crash report is an unexpected exit', async () => {
@@ -288,7 +307,12 @@ suite('ServerLifecycleTelemetry', () => {
       process.emit('close', 134, null);
       await flush();
       move(State.Starting);
+      await flush();
 
+      assert.deepStrictEqual(
+        sent.map((e) => e.eventName),
+        ['Server.Process.ExitedUnexpectedly', 'Server.Process.Restarted'],
+      );
       assert.strictEqual(sent[sent.length - 1].eventName, 'Server.Process.Restarted');
       assert.strictEqual(sent[sent.length - 1].properties.Reason, 'ProcessExited');
     });

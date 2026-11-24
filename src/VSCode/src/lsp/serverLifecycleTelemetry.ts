@@ -31,9 +31,9 @@ export const EXIT_DETAILS_TIMEOUT_MS = 2000;
  * carries `ServerSessionId`, `ExitCode`/`ExitSignal`, `UptimeMs` and the crash report the runtime printed to
  * stderr; that event is sent once the process has finished closing (bounded by {@link EXIT_DETAILS_TIMEOUT_MS}).
  *
- * Whether the process ended is only known when those details arrive, but a quick restart can come first, so
- * the stop is first recorded as a lost connection (the next `Restarted` reads it) and corrected to a process
- * exit if the details show the process ended and no newer attempt has started.
+ * Whether a stop after `Running` was an exit or a lost connection is only known when those details arrive, but
+ * vscode-languageclient restarts the server at once. A `Restarted` that follows such a stop therefore waits
+ * for the stop to be classified and is sent right after its event, carrying the classified `Reason`.
  */
 export class ServerLifecycleTelemetry implements vscode.Disposable {
   private readonly _listener: vscode.Disposable;
@@ -42,6 +42,8 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
   private _failureReported = false;
   private _intentionalStop = false;
   private _lastFailureReason: string | undefined;
+  /** The stop after `Running` still being classified; resolves, once its event is sent, to its `Reason`. */
+  private _pendingStop: Promise<string> | undefined;
 
   constructor(
     client: Pick<LanguageClient, 'onDidChangeState'> &
@@ -89,11 +91,22 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
     this._reachedRunning = false;
     this._failureReported = false;
     if (this._attempt > 1) {
-      this._send(TelemetryEvents.serverProcessRestarted, {
-        Reason: this._lastFailureReason ?? ServerFailureReason.sessionEnded,
-        AttemptNumber: this._attempt,
-      });
+      const attemptNumber = this._attempt;
+      const pendingStop = this._pendingStop;
+      const reason = this._lastFailureReason ?? ServerFailureReason.sessionEnded;
+      this._pendingStop = undefined;
       this._lastFailureReason = undefined;
+      const sendRestarted = (reasonValue: string) =>
+        this._send(TelemetryEvents.serverProcessRestarted, {
+          Reason: reasonValue,
+          AttemptNumber: attemptNumber,
+        });
+      if (pendingStop) {
+        // Telemetry must never surface as an unhandled rejection in the extension host.
+        void pendingStop.then(sendRestarted).catch(() => undefined);
+      } else {
+        sendRestarted(reason);
+      }
     }
   }
 
@@ -124,34 +137,25 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
       return;
     }
 
-    // Set before the details are known, so a restart that comes first still finds a reason.
-    this._lastFailureReason = ServerFailureReason.connectionLost;
-    void tracker
+    this._lastFailureReason = undefined;
+    this._pendingStop = tracker
       .describeExit(EXIT_DETAILS_TIMEOUT_MS)
       .catch(() => ({}))
       .then((details) => {
-        if (processEnded(details)) {
-          if (
-            this._attempt === attempt &&
-            this._lastFailureReason === ServerFailureReason.connectionLost
-          ) {
-            this._lastFailureReason = ServerFailureReason.processExited;
-          }
-          this._send(TelemetryEvents.serverProcessExitedUnexpectedly, {
-            ...details,
-            Reason: ServerFailureReason.processExited,
-            AttemptNumber: attempt,
-          });
-        } else {
-          this._send(TelemetryEvents.serverProcessConnectionLost, {
-            ...details,
-            Reason: ServerFailureReason.connectionLost,
-            AttemptNumber: attempt,
-          });
-        }
-      })
-      // Telemetry must never surface as an unhandled rejection in the extension host.
-      .catch(() => undefined);
+        const exited = processEnded(details);
+        const reason = exited
+          ? ServerFailureReason.processExited
+          : ServerFailureReason.connectionLost;
+        this._send(
+          exited
+            ? TelemetryEvents.serverProcessExitedUnexpectedly
+            : TelemetryEvents.serverProcessConnectionLost,
+          { ...details, Reason: reason, AttemptNumber: attempt },
+        );
+        return reason;
+      });
+    // Nobody may ever wait on it (no restart follows), so a failure to send must not go unhandled.
+    void this._pendingStop.catch(() => undefined);
   }
 
   private _reportFailure(eventName: string, reason: string): void {

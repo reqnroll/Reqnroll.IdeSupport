@@ -158,7 +158,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
     /// Locates the generated <c>&lt;feature&gt;.feature.cs</c> companion. Tries the classic
     /// co-located convention first (<c>Foo.feature</c> -&gt; <c>Foo.feature.cs</c>, next to it), then
     /// falls back to searching under <paramref name="projectFolder"/>'s <c>obj/</c> tree — Reqnroll
-    /// 3.3.0 added an MSBuild option (<c>GenerateFeatureFileCodeBehindInProjectDirectory=false</c>)
+    /// 3.3 added an MSBuild property (<c>ReqnrollUseIntermediateOutputPathForCodeBehind=true</c>)
     /// that relocates code-behind generation under the intermediate output directory instead, to
     /// avoid touching the source tree. The exact obj-relative layout isn't a stable public contract
     /// (it varies with configuration/TFM), so this matches by file name anywhere under <c>obj/</c>

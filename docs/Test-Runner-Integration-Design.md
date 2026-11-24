@@ -239,8 +239,8 @@ never sees the injected rows.
 - **Plain scenario:** exactly one target.
 - **Not yet built / no code-behind:** no targets.
 
-The code-behind is found next to the feature file, falling back to the `obj/` location Reqnroll 3.3.0+ uses
-when `GenerateFeatureFileCodeBehindInProjectDirectory` is false (hence the `projectFolder` parameter).
+The code-behind is found next to the feature file, falling back to the `obj/` location Reqnroll 3.3+ uses
+when `ReqnrollUseIntermediateOutputPathForCodeBehind` is true (hence the `projectFolder` parameter).
 
 **Row counting is positional.** The generator emits row attributes in `Examples:` document order, once per row,
 with no reordering, so the Nth row attribute is the Nth example row. The resolver counts row attributes from

@@ -28,10 +28,12 @@ import java.util.concurrent.atomic.AtomicReference
  * LSP server restart (a real, user-reachable action via the status-bar widget), silently turning
  * "run once when ready" into "run every time the server (re)starts."
  *
- * A deferred action runs on the thread that completes the LSP handshake — in Rider 2024.3.5 that's
- * the `whenComplete` of the LSP `initialize` request's future, i.e. a platform background thread,
- * not the EDT. See [ServerReadinessGate] for the check-then-register race and the optional
- * per-project coalescing of pending actions.
+ * A deferred action runs on a pooled thread that [ReqnrollServerEvents] starts when the platform
+ * reports the server initialized — after the platform has set the Running state, but not inside the
+ * platform's handshake callback, so a slow action cannot hold up the handshake. It is never the
+ * EDT, and the server may already be shutting down again by the time it runs. See
+ * [ServerReadinessGate] for the check-then-register race and the optional per-project coalescing
+ * of pending actions.
  */
 object ReqnrollLspServerReadiness {
     private val GATE_KEY = Key.create<ServerReadinessGate>("Reqnroll.ServerReadinessGate")
@@ -63,8 +65,8 @@ internal interface ServerStateSource {
     fun isRunning(): Boolean
 
     /**
-     * Calls [onRunning] on every transition to Running, on whatever thread the transition happens,
-     * until the returned handle is invoked.
+     * Calls [onRunning] after every transition to Running, on a background thread that may lag the
+     * transition, until the returned handle is invoked.
      */
     fun subscribe(onRunning: () -> Unit): () -> Unit
 }
@@ -72,9 +74,8 @@ internal interface ServerStateSource {
 /**
  * Platform-free core of [ReqnrollLspServerReadiness.runWhenRunning].
  *
- * The Running transition happens on a platform background thread (the `initialize` future's
- * `whenComplete`), while callers check the state from the EDT, so the transition can
- * land after the state check but before the listener is registered — and the platform never
+ * The Running state is set by the platform on a background thread while callers check it from the
+ * EDT, so the transition can land after the state check but before the listener is registered — and the platform never
  * replays a Running state to a newly added listener. Re-checking the state after registering
  * closes that window; a once-only guard keeps the re-check and a concurrent notification from
  * both running the action.

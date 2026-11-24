@@ -23,19 +23,28 @@ import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
  * (`ServerSessionId`, `ExitCode`, `UptimeMs`, crash report) to the callback it is given; it may do so later and
  * on another thread, since they are only complete once the process has finished terminating.
  *
- * Whether the process ended is only known when the details arrive, but a quick restart can come first, so the
- * stop is first recorded as a lost connection (the next `Restarted` reads it) and corrected to a process exit
- * if the details show the process ended and no newer attempt has started.
+ * Whether a stop after `Running` was an exit or a lost connection is only known when those details arrive, but
+ * the platform can restart the server before then. A `Restarted` that follows such a stop therefore waits for
+ * the stop to be classified and is sent right after its event, carrying the classified `Reason`.
  */
 class ReqnrollServerLifecycleTelemetry(
     private val send: (eventName: String, properties: Map<String, Any?>) -> Unit,
     private val startDetails: () -> Map<String, Any?> = { emptyMap() },
     private val exitDetails: (onReady: (Map<String, Any?>) -> Unit) -> Unit = { it(emptyMap()) },
 ) {
+    /** A stop after `Running`, from the state change until its details classify it. */
+    private class StopAfterRunning(val attempt: Int) {
+        var reason: String? = null
+
+        /** Set when the next start began before [reason] was known: the attempt number its `Restarted` must carry. */
+        var restartAttempt: Int? = null
+    }
+
     private var attempt = 0
     private var reachedRunning = false
     private var failureReported = false
     private var lastFailureReason: String? = null
+    private var lastStop: StopAfterRunning? = null
 
     @Synchronized
     fun onStateChanged(state: LspServerState) {
@@ -45,10 +54,17 @@ class ReqnrollServerLifecycleTelemetry(
                 reachedRunning = false
                 failureReported = false
                 if (attempt > 1) {
-                    send(
-                        RiderTelemetryTransmitter.SERVER_PROCESS_RESTARTED,
-                        properties(lastFailureReason ?: RiderTelemetryTransmitter.SERVER_FAILURE_REASON_SESSION_ENDED),
-                    )
+                    val stop = lastStop
+                    lastStop = null
+                    val stopReason = stop?.reason
+                    if (stop != null && stopReason == null) {
+                        stop.restartAttempt = attempt
+                    } else {
+                        send(
+                            RiderTelemetryTransmitter.SERVER_PROCESS_RESTARTED,
+                            properties(stopReason ?: lastFailureReason ?: RiderTelemetryTransmitter.SERVER_FAILURE_REASON_SESSION_ENDED),
+                        )
+                    }
                     lastFailureReason = null
                 }
             }
@@ -57,9 +73,10 @@ class ReqnrollServerLifecycleTelemetry(
                 if (failureReported) return
                 failureReported = true
                 if (reachedRunning) {
-                    lastFailureReason = RiderTelemetryTransmitter.SERVER_FAILURE_REASON_CONNECTION_LOST
-                    val stoppedAttempt = attempt
-                    exitDetails { details -> reportStopAfterRunning(stoppedAttempt, details) }
+                    val stop = StopAfterRunning(attempt)
+                    lastStop = stop
+                    lastFailureReason = null
+                    exitDetails { details -> completeStop(stop, details) }
                 } else {
                     val reason = RiderTelemetryTransmitter.SERVER_FAILURE_REASON_START_FAILED
                     lastFailureReason = reason
@@ -71,23 +88,18 @@ class ReqnrollServerLifecycleTelemetry(
         }
     }
 
-    private fun reportStopAfterRunning(stoppedAttempt: Int, details: Map<String, Any?>) {
-        if (processEnded(details)) {
-            synchronized(this) {
-                if (attempt == stoppedAttempt && lastFailureReason == RiderTelemetryTransmitter.SERVER_FAILURE_REASON_CONNECTION_LOST) {
-                    lastFailureReason = RiderTelemetryTransmitter.SERVER_FAILURE_REASON_PROCESS_EXITED
-                }
+    /** Sends the stop's event, then the `Restarted` that was held for it, if the next start already began. */
+    @Synchronized
+    private fun completeStop(stop: StopAfterRunning, details: Map<String, Any?>) {
+        val (eventName, reason) =
+            if (processEnded(details)) {
+                RiderTelemetryTransmitter.SERVER_PROCESS_EXITED_UNEXPECTEDLY to RiderTelemetryTransmitter.SERVER_FAILURE_REASON_PROCESS_EXITED
+            } else {
+                RiderTelemetryTransmitter.SERVER_PROCESS_CONNECTION_LOST to RiderTelemetryTransmitter.SERVER_FAILURE_REASON_CONNECTION_LOST
             }
-            send(
-                RiderTelemetryTransmitter.SERVER_PROCESS_EXITED_UNEXPECTEDLY,
-                details + properties(RiderTelemetryTransmitter.SERVER_FAILURE_REASON_PROCESS_EXITED, stoppedAttempt),
-            )
-        } else {
-            send(
-                RiderTelemetryTransmitter.SERVER_PROCESS_CONNECTION_LOST,
-                details + properties(RiderTelemetryTransmitter.SERVER_FAILURE_REASON_CONNECTION_LOST, stoppedAttempt),
-            )
-        }
+        send(eventName, details + properties(reason, stop.attempt))
+        stop.reason = reason
+        stop.restartAttempt?.let { send(RiderTelemetryTransmitter.SERVER_PROCESS_RESTARTED, properties(reason, it)) }
     }
 
     /** An exit code or a crash report is evidence the process ended; without either it may still be running. */
