@@ -296,6 +296,18 @@ public static class TelemetryEvents
     public const string ServerProcessExitedUnexpectedly = "Server.Process.ExitedUnexpectedly";
 
     /// <summary>
+    /// Sent by an IDE client when a running language server's connection stops without the client having
+    /// asked for it but the server process was not known to have ended: the IDE's LSP stack reported the stop
+    /// without checking the process (Rider, VS Code), so this is a lost or stalled connection to a server that
+    /// may still be alive, not a crash. Properties: <c>Reason</c> (always <see cref="ServerFailureReason.ConnectionLost"/>),
+    /// <c>AttemptNumber</c>, and, when known, <c>ServerSessionId</c> and <c>UptimeMs</c>; never <c>ExitCode</c>.
+    /// A stop whose process is known to have ended (an exit code, an exit signal or a crash report) is
+    /// <see cref="ServerProcessExitedUnexpectedly"/> instead. Visual Studio only reports after the process has
+    /// exited, so it never sends this. Mirrored in the TS and Kotlin catalogs.
+    /// </summary>
+    public const string ServerProcessConnectionLost = "Server.Process.ConnectionLost";
+
+    /// <summary>
     /// Sent by each IDE client when it restarts the language server after a failure or unexpected
     /// exit. Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c>.
     /// Mirrored in the TS and Kotlin catalogs.

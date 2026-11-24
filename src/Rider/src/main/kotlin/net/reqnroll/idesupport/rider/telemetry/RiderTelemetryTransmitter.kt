@@ -106,10 +106,12 @@ object RiderTelemetryTransmitter {
     // 1-based start attempt in this IDE session. Mirror of ServerLifecycleTelemetry.cs.
     internal const val SERVER_PROCESS_START_FAILED = "Server.Process.StartFailed"
     internal const val SERVER_PROCESS_EXITED_UNEXPECTEDLY = "Server.Process.ExitedUnexpectedly"
+    internal const val SERVER_PROCESS_CONNECTION_LOST = "Server.Process.ConnectionLost"
     internal const val SERVER_PROCESS_RESTARTED = "Server.Process.Restarted"
 
     internal const val SERVER_FAILURE_REASON_START_FAILED = "StartFailed"
     internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
+    internal const val SERVER_FAILURE_REASON_CONNECTION_LOST = "ConnectionLost"
     internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
 
     /** Exception caught in the plugin's own code; same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
