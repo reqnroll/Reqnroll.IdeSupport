@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -59,6 +60,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
     private readonly IFileSystemForIDE         _fileSystem;
     private readonly IProjectFeatureFileLookup _featureFileLookup;
     private readonly IBindingSourceFileProvider? _sourceFileProvider;
+    private readonly IClientOutputLog? _clientOutputLog;
 
     // Store (provider, handler) together so Dispose can unsubscribe by the exact delegate
     // that was passed to += in OnProjectDiscovered.
@@ -75,7 +77,8 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         IIdeSupportLogger logger,
         IFileSystemForIDE fileSystem,
         ILspTelemetryService? telemetryService = null,
-        ICSharpFileTextCache? csharpFileTextCache = null)
+        ICSharpFileTextCache? csharpFileTextCache = null,
+        IClientOutputLog? clientOutputLog = null)
     {
         _scopeManager = scopeManager;
         _mediator     = mediator;
@@ -83,6 +86,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         _logger       = logger;
         _fileSystem   = fileSystem;
         _telemetryService = telemetryService;
+        _clientOutputLog = clientOutputLog;
 
         _featureFileLookup = new MembershipIndexFeatureFileLookup(scopeManager);
 
@@ -227,7 +231,8 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
     private void OnProjectDiscovered(LspReqnrollProject project)
     {
         var provider = new ConnectorBindingRegistryProvider(
-            project, _logger, _fileSystem, _telemetryService, _featureFileLookup, _sourceFileProvider);
+            project, _logger, _fileSystem, _telemetryService, _featureFileLookup, _sourceFileProvider,
+            _clientOutputLog);
 
         // Capture project in a named local so the closure below can reference it.
         // Store the delegate so Dispose can unsubscribe by identity.

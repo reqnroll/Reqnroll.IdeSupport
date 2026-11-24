@@ -419,7 +419,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         var lastGood = SuccessfulRegistry();
 
         CreateSut().RunDiscovery(MakeScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
-            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev"));
+            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev", "boom"));
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         var lastGood = SuccessfulRegistry();
 
         CreateSut().RunDiscovery(MakeScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
-            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev"));
+            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev", "connector blew up"));
     }
 
     [Fact]

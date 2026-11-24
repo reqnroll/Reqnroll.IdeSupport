@@ -160,6 +160,8 @@ public static class ServiceCollectionExtensions
             // per project and routes binding-registry lookups to the correct per-project instance
             // via IProjectBindingRegistryLookup.GetRegistryForUri. Registries are NOT merged —
             // each feature file is resolved against only its own project's bindings.
+            // Messages for the user's Reqnroll output pane in the IDE (reqnroll/logMessage).
+            .AddSingleton<IClientOutputLog, ClientOutputLog>()
             .AddSingleton<BindingRegistryProviderRouter>()
             .AddSingleton<IProjectBindingRegistryLookup>(sp => sp.GetRequiredService<BindingRegistryProviderRouter>())
             // Per-project tag index feeding tag completion: tags in use across the

@@ -8,6 +8,7 @@ import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollEmptyParams
 import net.reqnroll.idesupport.rider.telemetry.ReqnrollTelemetryEventInterceptor
 import net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider
+import org.eclipse.lsp4j.MessageParams
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 
 /**
@@ -16,8 +17,9 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
  * [com.intellij.platform.lsp.api.LspClientDescriptor.createLsp4jClient] and return their subclass
  * of this Lsp4jClient... annotated functions... called via reflection by the lsp4j library" —
  * confirmed against the actual platform source, `platform/lsp/src/api/Lsp4jClient.kt` in
- * intellij-community, not assumed): adds the one reqnroll-custom server-to-client push this plugin
- * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline).
+ * intellij-community, not assumed): adds the reqnroll-custom server-to-client pushes this plugin
+ * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline) and `reqnroll/logMessage`
+ * (messages for the Reqnroll tool window).
  *
  * A decorator of [LspServerNotificationsHandler] — the approach [ReqnrollCodeLensRefreshInterceptor]
  * and [ReqnrollInlayHintRefreshInterceptor] use for the *standard* LSP pushes — cannot add this: every
@@ -50,4 +52,11 @@ class ReqnrollLsp4jClient(
             ModalityState.any(),
         )
     }
+
+    /**
+     * `reqnroll/logMessage`: a message for the user, written to the Reqnroll tool window. Not named
+     * `logMessage`, which [Lsp4jClient] already declares (final) for the standard `window/logMessage`.
+     */
+    @JsonNotification("reqnroll/logMessage")
+    fun reqnrollLogMessage(params: MessageParams) = ServerLogMessages.write(params)
 }

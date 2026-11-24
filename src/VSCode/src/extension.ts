@@ -69,6 +69,7 @@ import {
 import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_ARGUMENT } from './clientSession';
 import { TableHighlightService } from './tableHighlightService';
 import { registerTestOutcomes } from './testOutcomes/testOutcomesService';
+import { registerServerLogMessages } from './lsp/serverLogMessages';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
 import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
 import { showWalkthroughOnFirstActivation } from './walkthrough';
@@ -518,6 +519,11 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // opt-out cleanup does not wait for a successful start. Never blocks activation, and every
   // failure degrades silently (see the module's own doc comment).
   context.subscriptions.push(registerTestOutcomes(context, client));
+
+  // The server's messages for the user (e.g. a failed binding discovery) go to the curated
+  // "Reqnroll" channel, not "Reqnroll LSP". Subscribed before start() so every server (re)start is
+  // covered.
+  context.subscriptions.push(registerServerLogMessages(client, appLogChannel));
 
   client
     .start()

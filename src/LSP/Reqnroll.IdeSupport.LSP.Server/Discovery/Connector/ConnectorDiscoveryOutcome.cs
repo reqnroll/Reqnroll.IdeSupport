@@ -39,8 +39,12 @@ public enum ConnectorDiscoveryStatus
 /// <param name="Status">How the run ended.</param>
 /// <param name="Registry">The new registry when discovered; otherwise the caller's last-good registry.</param>
 /// <param name="Hash">The new assembly hash when discovered; otherwise the caller's last hash.</param>
+/// <param name="FailureReason">
+/// For <see cref="ConnectorDiscoveryStatus.Failed"/>: the connector's error message, or the message
+/// of the exception it threw; otherwise <see langword="null"/>.
+/// </param>
 public sealed record ConnectorDiscoveryOutcome(
-    ConnectorDiscoveryStatus Status, ProjectBindingRegistry Registry, string Hash)
+    ConnectorDiscoveryStatus Status, ProjectBindingRegistry Registry, string Hash, string? FailureReason = null)
 {
     /// <summary>A new registry for a changed assembly.</summary>
     public static ConnectorDiscoveryOutcome Discovered(ProjectBindingRegistry registry, string hash) =>
@@ -50,9 +54,9 @@ public sealed record ConnectorDiscoveryOutcome(
     public static ConnectorDiscoveryOutcome Unchanged(ProjectBindingRegistry lastGood, string lastHash) =>
         new(ConnectorDiscoveryStatus.Unchanged, lastGood, lastHash);
 
-    /// <summary>The connector failed; the last-good state is kept.</summary>
-    public static ConnectorDiscoveryOutcome Failed(ProjectBindingRegistry lastGood, string lastHash) =>
-        new(ConnectorDiscoveryStatus.Failed, lastGood, lastHash);
+    /// <summary>The connector failed, for <paramref name="reason"/>; the last-good state is kept.</summary>
+    public static ConnectorDiscoveryOutcome Failed(ProjectBindingRegistry lastGood, string lastHash, string? reason = null) =>
+        new(ConnectorDiscoveryStatus.Failed, lastGood, lastHash, reason);
 
     /// <summary>Discovery could not run; the last-good state is kept.</summary>
     public static ConnectorDiscoveryOutcome Skipped(ProjectBindingRegistry lastGood, string lastHash) =>

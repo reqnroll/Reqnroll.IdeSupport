@@ -24,4 +24,5 @@ export const ReqnrollMethods = {
   registerTestRun: 'reqnroll/testOutcomes/registerRun',
   getTestOutcome: 'reqnroll/testOutcomes/getOutcome',
   testOutcomesChanged: 'reqnroll/testOutcomes/changed',
+  logMessage: 'reqnroll/logMessage',
 } as const;

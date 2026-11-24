@@ -4,6 +4,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.Common.Telemetry;
@@ -46,6 +47,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IProjectFeatureFileLookup? _featureFileLookup;
     private readonly IBindingSourceFileProvider? _sourceFileProvider;
+    private readonly IClientOutputLog? _clientOutputLog;
 
     // Last-good state.  Volatile so readers always see the latest write.
     private volatile ProjectBindingRegistry _current = ProjectBindingRegistry.Invalid;
@@ -88,9 +90,9 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
         ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null,
-        IBindingSourceFileProvider? sourceFileProvider = null)
+        IBindingSourceFileProvider? sourceFileProvider = null, IClientOutputLog? clientOutputLog = null)
         : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService,
-            featureFileLookup, fileSystem, sourceFileProvider)
+            featureFileLookup, fileSystem, sourceFileProvider, clientOutputLog)
     {
     }
 
@@ -123,6 +125,10 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// Supplies the project's binding source files for the source-level fallback after a failed or
     /// not-yet-possible connector run; <see langword="null"/> disables the fallback.
     /// </param>
+    /// <param name="clientOutputLog">
+    /// Where a failed connector run is reported to the user; <see langword="null"/> reports it in the
+    /// server log only.
+    /// </param>
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project,
         IConnectorDiscoveryService discoveryService,
@@ -130,10 +136,12 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         ILspTelemetryService? telemetryService,
         IProjectFeatureFileLookup? featureFileLookup = null,
         IFileSystemForIDE? fileSystem = null,
-        IBindingSourceFileProvider? sourceFileProvider = null)
+        IBindingSourceFileProvider? sourceFileProvider = null,
+        IClientOutputLog? clientOutputLog = null)
     {
         _featureFileLookup = featureFileLookup;
         _sourceFileProvider = sourceFileProvider;
+        _clientOutputLog = clientOutputLog;
         _fileSystem       = fileSystem ?? new FileSystemForIDE();
         _project          = project;
         _logger           = logger;
@@ -291,6 +299,12 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
     // ── Source-level fallback ────────────────────────────────────────────────
 
+    /// <summary>What one source-level fallback pass added to the registry.</summary>
+    private readonly record struct SourceFallbackResult(int AddedStepDefinitions, int AddedHooks, int ParsedFileCount)
+    {
+        public bool AddedAny => AddedStepDefinitions > 0 || AddedHooks > 0;
+    }
+
     /// <summary>
     /// Fills the registry from source after a connector run that produced no bindings
     /// (<paramref name="status"/> is <see cref="ConnectorDiscoveryStatus.Failed"/> or
@@ -300,10 +314,10 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// left alone. When anything was added, <see cref="BindingRegistryChanged"/> is raised as a full
     /// replacement so every feature file of the project is matched against the new bindings.
     /// </summary>
-    private async Task ApplySourceFallbackAsync(ConnectorDiscoveryStatus status, CancellationToken ct)
+    private async Task<SourceFallbackResult> ApplySourceFallbackAsync(ConnectorDiscoveryStatus status, CancellationToken ct)
     {
         if (_sourceFileProvider is null)
-            return;
+            return default;
 
         IReadOnlyList<CsFileToReconcile> files;
         try
@@ -314,13 +328,13 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         {
             _logger.LogWarning(
                 $"[{_project.ProjectName}] Could not list binding source files for source-level discovery: {ex.Message}");
-            return;
+            return default;
         }
 
         var before = _current;
         var uncovered = files.Where(f => !before.HasAnyBindingFor(f.FilePath)).ToList();
         if (uncovered.Count == 0)
-            return;
+            return default;
 
         foreach (var file in uncovered)
         {
@@ -343,17 +357,19 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         ct.ThrowIfCancellationRequested();
 
         var after = _current;
-        var addedStepDefinitions = after.StepDefinitions.Length - before.StepDefinitions.Length;
-        var addedHooks = after.Hooks.Length - before.Hooks.Length;
-        if (addedStepDefinitions <= 0 && addedHooks <= 0)
-            return;
+        var result = new SourceFallbackResult(
+            after.StepDefinitions.Length - before.StepDefinitions.Length,
+            after.Hooks.Length - before.Hooks.Length,
+            uncovered.Count);
+        if (!result.AddedAny)
+            return result;
 
         var reason = status == ConnectorDiscoveryStatus.Failed
             ? "Binding discovery from the compiled assembly failed (see the warnings above)"
             : "The project has not been built yet";
         _logger.LogWarning(
-            $"[{_project.ProjectName}] {reason}; using {addedStepDefinitions} step definition(s) and " +
-            $"{addedHooks} hook(s) discovered from {uncovered.Count} source file(s) instead. Bindings " +
+            $"[{_project.ProjectName}] {reason}; using {result.AddedStepDefinitions} step definition(s) and " +
+            $"{result.AddedHooks} hook(s) discovered from {result.ParsedFileCount} source file(s) instead. Bindings " +
             "declared in referenced assemblies are not available until discovery from the compiled " +
             "assembly succeeds.");
 
@@ -369,6 +385,35 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         });
 
         _bindingRegistryChanged?.Invoke(this, true);
+        return result;
+    }
+
+    /// <summary>
+    /// Tells the user, in the IDE's Reqnroll output pane, that discovery from the compiled assembly
+    /// failed and which bindings the project has instead, so a step shown as undefined has a visible
+    /// explanation without opening the server log.
+    /// </summary>
+    internal static string FormatConnectorFailureMessage(
+        string projectName, string? failureReason, int addedStepDefinitions, int addedHooks,
+        ProjectBindingRegistry current)
+    {
+        var reason = string.IsNullOrWhiteSpace(failureReason) ? "." : $": {failureReason!.Trim()}";
+        var message = $"[{projectName}] Binding discovery from the compiled assembly failed{reason}";
+
+        string outcome;
+        if (addedStepDefinitions > 0 || addedHooks > 0)
+            outcome =
+                $"Using {addedStepDefinitions} step definition(s) and {addedHooks} hook(s) found in the " +
+                "project's source files instead. Bindings declared in referenced assemblies are not " +
+                "available until discovery from the compiled assembly succeeds.";
+        else if (current != ProjectBindingRegistry.Invalid && (current.StepDefinitions.Length > 0 || current.Hooks.Length > 0))
+            outcome =
+                $"Keeping the {current.StepDefinitions.Length} step definition(s) and {current.Hooks.Length} " +
+                "hook(s) found earlier.";
+        else
+            outcome = "No bindings were found in the project's source files either.";
+
+        return $"{message}{Environment.NewLine}{outcome} The language server log has the details.";
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
@@ -493,7 +538,10 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                     _discoveryService.LastRunTelemetry?.AddTo(failureProperties);
                     _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, failureProperties);
 
-                    await ApplySourceFallbackAsync(outcome.Status, ct).ConfigureAwait(false);
+                    var fallback = await ApplySourceFallbackAsync(outcome.Status, ct).ConfigureAwait(false);
+                    _clientOutputLog?.Warning(FormatConnectorFailureMessage(
+                        _project.ProjectName, outcome.FailureReason, fallback.AddedStepDefinitions,
+                        fallback.AddedHooks, _current));
                     return;
             }
 

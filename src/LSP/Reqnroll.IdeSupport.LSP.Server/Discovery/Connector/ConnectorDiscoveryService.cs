@@ -160,7 +160,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {ex.Message}");
-            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash, ex.Message);
         }
         sw.Stop();
 
@@ -175,7 +175,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         {
             _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
                 $"{ConnectorPidSuffix(result)}: {result.ErrorMessage}");
-            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash, result.ErrorMessage);
         }
 
         var registry = BuildRegistry(scope, result);

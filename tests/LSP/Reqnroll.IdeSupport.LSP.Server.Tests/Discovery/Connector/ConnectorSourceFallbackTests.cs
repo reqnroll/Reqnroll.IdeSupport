@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -72,17 +73,20 @@ public class ConnectorSourceFallbackTests : IDisposable
         return path;
     }
 
-    private void GivenDiscoveryReturns(ConnectorDiscoveryStatus status)
+    private void GivenDiscoveryReturns(ConnectorDiscoveryStatus status, string? failureReason = null)
         => _discovery.RunDiscovery(
                 Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(),
                 Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call => new ConnectorDiscoveryOutcome(
-                status, call.ArgAt<ProjectBindingRegistry>(1), call.ArgAt<string>(2)));
+                status, call.ArgAt<ProjectBindingRegistry>(1), call.ArgAt<string>(2), failureReason));
+
+    private readonly IClientOutputLog _clientOutputLog = Substitute.For<IClientOutputLog>();
 
     private ConnectorBindingRegistryProvider CreateSut() => new(
         _project, _discovery, _logger, telemetryService: null,
         sourceFileProvider: new CsFileReconciliationSelector(
-            _scopeManager, _csharpFileTextCache, new FileSystemForIDE(), _logger));
+            _scopeManager, _csharpFileTextCache, new FileSystemForIDE(), _logger),
+        clientOutputLog: _clientOutputLog);
 
     private static async Task<bool> RefreshAndWaitForFullReplacementAsync(ConnectorBindingRegistryProvider sut)
     {
@@ -212,5 +216,57 @@ public class ConnectorSourceFallbackTests : IDisposable
 
         raised.Should().BeFalse();
         sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
+    }
+
+    // ── Reporting the failure to the IDE's Reqnroll output pane ─────────────────
+
+    [Fact]
+    public async Task Failed_connector_run_is_reported_to_the_output_pane_with_its_reason_and_the_fallback()
+    {
+        GivenIndexedBindingFile("Steps.cs", StepsSource);
+        GivenIndexedBindingFile("MoreSteps.cs", MoreStepsSource);
+        GivenDiscoveryReturns(ConnectorDiscoveryStatus.Failed, "Could not load file or assembly 'X'.");
+        using var sut = CreateSut();
+
+        await RefreshAndWaitForRunAsync(sut);
+
+        _clientOutputLog.Received(1).Warning(Arg.Is<string>(m =>
+            m.Contains("Binding discovery from the compiled assembly failed: Could not load file or assembly 'X'.") &&
+            m.Contains("Using 2 step definition(s) and 1 hook(s) found in the project's source files")));
+    }
+
+    [Fact]
+    public async Task A_project_that_is_not_built_yet_is_not_reported_to_the_output_pane()
+    {
+        GivenIndexedBindingFile("Steps.cs", StepsSource);
+        GivenDiscoveryReturns(ConnectorDiscoveryStatus.Skipped);
+        using var sut = CreateSut();
+
+        (await RefreshAndWaitForFullReplacementAsync(sut)).Should().BeTrue();
+
+        _clientOutputLog.DidNotReceiveWithAnyArgs().Warning(default!);
+    }
+
+    [Fact]
+    public async Task Failure_message_says_when_earlier_bindings_are_kept()
+    {
+        var registry = await ProjectBindingRegistry.Invalid
+            .ReplaceBindings(FileDetails.FromPath(Path.Combine(_folder, "Steps.cs")).WithCSharpContent(StepsSource));
+
+        var message = ConnectorBindingRegistryProvider.FormatConnectorFailureMessage(
+            "Sample", "boom", addedStepDefinitions: 0, addedHooks: 0, registry);
+
+        message.Should().Contain("[Sample] Binding discovery from the compiled assembly failed: boom")
+            .And.Contain("Keeping the 1 step definition(s) and 0 hook(s) found earlier.");
+    }
+
+    [Fact]
+    public void Failure_message_says_when_no_bindings_were_found_at_all()
+    {
+        var message = ConnectorBindingRegistryProvider.FormatConnectorFailureMessage(
+            "Sample", failureReason: null, addedStepDefinitions: 0, addedHooks: 0, ProjectBindingRegistry.Invalid);
+
+        message.Should().Contain("[Sample] Binding discovery from the compiled assembly failed.")
+            .And.Contain("No bindings were found in the project's source files either.");
     }
 }
