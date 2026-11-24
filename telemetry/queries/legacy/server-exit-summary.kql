@@ -1,0 +1,91 @@
+// Server exit summary: how many language-server exits the clients reported as unexpected
+// (Server.Process.ExitedUnexpectedly), by ExitKind, host and day, including the kinds that crash-triage.kql hides.
+//
+// Table: customEvents (classic Application Insights resource, Monitoring > Logs). For a Log Analytics workspace
+// use ../server-exit-summary.kql (customEvents -> AppEvents, timestamp -> TimeGenerated, customDimensions -> Properties,
+// user_Id -> UserId, name -> Name).
+//
+// Status: not yet run against either resource.
+//
+// Columns
+// - ExitKind: classified exactly as in crash-triage.kql, from ExitCode/ExitSignal. HostTerminated (0x40010004,
+//   DBG_TERMINATE_PROCESS) and CleanExit (exit code 0) are normal IDE teardown rather than crashes, and are the
+//   rows crash-triage.kql leaves out by default. Every other kind is listed there.
+// - Exits, Users: events and distinct users with that kind on that day for that host. A crash-triage row that
+//   carries a crash report or a next-start fatal record is shown there even for these two kinds, so this count can
+//   exceed the number of hidden rows by those few.
+let lookback = 7d;
+// Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
+// themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
+// query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
+let LegacyEventNames = dynamic({
+    "CommentUncomment command executed": "Command.CommentUncomment",
+    "GoToMatchingScenarios command executed": "Command.GoToMatchingScenarios",
+    "AutoFormatDocument command executed": "Command.AutoFormatDocument",
+    "ResolveContainerTestTargets command executed": "Lookup.ResolveContainerTestTargets",
+    "ResolveTestTargets command executed": "Lookup.ResolveTestTargets",
+    "FindHooks command executed": "Lookup.FindHooks",
+    "DefineSteps command offered": "CodeAction.DefineSteps.Offered",
+    "DefineSteps command executed": "CodeAction.DefineSteps.Executed",
+    "InsertKeyword command offered": "CodeAction.InsertKeyword.Offered",
+    "InsertKeyword command executed": "CodeAction.InsertKeyword.Executed",
+    "FindUnusedStepDefinitions command executed": "Command.FindUnusedStepDefinitions",
+    "Rename step command executed": "Command.RenameStep",
+    "FindStepDefinitionUsages command executed": "Command.FindStepDefinitionUsages",
+    "GoToStepDefinition command executed": "Command.GoToStepDefinition",
+    "FindStepDefinitions command executed": "Lookup.FindStepDefinitions",
+    "OpenProject command executed": "Project.Opened",
+    "RenameTargets resolved": "Lookup.RenameTargets",
+    "GoToHook command executed": "Command.GoToHook",
+    "TagLink command executed": "Command.TagLink",
+    "Extension loaded": "Lifecycle.Extension.Loaded",
+    "Extension installed": "Lifecycle.Extension.Installed",
+    "Extension upgraded": "Lifecycle.Extension.Upgraded",
+    "Feature file opened": "Project.FeatureFile.Opened",
+    "Feature file added": "Project.FeatureFile.Added",
+    "Reqnroll config added": "Project.ReqnrollConfig.Added",
+    "Project Template Wizard Started": "Project.Creation.Started",
+    "Project Template Wizard Completed": "Project.Creation.Completed",
+    "Link clicked": "Lifecycle.Link.Clicked",
+    "Upgrade dialog dismissed": "Lifecycle.UpgradeDialog.Dismissed",
+    "Welcome dialog dismissed": "Lifecycle.WelcomeDialog.Dismissed",
+    "ReqnrollDiscoveryExecuted": "Project.Discovery.Executed",
+    "UnhandledException": "Error.UnhandledException",
+    "TestOutcomesRunCompleted": "Project.TestRun.Completed",
+    "TagIndexFirstScanCompleted": "Project.TagIndex.FirstScanCompleted",
+    "FeatureUsageSummary": "Lifecycle.Usage.SummaryReported",
+    "ServerSessionStarted": "Server.Session.Started",
+    "ServerSessionEnded": "Server.Session.Ended",
+    "ServerStartFailed": "Server.Process.StartFailed",
+    "ServerExitedUnexpectedly": "Server.Process.ExitedUnexpectedly",
+    "ServerConnectionLost": "Server.Process.ConnectionLost",
+    "ServerRestarted": "Server.Process.Restarted",
+    "ProjectCharacteristics": "Project.Characteristics.Reported",
+    "PerfSample": "Perf.Sample",
+    "VsWellKnownIdsSelfCheckMismatch": "Error.VsWellKnownIdsMismatch"
+});
+let CanonicalEventName = (n:string) {
+    let s = tostring(split(n, "/")[-1]);
+    iff(s matches regex @"^\d+ day usage$", "Lifecycle.Usage.Recorded", coalesce(tostring(LegacyEventNames[s]), s))
+};
+let exits = customEvents
+    | where timestamp > ago(lookback)
+    | extend EventName = CanonicalEventName(name)
+    | where EventName == "Server.Process.ExitedUnexpectedly"
+    | extend ExitCode = toint(customDimensions.ExitCode),
+             ExitSignal = tostring(customDimensions.ExitSignal)
+    | extend ExitKind = case(
+        isnotempty(ExitSignal), ExitSignal,
+        isnull(ExitCode), "Unknown",
+        ExitCode == -532462766, "ManagedException",
+        ExitCode == -1073741571, "StackOverflow",
+        ExitCode == -1073741819, "AccessViolation",
+        ExitCode == -2146232797, "FailFast",
+        ExitCode == 1073807364, "HostTerminated",
+        ExitCode == 0, "CleanExit",
+        ExitCode == 1, "Killed",
+        "Other");
+exits
+| summarize Exits = count(), Users = dcount(user_Id)
+    by Day = bin(timestamp, 1d), IdeClient = tostring(customDimensions.IdeClient), ExitKind
+| order by Day desc, IdeClient asc, Exits desc

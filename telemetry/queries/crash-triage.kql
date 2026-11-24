@@ -1,5 +1,7 @@
 // Crash triage: one row per language-server process that died without the client asking it to
-// (Server.Process.ExitedUnexpectedly), with everything known about why, newest first.
+// (Server.Process.ExitedUnexpectedly), with everything known about why, newest first. Exits that are normal
+// IDE teardown rather than crashes (ExitKind HostTerminated and CleanExit) are left out unless includeNonCrashExits
+// is set; server-exit-summary.kql counts every ExitKind, including those two.
 //
 // Table: AppEvents (workspace-based Application Insights). For a classic
 // "customEvents" view use legacy/crash-triage.kql (AppEvents -> customEvents, TimeGenerated -> timestamp,
@@ -19,7 +21,11 @@
 // Columns
 // - ExitKind: derived from ExitCode/ExitSignal. ManagedException (0xE0434352, an exception no code caught; also
 //   out-of-memory), StackOverflow (0xC00000FD), AccessViolation (0xC0000005), FailFast (0x80131623), Killed (exit
-//   code 1, usually), a POSIX signal name (macOS/Linux), or Other/Unknown.
+//   code 1, usually), a POSIX signal name (macOS/Linux), or Other/Unknown. Two kinds are not crashes:
+//   HostTerminated (0x40010004, DBG_TERMINATE_PROCESS: the process was terminated from outside, which is
+//   consistent with the IDE or window closing; the cause is not verified) and CleanExit (exit code 0 without a
+//   requested shutdown). They are hidden by default (see includeNonCrashExits), except for a row that also has a
+//   crash report or a next-start fatal record, which is shown whatever its exit code.
 // - CrashKind, ExceptionType, Message, StackFrames, Inner*: from the crash report the runtime printed to stderr
 //   (VS, VS Code), falling back to the next-start record (Fatal* columns) when there was none.
 // - Fatal*: the next-start record, written by the server itself as it died; covers any IDE, but not a stack
@@ -27,6 +33,8 @@
 // - PriorErrors / LastPriorErrorType: non-fatal exceptions the dead run reported before it died.
 // - InFlight*, LastRequest*, PeakWorkingSetMb, PrivateMemoryMb: what the server was doing (VS only).
 let lookback = 7d;
+// Set to true to also list the HostTerminated and CleanExit rows.
+let includeNonCrashExits = false;
 // Event names: VS Code used to prefix every name with its extension id (<publisher>.<name>/), and the names
 // themselves were later renamed to Category.Thing.Action. CanonicalEventName() maps all of those to the current name, so a
 // query covers old and new data alike. Keep LegacyEventNames in step with telemetry/queries/event-name-map.kql.
@@ -118,12 +126,18 @@ events
         ExitCode == -1073741571, "StackOverflow",
         ExitCode == -1073741819, "AccessViolation",
         ExitCode == -2146232797, "FailFast",
+        ExitCode == 1073807364, "HostTerminated",
+        ExitCode == 0, "CleanExit",
         ExitCode == 1, "Killed",
         "Other"),
     ExitCodeHex = iff(isnull(ExitCode), "", strcat("0x", toupper(tohex(ExitCode, 8))))
 | join kind=leftouter (starts | where isnotempty(RunId)) on RunId
 | join kind=leftouter (fatalRecords | where isnotempty(RunId)) on RunId
 | join kind=leftouter (priorErrors | where isnotempty(RunId)) on RunId
+| where includeNonCrashExits
+    or ExitKind !in ("HostTerminated", "CleanExit")
+    or isnotempty(tostring(Properties.CrashKind))
+    or isnotempty(FatalExceptionType)
 | project TimeGenerated,
           IdeClient = tostring(Properties.IdeClient),
           IdeVersion = tostring(Properties.IdeVersion),
