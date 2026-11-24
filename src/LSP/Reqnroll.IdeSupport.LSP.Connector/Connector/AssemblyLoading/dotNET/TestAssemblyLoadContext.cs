@@ -35,11 +35,18 @@ public class TestAssemblyLoadContext : AssemblyLoadContext
         _rids = GetRids(GetRuntimeFallbacks()).ToArray();
         _log.Info($"RIDs: {string.Join(",", _rids)}");
 
+        var sharedFrameworks = RuntimeConfigReader.ReadFrameworkReferences(TestAssembly.Location, _log);
+        var dotnetRoots = DotnetRootLocator.GetCandidateRoots();
+        _log.Info($"dotnet roots: {string.Join(",", dotnetRoots)}");
+
         _assemblyResolver = new RuntimeCompositeCompilationAssemblyResolver(new ICompilationAssemblyResolver[]
         {
             new AppBaseCompilationAssemblyResolver(Path.GetDirectoryName(TestAssembly.Location)!),
             new ReferenceAssemblyPathResolver(),
             new PackageCompilationAssemblyResolver(),
+            // Shared frameworks the test assembly declares come before the name-based ASP.NET Core
+            // fallback and the NuGet cache, as the host would load them from there.
+            new SharedFrameworkAssemblyResolver(sharedFrameworks, dotnetRoots),
             new AspNetCoreAssemblyResolver(),
             new NugetCacheAssemblyResolver(_shortFrameworkName)
         }, _log);
