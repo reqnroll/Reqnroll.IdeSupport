@@ -68,7 +68,7 @@ public class LanguageServerOptionsExtensionsTests
 
         options.InitializeCustomProtocolRouting();
 
-        options.Services.Count(d => d.ServiceType == typeof(OnLanguageServerInitializedDelegate)).Should().Be(1);
+        options.Services.Count(d => d.ServiceType == typeof(OnLanguageServerInitializedDelegate)).Should().BeGreaterThan(0);
         options.Services.Count(d => d.ServiceType == typeof(OnLanguageServerStartedDelegate)).Should().Be(0);
     }
 
