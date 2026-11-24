@@ -11,10 +11,11 @@ class ReqnrollServerLifecycleTelemetryTest {
 
     private fun move(vararg states: LspServerState) = states.forEach(sut::onStateChanged)
 
+    /** Holds each stop's exit-details callback until the test delivers it, oldest first. */
     private class DeferredExitDetails {
-        private var pending: ((Map<String, Any?>) -> Unit)? = null
-        val exitDetails: (onReady: (Map<String, Any?>) -> Unit) -> Unit = { pending = it }
-        fun deliver(details: Map<String, Any?>) = pending!!(details)
+        private val pending = ArrayDeque<(Map<String, Any?>) -> Unit>()
+        val exitDetails: (onReady: (Map<String, Any?>) -> Unit) -> Unit = { pending.addLast(it) }
+        fun deliver(details: Map<String, Any?>) = pending.removeFirst()(details)
     }
 
     private class Harness(exitDetails: (onReady: (Map<String, Any?>) -> Unit) -> Unit) {
@@ -107,7 +108,7 @@ class ReqnrollServerLifecycleTelemetryTest {
     }
 
     @Test
-    fun `a restart that comes before the exit details is labelled a lost connection, and a later exit corrects only the same attempt`() {
+    fun `a restart that comes before the exit details waits for them, and follows the exit event with ProcessExited`() {
         val delivery = DeferredExitDetails()
         val withDetails = telemetryWithExitDetails(delivery)
 
@@ -115,20 +116,63 @@ class ReqnrollServerLifecycleTelemetryTest {
             LspServerState.Initializing, LspServerState.Running, LspServerState.ShutdownUnexpectedly,
             LspServerState.Initializing,
         )
-        assertEquals("ConnectionLost", withDetails.sent.single().second["Reason"], "the quick restart sees the stop")
+        assertTrue(withDetails.sent.isEmpty(), "the restart is held until the stop is classified")
 
-        delivery.deliver(mapOf("ExitCode" to 1))
-        withDetails.move(LspServerState.Running, LspServerState.ShutdownUnexpectedly, LspServerState.Initializing)
+        delivery.deliver(mapOf("ExitCode" to 134))
 
         assertEquals(
-            listOf("Server.Process.Restarted", "Server.Process.ExitedUnexpectedly", "Server.Process.Restarted"),
+            listOf(
+                "Server.Process.ExitedUnexpectedly" to mapOf<String, Any?>("ExitCode" to 134, "Reason" to "ProcessExited", "AttemptNumber" to 1),
+                "Server.Process.Restarted" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 2),
+            ),
+            withDetails.sent,
+        )
+    }
+
+    @Test
+    fun `a restart that comes before the exit details of a lost connection follows its event with ConnectionLost`() {
+        val delivery = DeferredExitDetails()
+        val withDetails = telemetryWithExitDetails(delivery)
+
+        withDetails.move(
+            LspServerState.Initializing, LspServerState.Running, LspServerState.ShutdownUnexpectedly,
+            LspServerState.Initializing,
+        )
+        delivery.deliver(mapOf("UptimeMs" to 1000L))
+
+        assertEquals(
+            listOf("Server.Process.ConnectionLost", "Server.Process.Restarted"),
             withDetails.sent.map { it.first },
         )
-        assertEquals(
-            "ConnectionLost",
-            withDetails.sent.last().second["Reason"],
-            "the late exit of attempt 1 must not rewrite the reason for attempt 2's stop",
+        assertEquals(listOf<Any?>("ConnectionLost", "ConnectionLost"), withDetails.sent.map { it.second["Reason"] })
+        assertEquals(listOf<Any?>(1, 2), withDetails.sent.map { it.second["AttemptNumber"] })
+    }
+
+    @Test
+    fun `each held restart carries the reason of its own stop`() {
+        val delivery = DeferredExitDetails()
+        val withDetails = telemetryWithExitDetails(delivery)
+
+        withDetails.move(
+            LspServerState.Initializing, LspServerState.Running, LspServerState.ShutdownUnexpectedly,
+            LspServerState.Initializing, LspServerState.Running, LspServerState.ShutdownUnexpectedly,
+            LspServerState.Initializing,
         )
+        assertTrue(withDetails.sent.isEmpty())
+
+        delivery.deliver(mapOf("ExitCode" to 1))
+        delivery.deliver(emptyMap())
+
+        assertEquals(
+            listOf(
+                "Server.Process.ExitedUnexpectedly" to "ProcessExited",
+                "Server.Process.Restarted" to "ProcessExited",
+                "Server.Process.ConnectionLost" to "ConnectionLost",
+                "Server.Process.Restarted" to "ConnectionLost",
+            ),
+            withDetails.sent.map { it.first to it.second["Reason"] },
+        )
+        assertEquals(listOf<Any?>(1, 2, 2, 3), withDetails.sent.map { it.second["AttemptNumber"] })
     }
 
     @Test
