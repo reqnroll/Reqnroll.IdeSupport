@@ -23,8 +23,8 @@ public interface IScenarioTestTargetResolver
     /// </param>
     /// <param name="projectFolder">
     /// The owning project's directory (the folder containing its <c>.csproj</c>), used to fall back
-    /// to an <c>obj/</c>-relocated code-behind file (Reqnroll 3.3.0+'s
-    /// <c>GenerateFeatureFileCodeBehindInProjectDirectory=false</c> option) when the co-located
+    /// to an <c>obj/</c>-relocated code-behind file (Reqnroll 3.3+'s
+    /// <c>ReqnrollUseIntermediateOutputPathForCodeBehind=true</c> property) when the co-located
     /// <c>&lt;feature&gt;.feature.cs</c> doesn't exist. May be <see langword="null"/> or empty if the
     /// owning project couldn't be resolved — the co-located convention is still tried in that case.
     /// </param>
