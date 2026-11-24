@@ -134,7 +134,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll test project; skipping binding discovery.");
             }
 
-            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.NotReqnrollProject(lastGood, lastHash);
         }
 
         var currentHash = ComputeHash(_fileSystem, assemblyPath);

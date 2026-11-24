@@ -15,10 +15,16 @@ public enum ConnectorDiscoveryStatus
     Failed,
 
     /// <summary>
-    /// Discovery could not run: no output assembly (path unset or not built yet), or the project is
-    /// not a Reqnroll test project. Nothing was discovered and nothing failed.
+    /// Discovery could not run because there is no output assembly (path unset or not built yet).
+    /// Nothing was discovered and nothing failed.
     /// </summary>
     Skipped,
+
+    /// <summary>
+    /// The project is not a Reqnroll test project, so the connector was not invoked. Unlike
+    /// <see cref="Skipped"/>, no binding discovery is expected for the project at all.
+    /// </summary>
+    NotReqnrollProject,
 }
 
 /// <summary>
@@ -51,6 +57,10 @@ public sealed record ConnectorDiscoveryOutcome(
     /// <summary>Discovery could not run; the last-good state is kept.</summary>
     public static ConnectorDiscoveryOutcome Skipped(ProjectBindingRegistry lastGood, string lastHash) =>
         new(ConnectorDiscoveryStatus.Skipped, lastGood, lastHash);
+
+    /// <summary>The project is not a Reqnroll test project; the last-good state is kept.</summary>
+    public static ConnectorDiscoveryOutcome NotReqnrollProject(ProjectBindingRegistry lastGood, string lastHash) =>
+        new(ConnectorDiscoveryStatus.NotReqnrollProject, lastGood, lastHash);
 
     /// <summary>
     /// Deconstructs into the registry and hash only, for callers that just want the resulting state.

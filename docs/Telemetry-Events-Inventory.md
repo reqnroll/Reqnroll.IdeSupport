@@ -223,14 +223,15 @@ include URIs; the `Perf.Sample` telemetry payload never does.)
 | | |
 |---|---|
 | **Emitters** | LSP server: `CSharpBindingDiscoveryService` (Roslyn, in-proc source parse) and `ConnectorBindingRegistryProvider` (out-of-proc connector reflection), discriminated by `DiscoverySource` |
-| **When** | Each completed binding-discovery run: Roslyn on a `.cs` binding file open/`csEdit` per owning project; Connector on the first `projectLoad` after a project registers, then on every post-build refresh (debounced). A connector refresh that cannot start (no output assembly yet, or not a Reqnroll test project) sends nothing and does not use up `projectLoad` |
+| **When** | Each completed binding-discovery run: Roslyn on a `.cs` binding file open/`csEdit` per owning project, and once per connector run that failed or found no output assembly yet when source-level discovery then added bindings (`connectorFallback`); Connector on the first `projectLoad` after a project registers, then on every post-build refresh (debounced). A connector refresh that cannot start (no output assembly yet, or not a Reqnroll test project) sends no Connector event and does not use up `projectLoad` |
 
 **Properties**
 
 | Property | Type | Meaning |
 |---|---|---|
 | `DiscoverySource` | `"Connector"` \| `"Roslyn"` | Which discovery path ran |
-| `TriggerContext` | Connector: `"projectLoad"` \| `"build"`; Roslyn: `"csOpen"` \| `"csEdit"` | What triggered the run |
+| `TriggerContext` | Connector: `"projectLoad"` \| `"build"`; Roslyn: `"csOpen"` \| `"csEdit"` \| `"connectorFallback"` | What triggered the run |
+| `ConnectorStatus` | `"Failed"` \| `"Skipped"` | Roslyn `connectorFallback` only: why the connector produced no bindings (failed, or no output assembly yet) |
 | `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure: an unexpected exception, or the connector threw or reported failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn: counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |

@@ -7,6 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -57,6 +58,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
     private readonly ILspTelemetryService?     _telemetryService;
     private readonly IFileSystemForIDE         _fileSystem;
     private readonly IProjectFeatureFileLookup _featureFileLookup;
+    private readonly IBindingSourceFileProvider? _sourceFileProvider;
 
     // Store (provider, handler) together so Dispose can unsubscribe by the exact delegate
     // that was passed to += in OnProjectDiscovered.
@@ -72,7 +74,8 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         IBindingMatchService matchService,
         IIdeSupportLogger logger,
         IFileSystemForIDE fileSystem,
-        ILspTelemetryService? telemetryService = null)
+        ILspTelemetryService? telemetryService = null,
+        ICSharpFileTextCache? csharpFileTextCache = null)
     {
         _scopeManager = scopeManager;
         _mediator     = mediator;
@@ -82,6 +85,12 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         _telemetryService = telemetryService;
 
         _featureFileLookup = new MembershipIndexFeatureFileLookup(scopeManager);
+
+        // Source files for the providers' source-level fallback when the connector cannot
+        // discover bindings. Without the open-buffer cache there is no fallback.
+        _sourceFileProvider = csharpFileTextCache is null
+            ? null
+            : new CsFileReconciliationSelector(scopeManager, csharpFileTextCache, fileSystem, logger);
 
         scopeManager.ProjectDiscovered += OnProjectDiscovered;
         scopeManager.ProjectRemoved    += OnProjectRemoved;
@@ -218,7 +227,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
     private void OnProjectDiscovered(LspReqnrollProject project)
     {
         var provider = new ConnectorBindingRegistryProvider(
-            project, _logger, _fileSystem, _telemetryService, _featureFileLookup);
+            project, _logger, _fileSystem, _telemetryService, _featureFileLookup, _sourceFileProvider);
 
         // Capture project in a named local so the closure below can reference it.
         // Store the delegate so Dispose can unsubscribe by identity.

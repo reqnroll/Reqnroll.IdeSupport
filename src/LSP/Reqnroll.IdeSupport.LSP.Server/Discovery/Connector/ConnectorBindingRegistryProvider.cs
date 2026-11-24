@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Discovery;
@@ -28,6 +29,12 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 /// is kept and an error is logged; the registry is never replaced with
 /// <see cref="ProjectBindingRegistry.Invalid"/> after it has been successfully populated once.
 /// </para>
+/// <para>
+/// When a run fails, or cannot run because the project has not been built yet, the provider falls
+/// back to source-level (Roslyn) discovery for every project binding file the registry has no
+/// bindings for, so the project is not left without bindings until each file is opened. Files the
+/// registry already covers keep their bindings, so a last-good connector result is never replaced.
+/// </para>
 /// </summary>
 public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider, IDisposable
 {
@@ -38,6 +45,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IProjectFeatureFileLookup? _featureFileLookup;
+    private readonly IBindingSourceFileProvider? _sourceFileProvider;
 
     // Last-good state.  Volatile so readers always see the latest write.
     private volatile ProjectBindingRegistry _current = ProjectBindingRegistry.Invalid;
@@ -79,9 +87,10 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// </summary>
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
-        ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null)
+        ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null,
+        IBindingSourceFileProvider? sourceFileProvider = null)
         : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService,
-            featureFileLookup, fileSystem)
+            featureFileLookup, fileSystem, sourceFileProvider)
     {
     }
 
@@ -110,15 +119,21 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// <summary>
     /// Creates a provider backed by a caller-supplied discovery service and telemetry service.
     /// </summary>
+    /// <param name="sourceFileProvider">
+    /// Supplies the project's binding source files for the source-level fallback after a failed or
+    /// not-yet-possible connector run; <see langword="null"/> disables the fallback.
+    /// </param>
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project,
         IConnectorDiscoveryService discoveryService,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService,
         IProjectFeatureFileLookup? featureFileLookup = null,
-        IFileSystemForIDE? fileSystem = null)
+        IFileSystemForIDE? fileSystem = null,
+        IBindingSourceFileProvider? sourceFileProvider = null)
     {
         _featureFileLookup = featureFileLookup;
+        _sourceFileProvider = sourceFileProvider;
         _fileSystem       = fileSystem ?? new FileSystemForIDE();
         _project          = project;
         _logger           = logger;
@@ -274,6 +289,88 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         _bindingRegistryChanged?.Invoke(this, false);
     }
 
+    // ── Source-level fallback ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Fills the registry from source after a connector run that produced no bindings
+    /// (<paramref name="status"/> is <see cref="ConnectorDiscoveryStatus.Failed"/> or
+    /// <see cref="ConnectorDiscoveryStatus.Skipped"/>): every project binding file the registry
+    /// has no bindings for yet is parsed with Roslyn and patched in. Files that already have
+    /// bindings -- from the last good connector run, or from an earlier source-level patch -- are
+    /// left alone. When anything was added, <see cref="BindingRegistryChanged"/> is raised as a full
+    /// replacement so every feature file of the project is matched against the new bindings.
+    /// </summary>
+    private async Task ApplySourceFallbackAsync(ConnectorDiscoveryStatus status, CancellationToken ct)
+    {
+        if (_sourceFileProvider is null)
+            return;
+
+        IReadOnlyList<CsFileToReconcile> files;
+        try
+        {
+            files = _sourceFileProvider.GetBindingSourceFiles(_project);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                $"[{_project.ProjectName}] Could not list binding source files for source-level discovery: {ex.Message}");
+            return;
+        }
+
+        var before = _current;
+        var uncovered = files.Where(f => !before.HasAnyBindingFor(f.FilePath)).ToList();
+        if (uncovered.Count == 0)
+            return;
+
+        foreach (var file in uncovered)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                // notify: false -- one full-replacement notification is raised below for the
+                // whole batch instead of one per file.
+                await ApplyRoslynFileUpdateAsync(
+                        FileDetails.FromPath(file.FilePath).WithCSharpContent(file.Text), notify: false)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    $"[{_project.ProjectName}] Source-level discovery failed for '{file.FilePath}': {ex.Message}");
+            }
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        var after = _current;
+        var addedStepDefinitions = after.StepDefinitions.Length - before.StepDefinitions.Length;
+        var addedHooks = after.Hooks.Length - before.Hooks.Length;
+        if (addedStepDefinitions <= 0 && addedHooks <= 0)
+            return;
+
+        var reason = status == ConnectorDiscoveryStatus.Failed
+            ? "Binding discovery from the compiled assembly failed (see the warnings above)"
+            : "The project has not been built yet";
+        _logger.LogWarning(
+            $"[{_project.ProjectName}] {reason}; using {addedStepDefinitions} step definition(s) and " +
+            $"{addedHooks} hook(s) discovered from {uncovered.Count} source file(s) instead. Bindings " +
+            "declared in referenced assemblies are not available until discovery from the compiled " +
+            "assembly succeeds.");
+
+        _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, new()
+        {
+            ["DiscoverySource"] = "Roslyn",
+            ["TriggerContext"] = "connectorFallback",
+            ["IsFailed"] = false,
+            ["ConnectorStatus"] = status.ToString(),
+            ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
+            [TelemetryProperties.StepDefinitionCount] = after.StepDefinitions.Length,
+            [TelemetryProperties.HookCount] = after.Hooks.Length,
+        });
+
+        _bindingRegistryChanged?.Invoke(this, true);
+    }
+
     // ── IDisposable ───────────────────────────────────────────────────────────
 
     /// <summary>Cancels and disposes the provider's background discovery loop.</summary>
@@ -368,9 +465,15 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             // registry or advances _lastHash, so the next trigger retries exactly as before.
             switch (outcome.Status)
             {
+                case ConnectorDiscoveryStatus.NotReqnrollProject:
+                    // Nothing ran and no bindings are expected: no outcome to report, no fallback.
+                    return;
+
                 case ConnectorDiscoveryStatus.Skipped:
-                    // No assembly yet, or not a Reqnroll test project: nothing ran, so there is no
-                    // discovery outcome to report, and the first real run is still the project load.
+                    // No assembly yet: nothing ran, so there is no discovery outcome to report, and
+                    // the first real run is still the project load. Bindings can still come from
+                    // source.
+                    await ApplySourceFallbackAsync(outcome.Status, ct).ConfigureAwait(false);
                     return;
 
                 case ConnectorDiscoveryStatus.Failed:
@@ -389,6 +492,8 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                     };
                     _discoveryService.LastRunTelemetry?.AddTo(failureProperties);
                     _telemetryService?.SendEvent(TelemetryEvents.ProjectDiscoveryExecuted, failureProperties);
+
+                    await ApplySourceFallbackAsync(outcome.Status, ct).ConfigureAwait(false);
                     return;
             }
 

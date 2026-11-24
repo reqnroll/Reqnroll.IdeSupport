@@ -452,12 +452,12 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     }
 
     [Fact]
-    public void RunDiscovery_reports_Skipped_for_a_non_reqnroll_test_project()
+    public void RunDiscovery_reports_NotReqnrollProject_for_a_non_reqnroll_test_project()
     {
         var lastGood = SuccessfulRegistry();
 
         CreateSut().RunDiscovery(MakeNonReqnrollScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
-            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
+            .Should().Be(ConnectorDiscoveryOutcome.NotReqnrollProject(lastGood, "prev"));
     }
 
     private sealed class ThrowingConnector : OutProcReqnrollConnector
