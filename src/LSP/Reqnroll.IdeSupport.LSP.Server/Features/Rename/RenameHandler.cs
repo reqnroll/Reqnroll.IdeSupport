@@ -178,6 +178,14 @@ public sealed class RenameHandler
         if (binding == null)
             return null;
 
+        // An error rather than null: the cursor is on a real binding, so say why it cannot be
+        // renamed instead of silently offering nothing.
+        if (_bindingResolver.GetUneditableReason(binding) is { } notEditable)
+        {
+            _logger.LogVerbose($"RenameHandler: prepareRename — {notEditable}");
+            throw RenameFailedError(notEditable, "rename");
+        }
+
         // Rule 2: validate expression is a string literal
         var exprError = StepRenameValidator.ValidateExpressionIsStringLiteral(binding.Expression);
         if (exprError != null)
@@ -229,6 +237,16 @@ public sealed class RenameHandler
             // applied at the step-text-only range HandleRenameAsync actually replaces.
             _logger.LogVerbose("RenameHandler: prepareRename — matched a binding but could not resolve the step's text range");
             return null;
+        }
+
+        // The candidates already exclude uneditable bindings whenever an editable one exists, so
+        // the first is uneditable only when they all are: refuse up front then. An error rather
+        // than null so the client shows the reason (VS Code shows the message in place of the
+        // rename box). HandleRenameAsync still re-checks whichever binding is finally resolved.
+        if (_bindingResolver.GetUneditableReason(featureBindings[0]) is { } notEditable)
+        {
+            _logger.LogVerbose($"RenameHandler: prepareRename — {notEditable}");
+            throw RenameFailedError(notEditable, "rename");
         }
 
         // When ambiguous (2+ candidate bindings), a plain F2 rename would fall back to the
@@ -348,6 +366,16 @@ public sealed class RenameHandler
         {
             SendRenameTelemetry(origin, started, erroneous: true, reason: "BindingNotResolved");
             throw RenameFailedError("No step definition found at this position", "position");
+        }
+
+        // Must precede every edit-building step: for a binding whose source cannot be edited the
+        // C# half of the edit comes out empty while the .feature half does not, which would rename
+        // the usages and leave every one of them unbound.
+        if (_bindingResolver.GetUneditableReason(binding) is { } notEditable)
+        {
+            _logger.LogVerbose($"RenameHandler: refusing rename — {notEditable}");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "BindingNotInWorkspace");
+            throw RenameFailedError(notEditable, "rename");
         }
 
         var bindingLocation = ResolveBindingLocation(path, binding, line, column);

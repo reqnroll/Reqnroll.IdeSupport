@@ -36,16 +36,28 @@ internal sealed class RenameBindingResolver
     }
 
     /// <summary>
-    /// Finds all bindings that match the feature step at the given cursor position
-    /// by querying the binding match cache for the owning projects.
+    /// Finds the bindings a rename of the feature step at the given cursor position may target,
+    /// by querying the binding match cache for the owning projects. When the step matches several
+    /// bindings, those a rename would refuse (see <see cref="GetUneditableReason"/>) are left out
+    /// as long as at least one other remains.
     /// </summary>
+    /// <remarks>
+    /// Every rename path that lists or indexes the candidates at a <c>.feature</c> step goes through
+    /// here: the <c>reqnroll/renameTargets</c> picker, the <c>reqnroll/selectRenameTarget</c>
+    /// lookup that turns the picked index back into a binding, the index-only fallback, plain
+    /// F2's first-candidate fallback, and <c>prepareRename</c>'s placeholder. The filter has to
+    /// apply to all of them alike: an index chosen from a filtered picker list but resolved
+    /// against an unfiltered one would name a different binding. When no candidate is editable
+    /// the list is returned whole, so the rename is refused with the reason rather than reported
+    /// as "no step definition found".
+    /// </remarks>
     public List<ProjectStepDefinitionBinding> FindBindingsAtFeatureStep(
         DocumentUri uri, string path, Position position) =>
         FindBindingsAtFeatureStep(uri, path, position, out _);
 
     /// <summary>
-    /// Finds all bindings that match the feature step at the given cursor position, and the
-    /// matched step's own text span (excluding the keyword/indentation) via <paramref
+    /// Finds the rename candidates at the feature step, filtered as described on the overload
+    /// above, and the matched step's own text span (excluding the keyword/indentation) via <paramref
     /// name="matchedRange"/>. Callers that only need the range for editing (prepareRename must
     /// offer exactly the text that HandleRenameAsync will later replace at <c>usage.Range</c> —
     /// otherwise the keyword/indentation the client seeds the dialog with gets duplicated when
@@ -98,7 +110,78 @@ internal sealed class RenameBindingResolver
             }
         }
 
-        return matchedBindings.ToList();
+        return PreferEditable(matchedBindings.ToList());
+    }
+
+    /// <summary>
+    /// Drops the candidates a rename would refuse, unless that would leave none.
+    /// </summary>
+    private List<ProjectStepDefinitionBinding> PreferEditable(List<ProjectStepDefinitionBinding> candidates)
+    {
+        if (candidates.Count < 2)
+            return candidates;
+
+        var editable = candidates.Where(b => GetUneditableReason(b) == null).ToList();
+        if (editable.Count == 0 || editable.Count == candidates.Count)
+            return candidates;
+
+        _logger.LogVerbose(
+            $"RenameBindingResolver: left out {candidates.Count - editable.Count} of {candidates.Count} candidate(s) whose source is outside the solution");
+        return editable;
+    }
+
+    /// <summary>
+    /// Explains why a rename must not touch <paramref name="binding"/>'s source, or returns
+    /// <see langword="null"/> when it may. Only a binding declared in a file inside the solution
+    /// open in the IDE is renameable: one discovered from a referenced assembly whose source is not
+    /// part of the solution is unalterable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three shapes are refused. A binding with no source location (an assembly without symbols)
+    /// has no attribute to edit at all. An unresolved location (the assembly was built elsewhere,
+    /// so the path it records does not exist here) has none either, and letting the rename
+    /// proceed would rewrite the <c>.feature</c> usages alone, leaving every one of them unbound.
+    /// A location that does exist on disk but lies outside the workspace (e.g. a sibling checkout
+    /// the symbols point at) would be edited behind the user's back, outside the solution being
+    /// refactored.
+    /// </para>
+    /// <para>
+    /// "Inside the workspace" means owned by a project in the membership index
+    /// (<see cref="ILspWorkspaceScopeManager.ResolveOwners"/>, which also covers a file linked into
+    /// a project from elsewhere) <em>or</em> under a workspace folder (the solution folder in Visual
+    /// Studio and Rider, the opened folders in VS Code). Project ownership alone is not enough:
+    /// Rider registers only the projects in its runnable-projects model, so an in-solution class
+    /// library that declares bindings may never be reported to the server, and refusing it would
+    /// break a rename that is entirely legitimate.
+    /// </para>
+    /// </remarks>
+    public string? GetUneditableReason(ProjectStepDefinitionBinding binding)
+    {
+        var method   = binding.Implementation?.Method ?? "this step definition";
+        var location = binding.Implementation?.SourceLocation;
+
+        if (location is null || string.IsNullOrEmpty(location.SourceFile))
+        {
+            return $"'{method}' is declared in a referenced assembly that has no source information, " +
+                   "so it cannot be renamed. Rename it in the project that declares it.";
+        }
+
+        if (!location.IsResolved)
+        {
+            return $"'{method}' is declared in a referenced assembly whose source " +
+                   $"('{location.RecordedSourceFile}') is not on this machine, so it cannot be renamed. " +
+                   "Rename it in the project that declares it.";
+        }
+
+        var sourceUri = DocumentUri.FromFileSystemPath(location.SourceFile);
+        if (_scopeManager.ResolveOwners(sourceUri).Count == 0 && _scopeManager.GetScopeForUri(sourceUri) is null)
+        {
+            return $"'{method}' is declared in '{location.SourceFile}', which is outside the solution " +
+                   "open in the IDE, so it cannot be renamed. Open the project that declares it to rename it.";
+        }
+
+        return null;
     }
 
     /// <summary>
