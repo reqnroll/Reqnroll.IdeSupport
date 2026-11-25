@@ -222,7 +222,7 @@ classDiagram
 | `RunTestCodeLensCallbackListener`, `RunTestCodeLensDataPoint`, `RunTestCodeLensRedirect`, `RunTestOutcomeBridge` | `src/VisualStudio/…VSSDKIntegration/RunTestCodeLens` | VS lens: server-first lookup, bridge fallback, refresh on change. |
 | `TestOutcomesChangedInterceptor` | `src/VisualStudio/…Extension/LspInterception` | Forwards the `changed` push to the lens. |
 | `MtpProjectStubs`, `MtpProjectStubSolutionListener` | VS `…VSSDKIntegration/TestReporter`, `…Extension/TestOutcomes`; Rider `MtpProjectStubs.kt`; VS Code `mtpProjectStubs.ts` | Keep each Reqnroll project's `obj/` stub in sync. |
-| `RunTestRunner`, `RunLensSupport` | `src/Rider/…/testrunner` | Rider `dotnet test` invocation and lens. |
+| `RunTestRunner`, `DotnetTestModeStrategy`, `RunOutcomeCollector`, `RunLensSupport` | `src/Rider/…/testrunner` | Rider `dotnet test` invocation, per-mode arguments, outcome polling, and lens. |
 | `GutterRunOutcomes` | `src/Rider/…/testrunner` | Backend builds: starts the listener on each server start; on `changed`, applies changed outcomes to the open `.feature` editors. |
 | `testOutcomesService.ts`, `runSettingsInjector.ts`, `testOutcomeCodeLens.ts` | `src/VSCode/src/testOutcomes` | VS Code registration, runsettings merge, read-only lens. |
 
@@ -257,9 +257,9 @@ backend reporter sends its results after the run has finished, so it sends no `r
   `ReqnrollIde` `<Logger>` into the effective runsettings. Discovery requests, runs with no `Reqnroll.dll`
   beside any container, and a missing bundled logger all inject nothing. The kill switch is the environment
   variable `REQNROLL_IDE_DISABLE_TEST_LOGGER` (anything other than empty, `0` or `false` disables).
-- **Rider.** `RunTestRunner` owns the `dotnet test` invocation. In VSTest mode it adds
+- **Rider.** `RunTestRunner` owns the `dotnet test` invocation. In VSTest mode, `VsTestStrategy` adds
   `--test-adapter-path <bundled logger dir>` and `--logger "ReqnrollIde;Endpoint=…;RunId=…"` next to its
-  existing TRX logger. After the process exits it polls `getOutcome` per target method (bounded), because
+  existing TRX logger. After the process exits, `RunOutcomeCollector` polls `getOutcome` per target method (bounded), because
   the final `runComplete` may not have been processed yet. If registration, bundling or polling fails it
   falls back to the TRX result.
 - **VS Code.** C# Dev Kit, not this extension, launches the tests. The extension registers each time

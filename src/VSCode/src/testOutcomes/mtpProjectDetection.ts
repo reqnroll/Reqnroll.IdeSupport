@@ -10,7 +10,7 @@ import {
 
 /**
  * Ad hoc, narrow detection of whether a project is Microsoft.Testing.Platform (MTP)-capable —
- * ported identically from the Rider plugin's `RunTestRunner.detectDotnetTestMode`
+ * ported identically from the Rider plugin's `DotnetTestModeDetector.detect`
  * (Kotlin) and the Visual Studio extension's `MtpProjectDetection.cs`. VS Code needs only this one
  * signal (like VS): C# Dev Kit always drives an MTP-capable project through its own testing-platform
  * pipeline regardless of `dotnet test`'s own CLI redirect mode, so the three-way VsTest/MtpCompat/
@@ -26,7 +26,7 @@ import {
  * like a test project (references `Microsoft.NET.Test.Sdk`), this falls back to a real
  * `dotnet msbuild -getProperty` evaluation — mirroring the VS extension's own fix for the identical
  * gap (`MtpProjectDetection.EvaluateViaMsBuild`) and the Rider plugin's
- * `RunTestRunner.evaluateMtpPropertiesViaMsbuild`. Gating the subprocess on that literal "looks like
+ * `DotnetTestModeDetector.evaluateMtpPropertiesViaMsbuild`. Gating the subprocess on that literal "looks like
  * a test project" signal keeps a solution-wide scan (`mtpProjectStubs.ts` calls this once per
  * `.csproj` in the workspace) from shelling out to `dotnet msbuild` for every ordinary non-test
  * project.
