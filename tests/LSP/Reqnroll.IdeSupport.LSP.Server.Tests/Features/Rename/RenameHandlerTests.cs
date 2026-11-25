@@ -47,6 +47,10 @@ public class StepRenameHandlerTests
         // no feature-side edits; the tests focus on the generated C# attribute edit.
         _scopeManager.ResolveOwners(Arg.Any<DocumentUri>())
                      .Returns(Array.Empty<LspReqnrollProject>());
+        // The step-definition file itself belongs to a workspace project: a rename refuses any
+        // binding declared outside the projects open in the IDE.
+        _scopeManager.ResolveOwners(Arg.Is<DocumentUri>(u => u.GetFileSystemPath() == CsPath))
+                     .Returns(new[] { MakeTestProject() });
         _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(System.Array.Empty<StepBindingMatch>());
 
@@ -1373,6 +1377,222 @@ public class StepRenameHandlerTests
                 TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0"
             },
             Substitute.For<Reqnroll.IdeSupport.Common.IIdeScope>());
+
+    // ── A binding discovered from a referenced assembly whose source is not part of the
+    //    solution is unalterable: rename and prepareRename refuse it with a reason instead of
+    //    editing a file outside the solution, or rewriting only the .feature usages (which
+    //    leaves every one of them unbound). ──────────────────────────────────────────────────
+
+    private static readonly DocumentUri ExternalFeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
+    private const string ExternalStepText = "the external step runs";
+
+    // The implementation's constructor parameter is not null-annotated, but its SourceLocation
+    // property is nullable: an assembly without symbols leaves it null.
+    private static ProjectStepDefinitionBinding MakeExternalBinding(SourceLocation? location) =>
+        new(ScenarioBlock.Given, new Regex($"^{ExternalStepText}$"), null,
+            new ProjectBindingImplementation("Lib.ExternalSteps.GivenTheExternalStepRuns()", null, location!),
+            ExternalStepText);
+
+    /// <summary>
+    /// Wires a <c>.feature</c> step that matches the given bindings, together with its usage, so
+    /// that only the binding guard stands between the request and a (feature-side) edit.
+    /// </summary>
+    private void SetupFeatureStepBoundTo(params ProjectStepDefinitionBinding[] bindings)
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(bindings));
+
+        var project = MakeTestProject();
+        _scopeManager.ResolveOwners(ExternalFeatureUri).Returns(new[] { project });
+        _scopeManager.GetProjectForUri(ExternalFeatureUri).Returns(project);
+
+        var matchSet = bindings.Length == 1
+            ? MakeFeatureMatchSet(ExternalFeatureUri.ToString(), bindings[0], "Given", ExternalStepText, stepLine: 2, stepChar: 6)
+            : MakeAmbiguousFeatureMatchSet(ExternalFeatureUri.ToString(), bindings, "Given", ExternalStepText, stepLine: 2, stepChar: 6);
+        _matchService.TryGet(Arg.Any<MatchSetKey>(), out Arg.Any<FeatureBindingMatchSet>())
+            .Returns(ci =>
+            {
+                ci[1] = matchSet;
+                return true;
+            });
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(matchSet.Steps.ToArray());
+    }
+
+    private Task<WorkspaceEdit?> RenameExternalStepAsync(RenameHandler sut) =>
+        sut.HandleRenameAsync(
+            new RenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = ExternalFeatureUri },
+                Position     = new Position(2, 10),
+                NewName      = "the external step was renamed"
+            },
+            CancellationToken.None);
+
+    private Task<RangeOrPlaceholderRange?> PrepareRenameExternalStepAsync(RenameHandler sut) =>
+        sut.HandlePrepareRenameAsync(
+            new PrepareRenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = ExternalFeatureUri },
+                Position     = new Position(2, 10)
+            },
+            CancellationToken.None);
+
+    [Fact]
+    public async Task Rename_from_feature_refuses_a_binding_whose_recorded_source_is_not_on_this_machine()
+    {
+        SetupFeatureStepBoundTo(MakeExternalBinding(
+            SourceLocation.Unresolved("/_/src/Lib/ExternalSteps.cs", 12, 9)));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var act = () => RenameExternalStepAsync(CreateSutWithTelemetry(telemetry));
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>(
+            "without the guard the .feature usages alone would be rewritten, leaving them unbound");
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("/_/src/Lib/ExternalSteps.cs")
+            .And.Contain("not on this machine");
+        telemetry.Received(1).SendEvent(
+            "Command.RenameStep",
+            Arg.Is<Dictionary<string, object?>>(p => (string?)p["Reason"] == "BindingNotInWorkspace"));
+    }
+
+    private const string ExternalStepsCsText =
+        "using Reqnroll;\n" +
+        "namespace Lib\n" +
+        "{\n" +
+        "    [Binding]\n" +
+        "    public class ExternalSteps\n" +
+        "    {\n" +
+        $"        [Given(\"{ExternalStepText}\")]\n" +
+        "        public void GivenTheExternalStepRuns() { }\n" +   // 1-based line 8
+        "    }\n" +
+        "}\n";
+
+    [Fact]
+    public async Task Rename_from_feature_refuses_a_binding_declared_in_a_file_outside_the_workspace()
+    {
+        var externalUri = DocumentUri.FromFileSystemPath("/elsewhere/Lib/ExternalSteps.cs");
+        // The file is readable, so without the guard its attribute would be found and edited.
+        SetupBuffers((externalUri, ExternalStepsCsText));
+        SetupFeatureStepBoundTo(MakeExternalBinding(
+            new SourceLocation(externalUri.GetFileSystemPath(), 8, 9)));
+
+        var act = () => RenameExternalStepAsync(CreateSut());
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("outside the solution");
+    }
+
+    [Fact]
+    public async Task Rename_from_feature_edits_a_binding_inside_the_workspace_folder_that_no_registered_project_owns()
+    {
+        // Rider registers only its runnable projects, so an in-solution binding library can be
+        // unknown to the membership index while still living under the solution folder.
+        var libraryUri = DocumentUri.FromFileSystemPath("/workspace/Lib/ExternalSteps.cs");
+        SetupBuffers((libraryUri, ExternalStepsCsText));
+        SetupFeatureStepBoundTo(MakeExternalBinding(
+            new SourceLocation(libraryUri.GetFileSystemPath(), 8, 9)));
+        _scopeManager.GetScopeForUri(Arg.Is<DocumentUri>(u => u.GetFileSystemPath() == libraryUri.GetFileSystemPath()))
+                     .Returns(new LspProjectScope("/workspace", Substitute.For<Reqnroll.IdeSupport.Common.IIdeScope>()));
+
+        var result = await RenameExternalStepAsync(CreateSut());
+
+        result.Should().NotBeNull();
+        result!.Changes.Should().ContainKey(libraryUri,
+            "a file under the workspace folder is part of the solution even when no registered project claims it");
+    }
+
+    [Fact]
+    public async Task Rename_from_feature_refuses_a_binding_with_no_source_location()
+    {
+        SetupFeatureStepBoundTo(MakeExternalBinding(location: null));
+
+        var act = () => RenameExternalStepAsync(CreateSut());
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("no source information",
+            "the reason must say the binding is external, not that it 'could not be located'");
+    }
+
+    [Fact]
+    public async Task Rename_from_visual_studio_does_not_push_an_edit_for_an_external_binding()
+    {
+        SetupFeatureStepBoundTo(MakeExternalBinding(
+            SourceLocation.Unresolved("/_/src/Lib/ExternalSteps.cs", 12, 9)));
+
+        var act = () => RenameExternalStepAsync(CreateSutForVisualStudio());
+
+        await act.Should().ThrowAsync<RpcErrorException>();
+        await Task.Delay(100);
+        _languageServer.DidNotReceive().SendRequest(Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>());
+    }
+
+    [Fact]
+    public async Task PrepareRename_from_feature_reports_why_an_external_binding_cannot_be_renamed()
+    {
+        SetupFeatureStepBoundTo(MakeExternalBinding(
+            SourceLocation.Unresolved("/_/src/Lib/ExternalSteps.cs", 12, 9)));
+
+        var act = () => PrepareRenameExternalStepAsync(CreateSut());
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>(
+            "an error (shown by the client) rather than null (silently no rename box)");
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("not on this machine");
+    }
+
+    [Fact]
+    public async Task PrepareRename_from_feature_still_offers_rename_when_an_ambiguous_candidate_is_editable()
+    {
+        SetupBuffer(
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            $"        [Given(\"{ExternalStepText}\")]\n" +
+            "        public void GivenTheExternalStepRuns() { }\n" +
+            "    }\n" +
+            "}\n");
+        var local = MakeBinding(
+            ScenarioBlock.Given, new Regex($"^{ExternalStepText}$"), ExternalStepText,
+            line: 8, method: "N.Steps.GivenTheExternalStepRuns()");
+        var external = MakeExternalBinding(SourceLocation.Unresolved("/_/src/Lib/ExternalSteps.cs", 12, 9));
+        SetupFeatureStepBoundTo(external, local);
+
+        var result = await PrepareRenameExternalStepAsync(CreateSut());
+
+        result.Should().NotBeNull(
+            "the disambiguation picker can still choose the editable binding; rename re-checks the final choice");
+    }
+
+    [Fact]
+    public async Task PrepareRename_from_cs_reports_why_a_binding_outside_every_workspace_project_cannot_be_renamed()
+    {
+        var binding = MakeBinding(
+            ScenarioBlock.Given, new Regex("^the first number is (.*)$"), "the first number is {int}", line: 8);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+        var project = MakeTestProject();
+        _scopeManager.GetProjectForUri(CsUri).Returns(project);
+        _scopeManager.GetIndexedFeatureFiles(project).Returns(new List<string> { "/workspace/test.feature" });
+        _scopeManager.ResolveOwners(CsUri).Returns(Array.Empty<LspReqnrollProject>());
+
+        var act = () => CreateSut().HandlePrepareRenameAsync(
+            new PrepareRenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = CsUri },
+                Position     = new Position(7, 8)
+            },
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Message.Should().Contain("outside the solution");
+    }
 
     // ── Regression: prepareRename for a .feature step must return the step-text-only range
     //    (excluding the keyword and leading indentation), matching the range HandleRenameAsync

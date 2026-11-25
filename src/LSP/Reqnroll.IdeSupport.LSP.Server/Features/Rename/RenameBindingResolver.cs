@@ -102,6 +102,60 @@ internal sealed class RenameBindingResolver
     }
 
     /// <summary>
+    /// Explains why a rename must not touch <paramref name="binding"/>'s source, or returns
+    /// <see langword="null"/> when it may. Only a binding declared in a file inside the solution
+    /// open in the IDE is renameable: one discovered from a referenced assembly whose source is not
+    /// part of the solution is unalterable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three shapes are refused. A binding with no source location (an assembly without symbols)
+    /// has no attribute to edit at all. An unresolved location (the assembly was built elsewhere,
+    /// so the path it records does not exist here) has none either, and letting the rename
+    /// proceed would rewrite the <c>.feature</c> usages alone, leaving every one of them unbound.
+    /// A location that does exist on disk but lies outside the workspace (e.g. a sibling checkout
+    /// the symbols point at) would be edited behind the user's back, outside the solution being
+    /// refactored.
+    /// </para>
+    /// <para>
+    /// "Inside the workspace" means owned by a project in the membership index
+    /// (<see cref="ILspWorkspaceScopeManager.ResolveOwners"/>, which also covers a file linked into
+    /// a project from elsewhere) <em>or</em> under a workspace folder (the solution folder in Visual
+    /// Studio and Rider, the opened folders in VS Code). Project ownership alone is not enough:
+    /// Rider registers only the projects in its runnable-projects model, so an in-solution class
+    /// library that declares bindings may never be reported to the server, and refusing it would
+    /// break a rename that is entirely legitimate.
+    /// </para>
+    /// </remarks>
+    public string? GetUneditableReason(ProjectStepDefinitionBinding binding)
+    {
+        var method   = binding.Implementation?.Method ?? "this step definition";
+        var location = binding.Implementation?.SourceLocation;
+
+        if (location is null || string.IsNullOrEmpty(location.SourceFile))
+        {
+            return $"'{method}' is declared in a referenced assembly that has no source information, " +
+                   "so it cannot be renamed. Rename it in the project that declares it.";
+        }
+
+        if (!location.IsResolved)
+        {
+            return $"'{method}' is declared in a referenced assembly whose source " +
+                   $"('{location.RecordedSourceFile}') is not on this machine, so it cannot be renamed. " +
+                   "Rename it in the project that declares it.";
+        }
+
+        var sourceUri = DocumentUri.FromFileSystemPath(location.SourceFile);
+        if (_scopeManager.ResolveOwners(sourceUri).Count == 0 && _scopeManager.GetScopeForUri(sourceUri) is null)
+        {
+            return $"'{method}' is declared in '{location.SourceFile}', which is outside the solution " +
+                   "open in the IDE, so it cannot be renamed. Open the project that declares it to rename it.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Finds all bindings whose attributes are declared on the same C# method as the given
     /// 1-based <paramref name="line"/> in <paramref name="path"/> — the genuine "multi-attribute"
     /// case ([Given]/[When]/[Then] stacked on one method). Via the registry's own step-definition
