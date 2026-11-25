@@ -7,7 +7,10 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
+import net.reqnroll.idesupport.rider.lsp.LspRequestResult
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.noAnswerMessage
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.protocol.FindHookLocation
 import net.reqnroll.idesupport.rider.lsp.protocol.FindHooksResponse
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
@@ -44,12 +47,12 @@ object GoToHooksRunner {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.findHooks(project, uri, line, character, ownLevelOnly)
+                val result = ReqnrollRequestSender.findHooks(project, uri, line, character, ownLevelOnly)
                 ReqnrollDebugLogger.info(
-                    "GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned")
+                    "GoToHooksRunner: ${result.valueOrNull()?.hooks?.size?.let { "$it hook(s) returned" } ?: "no answer: $result"}")
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
-                    showResult(project, response, alwaysShowPicker)
+                    showResult(project, result, alwaysShowPicker)
                 }
             }
         })
@@ -68,10 +71,10 @@ object GoToHooksRunner {
         if (place == ActionPlaces.EDITOR_POPUP) RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CONTEXT_MENU
         else RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_COMMAND
 
-    private fun showResult(project: Project, response: FindHooksResponse?, alwaysShowPicker: Boolean) {
+    private fun showResult(project: Project, result: LspRequestResult<FindHooksResponse>, alwaysShowPicker: Boolean) {
+        val response = result.valueOrNull()
         if (response == null) {
-            ReqnrollNotify.error(
-                project, "The Reqnroll LSP server is not running or did not respond.", "Find Hooks")
+            ReqnrollNotify.error(project, result.noAnswerMessage, "Find Hooks")
             return
         }
 

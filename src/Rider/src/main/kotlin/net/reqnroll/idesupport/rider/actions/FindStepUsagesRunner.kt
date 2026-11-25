@@ -5,7 +5,10 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import net.reqnroll.idesupport.rider.lsp.LspRequestResult
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.noAnswerMessage
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.protocol.FindStepUsageItem
 import net.reqnroll.idesupport.rider.lsp.protocol.FindStepUsagesResponse
 
@@ -20,10 +23,10 @@ object FindStepUsagesRunner {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Step Usages", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.findStepUsages(project, uri, line, character)
+                val result = ReqnrollRequestSender.findStepUsages(project, uri, line, character)
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
-                    showResult(project, response)
+                    showResult(project, result)
                 }
             }
         })
@@ -35,10 +38,10 @@ object FindStepUsagesRunner {
             project, "This step definition has no usages in any feature file.", "Find Step Usages")
     }
 
-    private fun showResult(project: Project, response: FindStepUsagesResponse?) {
+    private fun showResult(project: Project, result: LspRequestResult<FindStepUsagesResponse>) {
+        val response = result.valueOrNull()
         if (response == null) {
-            ReqnrollNotify.error(
-                project, "The Reqnroll LSP server is not running or did not respond.", "Find Step Usages")
+            ReqnrollNotify.error(project, result.noAnswerMessage, "Find Step Usages")
             return
         }
 

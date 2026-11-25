@@ -8,6 +8,7 @@ import com.intellij.openapi.util.TextRange
 import net.reqnroll.idesupport.rider.actions.GoToHooksRunner
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import org.eclipse.lsp4j.CodeLens
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
@@ -75,7 +76,7 @@ internal object HookLensSupport {
         if (NativeLspCodeLens.isRenderedByPlatform) return emptyList()
 
         val uri = localPathToLspUri(filePath)
-        val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
+        val lenses = ReqnrollRequestSender.codeLens(project, uri).valueOrNull() ?: return emptyList()
 
         return lenses
             .filter { StepUsagesCodeVisionProvider.isRenderable(it, document.lineCount) }

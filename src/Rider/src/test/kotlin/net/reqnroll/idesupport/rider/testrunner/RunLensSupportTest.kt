@@ -1,11 +1,14 @@
 package net.reqnroll.idesupport.rider.testrunner
 
+import net.reqnroll.idesupport.rider.lsp.LspRequestResult
+import net.reqnroll.idesupport.rider.lsp.protocol.ScenarioTestTargetItem
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SymbolKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class RunLensSupportTest {
     private fun methodSymbol(name: String, line: Int, children: List<DocumentSymbol> = emptyList()) =
@@ -162,5 +165,26 @@ class RunLensSupportTest {
             "row 2: When the calculation explodes\nrow 3",
             RunLensSupport.renderTooltip("✗ Run", result),
         )
+    }
+
+    @Test
+    fun `resolved targets are cacheable, and a null answer caches as no targets`() {
+        val target = ScenarioTestTargetItem(declaringTypeFullName = "NS.Feat", methodName = "Add")
+
+        assertEquals(listOf(target), RunLensSupport.cacheableTargets(LspRequestResult.Success(listOf(target))))
+        assertEquals(emptyList(), RunLensSupport.cacheableTargets(LspRequestResult.Success(null)))
+    }
+
+    @Test
+    fun `a failed resolve is never cached as no targets`() {
+        val failures = listOf(
+            LspRequestResult.Unavailable,
+            LspRequestResult.TimedOut(10_000),
+            LspRequestResult.ServerError(-32603, "boom"),
+            LspRequestResult.Failed(RuntimeException("pipe")),
+        )
+        for (failure in failures) {
+            assertNull(RunLensSupport.cacheableTargets(failure), "$failure")
+        }
     }
 }

@@ -482,8 +482,8 @@ issue #566; still TODO:
   already covered above).
 - `StepUsagesCodeVisionProvider`/`ReqnrollFeatureInlayHintsController` — need a real
   `Editor`/`PsiFile` fixture (itself `Project`-scoped); the request/response plumbing they call
-  (`ReqnrollRequestSender`) is thin glue over `LspServer.sendRequestSync` with no independent
-  logic to unit-test.
+  (`ReqnrollRequestSender`) is thin glue over the suspend `LspServer.sendRequest`; its result mapping
+  (`LspRequestResult`, the rename/comment/format outcomes) is unit-tested, the wait itself is not.
 - Deferred: a full end-to-end functional test (real Rider sandbox, open a `.feature`
   file, confirm the LSP connection comes up and `reqnroll/*` notifications actually arrive)
   — expensive; revisit once there's been at least one live `runIde` verification pass to

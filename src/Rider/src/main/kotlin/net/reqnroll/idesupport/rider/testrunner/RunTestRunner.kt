@@ -14,6 +14,7 @@ import net.reqnroll.idesupport.rider.actions.ReqnrollNotify
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollMtpReporterPathResolver
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.ReqnrollTestLoggerPathResolver
 import net.reqnroll.idesupport.rider.lsp.lspUriToLocalPath
 import net.reqnroll.idesupport.rider.lsp.protocol.GetTestOutcomeResponse
@@ -98,7 +99,7 @@ object RunTestRunner {
                 // A null/unsuccessful registration (no server running, or it couldn't start its
                 // listener) just means the extra arguments/injection are omitted — the run
                 // proceeds with the TRX-only result (VsTest) or exit-code-only (MTP).
-                val registration = ReqnrollRequestSender.registerTestRun(project)
+                val registration = ReqnrollRequestSender.registerTestRun(project).valueOrNull()
                     ?.takeIf { it.success }
                 val mode = detectDotnetTestMode(runnableProject.projectFilePath)
                 val loggerDirectory = registration?.takeIf { mode == DotnetTestMode.VS_TEST }?.let { ReqnrollTestLoggerPathResolver.resolve() }
@@ -276,7 +277,7 @@ object RunTestRunner {
         val distinctMethods = targets.map { it.declaringTypeFullName to it.methodName }.distinct()
         repeat(OUTCOME_POLL_ATTEMPTS) { attempt ->
             val responses = distinctMethods.map { (type, method) ->
-                ReqnrollRequestSender.getTestOutcome(project, assemblyPath, type, method)
+                ReqnrollRequestSender.getTestOutcome(project, assemblyPath, type, method).valueOrNull()
             }
             usableOrNull(responses)?.let { usable -> return distinctMethods.zip(usable).toMap() }
             if (attempt < OUTCOME_POLL_ATTEMPTS - 1) Thread.sleep(OUTCOME_POLL_DELAY_MS)

@@ -13,6 +13,7 @@ import com.intellij.openapi.util.TextRange
 import net.reqnroll.idesupport.rider.actions.FindStepUsagesRunner
 import net.reqnroll.idesupport.rider.actions.GoToMatchingScenariosRunner
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Command
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
@@ -113,7 +114,7 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
         if (NativeLspCodeLens.isRenderedByPlatform) return emptyList()
 
         val uri = localPathToLspUri(file.path)
-        val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
+        val lenses = ReqnrollRequestSender.codeLens(project, uri).valueOrNull() ?: return emptyList()
 
         val document = editor.document
         return lenses.filter { isRenderable(it, document.lineCount) }.map { lens ->

@@ -19,6 +19,7 @@ import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.LatestResponseGate
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import org.eclipse.lsp4j.FoldingRange
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
@@ -108,7 +109,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
             if (project.isDisposed || editor.isDisposed) return
             val gate = editor.getUserData(SESSION_KEY)?.gate ?: return
 
-            // ReqnrollRequestSender.foldingRange uses sendRequestSync, which blocks the calling
+            // ReqnrollRequestSender.foldingRange blocks the calling
             // thread — refresh() runs on the EDT (editorCreated and the SWING_THREAD debounce
             // alarm both dispatch there), so the request itself must run on a background thread,
             // matching ReqnrollFeatureInlayHintsController's identical rationale. The gate renders
@@ -118,7 +119,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
                     if (project.isDisposed || editor.isDisposed) return@fetch null
 
                     val uri = localPathToLspUri(virtualFile.path)
-                    val ranges = ReqnrollRequestSender.foldingRange(project, uri)
+                    val ranges = ReqnrollRequestSender.foldingRange(project, uri).valueOrNull()
                     ReqnrollDebugLogger.verbose("ReqnrollFeatureFoldingController: ${ranges?.size ?: "null"} range(s) for $uri")
                     ranges
                 },

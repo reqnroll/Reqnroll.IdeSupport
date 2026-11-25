@@ -66,7 +66,7 @@ class ReqnrollLspCommandsSupport : LspCommandsSupport() {
 
     /** The action to run for a click on [command]: itself, the fresh lens it now corresponds to, or null if it is gone. */
     private fun currentAction(project: Project, uri: String, command: Command, action: LensCommand): LensCommand? {
-        val fresh = ReqnrollRequestSender.codeLens(project, uri) ?: return action // No answer: keep the click as it was.
+        val fresh = ReqnrollRequestSender.codeLens(project, uri).valueOrNull() ?: return action // No answer: keep the click as it was.
         return when (val resolution = StaleLensCommandResolver.resolve(command, fresh)) {
             StaleLensCommandResolver.Resolution.Current -> action
             is StaleLensCommandResolver.Resolution.Rebased -> {

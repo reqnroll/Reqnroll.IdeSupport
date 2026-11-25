@@ -6,7 +6,10 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import net.reqnroll.idesupport.rider.codevision.StepUsagesCodeVisionProvider
+import net.reqnroll.idesupport.rider.lsp.LspRequestResult
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.map
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.protocol.ScenarioTestTargetItem
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.SymbolKind
@@ -87,7 +90,7 @@ internal object RunLensSupport {
         rulesOnly: Boolean = false,
     ): List<Pair<TextRange, CodeVisionEntry>> {
         val uri = localPathToLspUri(filePath)
-        val symbols = ReqnrollRequestSender.documentSymbol(project, uri) ?: return emptyList()
+        val symbols = ReqnrollRequestSender.documentSymbol(project, uri).valueOrNull() ?: return emptyList()
         val scenarioSymbols = if (rulesOnly) emptyList() else collectMethodSymbols(symbols)
         val containerSymbols = collectContainerSymbols(symbols, rulesOnly)
         if (scenarioSymbols.isEmpty() && containerSymbols.isEmpty()) return emptyList()
@@ -129,9 +132,9 @@ internal object RunLensSupport {
                     range.start.line, range.start.character,
                     range.end.line, range.end.character,
                 )
-                val resolved = response?.targets.orEmpty()
-                RunTestTargetCache.put(uri, startLine, identity, resolved)
-                resolved
+                cacheableTargets(response.map { it?.targets })
+                    ?.also { RunTestTargetCache.put(uri, startLine, identity, it) }
+                    .orEmpty()
             }
             if (targets.isEmpty()) continue
 
@@ -159,11 +162,19 @@ internal object RunLensSupport {
                 selectionRange.start.line, selectionRange.start.character,
                 selectionRange.end.line, selectionRange.end.character,
             )
-            val resolved = response?.targets.orEmpty()
-            RunTestTargetCache.put(uri, startLine, identity, resolved)
-            resolved
+            cacheableTargets(response.map { it?.targets })
+                ?.also { RunTestTargetCache.put(uri, startLine, identity, it) }
+                .orEmpty()
         }
     }
+
+    /**
+     * The targets to cache from a resolve request: the answer's targets (none for a `null` answer), or `null` when
+     * the request failed, so a server error, timeout or missing server is never cached as "no tests" and the next
+     * lens pass asks again. `internal` for testability.
+     */
+    internal fun cacheableTargets(result: LspRequestResult<List<ScenarioTestTargetItem>>): List<ScenarioTestTargetItem>? =
+        (result as? LspRequestResult.Success)?.let { it.value.orEmpty() }
 
     /**
      * Builds the CodeVision entry for one resolved scenario — or, with [isContainer], the
