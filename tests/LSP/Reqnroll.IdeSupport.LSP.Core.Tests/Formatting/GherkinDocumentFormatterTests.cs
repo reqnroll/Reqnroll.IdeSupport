@@ -139,6 +139,84 @@ public class GherkinDocumentFormatterTests
         buffer.GetLineOneBased(6).Should().Be("        | short   | a much longer value |");
     }
 
+    // ── Repeated step keywords ────────────────────────────────────────────────
+
+    private static readonly string[] RepeatedKeywordLines =
+    {
+        "Feature: foo",
+        "Scenario: bar",
+        "    Given first",
+        "    Given second",
+        "    When action",
+        "    Then check",
+        "    Then another check",
+        "    And explicit and",
+        "    But explicit but",
+        ""
+    };
+
+    [Fact]
+    public void Repeated_keywords_are_replaced_with_And_by_default()
+    {
+        var sut = CreateSUT();
+        var buffer = Buffer(RepeatedKeywordLines);
+
+        sut.FormatGherkinDocument(ParseDocument(RepeatedKeywordLines), buffer, _defaultSettings);
+
+        Format(buffer).Should().Be(string.Join(Environment.NewLine,
+            "Feature: foo",
+            "Scenario: bar",
+            "    Given first",
+            "    And second",
+            "    When action",
+            "    Then check",
+            "    And another check",
+            "    And explicit and",
+            "    But explicit but",
+            ""));
+    }
+
+    [Fact]
+    public void Repeated_keywords_are_kept_as_written_when_normalization_is_disabled()
+    {
+        var sut = CreateSUT();
+        var settings = new GherkinFormatSettings();
+        settings.Configuration.NormalizeRepeatedKeywords = false;
+        var buffer = Buffer(RepeatedKeywordLines);
+
+        sut.FormatGherkinDocument(ParseDocument(RepeatedKeywordLines), buffer, settings);
+
+        Format(buffer).Should().Be(string.Join(Environment.NewLine, RepeatedKeywordLines));
+    }
+
+    [Fact]
+    public void Disabling_normalization_still_fixes_step_indentation()
+    {
+        var sut = CreateSUT();
+        var settings = new GherkinFormatSettings();
+        settings.Configuration.NormalizeRepeatedKeywords = false;
+        var lines = new[]
+        {
+            "Feature: foo",
+            "Scenario: bar",
+            "Given first",
+            "      Given second",
+            "  And third",
+            ""
+        };
+        var buffer = Buffer(lines);
+
+        sut.FormatGherkinDocument(ParseDocument(lines), buffer, settings);
+
+        Format(buffer).Should().Be(string.Join(Environment.NewLine,
+            "Feature: foo",
+            "Scenario: bar",
+            "    Given first",
+            "    Given second",
+            "    And third",
+            ""));
+    }
+
     // ── Table cell alignment ──────────────────────────────────────────────────
 
     [Theory]
