@@ -90,17 +90,6 @@ public static class VsUtils
     //    VsShellUtilities.IsDocumentOpen(serviceProvider, filePath, Guid.Empty,
     //        out _, out _, out windowFrame);
 
-    /// <summary>Opens <paramref name="filePath"/> in the editor if it is not already open.</summary>
-    public static void OpenIfNotOpened(string filePath, IServiceProvider serviceProvider)
-    {
-        if (VsShellUtilities.IsDocumentOpen(serviceProvider, filePath, Guid.Empty,
-                out _, out _, out _))
-            return;
-
-        VsShellUtilities.OpenDocument(serviceProvider, filePath, Guid.Empty,
-            out _, out _, out _);
-    }
-
     /// <summary>Returns the containing <see cref="Project"/> of <paramref name="projectItem"/>, or <see langword="null"/> on failure.</summary>
     public static Project GetProject(ProjectItem projectItem)
     {

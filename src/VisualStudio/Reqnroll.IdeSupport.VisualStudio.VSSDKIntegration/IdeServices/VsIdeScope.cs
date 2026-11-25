@@ -23,7 +23,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.IdeServices;
 [Export(typeof(IVsIdeScope))]
 public class VsIdeScope : IVsIdeScope
 {
-    private readonly CancellationTokenSource _backgroundTaskTokenSource = new();
     private readonly ConcurrentDictionary<string, VsProjectScope>
         _projectScopes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -66,42 +65,6 @@ public class VsIdeScope : IVsIdeScope
     /// <summary>The IDE's file system abstraction.</summary>
     public IFileSystemForIDE FileSystem { get; }
 
-    /// <summary>Runs <paramref name="action"/> fire-and-forget, routing exceptions through <paramref name="onException"/> and telemetry.</summary>
-    public void FireAndForget(Func<Task> action, Action<Exception> onException,
-        [CallerMemberName] string callerName = "???")
-    {
-        action().FileAndForget($"vs/Reqnroll/{nameof(FireAndForget)}/{callerName}",
-            "Error on a background task in Reqnroll",
-            exception =>
-            {
-                Logger.LogException(TelemetryService, exception, $"Called from {callerName}");
-                onException(exception);
-                return true;
-            });
-    }
-
-    /// <summary>Runs <paramref name="action"/> on a dedicated long-running background thread, logging any exception through telemetry.</summary>
-    public void FireAndForgetOnBackgroundThread(Func<CancellationToken, Task> action,
-        [CallerMemberName] string callerName = "???")
-    {
-        _ = Task.Factory.StartNew(async () =>
-            {
-                try
-                {
-                    ThreadHelper.ThrowIfOnUIThread(callerName);
-                    await action(_backgroundTaskTokenSource.Token);
-                }
-                catch (Exception e)
-                {
-                    Logger.LogException(TelemetryService, e, $"Called from {callerName}");
-                }
-            },
-            _backgroundTaskTokenSource.Token,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Default
-        );
-    }
-
     /// <summary>Switches to the UI thread and runs <paramref name="action"/> there.</summary>
     public async Task RunOnUiThreadAsync(Action action)
     {
@@ -109,12 +72,10 @@ public class VsIdeScope : IVsIdeScope
         action();
     }
 
-    /// <summary>Disposes the cached project scopes, then cancels and disposes the background-task cancellation source.</summary>
+    /// <summary>Disposes the cached project scopes.</summary>
     public void Dispose()
     {
         RemoveAllProjectScopes();
-        _backgroundTaskTokenSource.Cancel();
-        _backgroundTaskTokenSource.Dispose();
     }
 
     /// <summary>
