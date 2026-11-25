@@ -35,6 +35,7 @@ import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.LatestResponseGate
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.telemetry.RiderTelemetryTransmitter
 import java.awt.Cursor
 import java.awt.Font
@@ -136,7 +137,7 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
             if (project.isDisposed || editor.isDisposed) return
             val gate = editor.getUserData(SESSION_KEY)?.gate ?: return
 
-            // ReqnrollRequestSender.documentLink uses sendRequestSync, which blocks the calling thread, so the
+            // ReqnrollRequestSender.documentLink blocks the calling thread, so the
             // request runs on a background thread - same rationale as ReqnrollFeatureFoldingController. The gate
             // applies only the newest response and skips a failed (null) one.
             gate.fetchThenApply(
@@ -144,7 +145,7 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
                     if (project.isDisposed || editor.isDisposed) return@fetch null
 
                     val uri = localPathToLspUri(virtualFile.path)
-                    val links = ReqnrollRequestSender.documentLink(project, uri)
+                    val links = ReqnrollRequestSender.documentLink(project, uri).valueOrNull()
                     ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: ${links?.size ?: "null"} link(s) for $uri")
                     links
                 },

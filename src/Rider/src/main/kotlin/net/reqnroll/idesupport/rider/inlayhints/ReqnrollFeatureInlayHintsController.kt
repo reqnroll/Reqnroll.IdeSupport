@@ -27,6 +27,7 @@ import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.LatestResponseGate
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import org.eclipse.lsp4j.InlayHint
 import java.awt.Graphics
 import java.awt.Rectangle
@@ -149,7 +150,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
                 return
             }
 
-            // ReqnrollRequestSender.inlayHint uses sendRequestSync, which blocks the calling
+            // ReqnrollRequestSender.inlayHint blocks the calling
             // thread for up to INLAY_HINT_TIMEOUT_MS — refresh() is called from the EDT (both
             // editorCreated and the SWING_THREAD debounce alarm), so the request itself must run
             // on a background thread or every editor open / debounced keystroke freezes the UI.
@@ -159,7 +160,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
                     if (project.isDisposed || editor.isDisposed) return@fetch null
 
                     val uri = localPathToLspUri(virtualFile.path)
-                    val hints = ReqnrollRequestSender.inlayHint(project, uri, 0, editor.document.lineCount)
+                    val hints = ReqnrollRequestSender.inlayHint(project, uri, 0, editor.document.lineCount).valueOrNull()
                     ReqnrollDebugLogger.verbose("ReqnrollFeatureInlayHintsController: ${hints?.size ?: "null"} hint(s) for $uri")
                     hints
                 },

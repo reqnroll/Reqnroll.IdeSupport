@@ -9,7 +9,10 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import net.reqnroll.idesupport.rider.lsp.LspRequestResult
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.noAnswerMessage
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import net.reqnroll.idesupport.rider.lsp.protocol.UnusedStepDefinitionItem
 
@@ -35,20 +38,19 @@ class FindUnusedStepDefinitionsAction : AnAction() {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Scanning for Unused Step Definitions", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.findUnusedStepDefinitions(project)
+                val result = ReqnrollRequestSender.findUnusedStepDefinitions(project)
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
-                    showResult(project, response)
+                    showResult(project, result)
                 }
             }
         })
     }
 
-    private fun showResult(project: Project, response: FindUnusedStepDefinitionsResponse?) {
+    private fun showResult(project: Project, result: LspRequestResult<FindUnusedStepDefinitionsResponse>) {
+        val response = result.valueOrNull()
         if (response == null) {
-            ReqnrollNotify.error(
-                project, "The Reqnroll LSP server is not running or did not respond.",
-                "Find Unused Step Definitions in Projects")
+            ReqnrollNotify.error(project, result.noAnswerMessage, "Find Unused Step Definitions in Projects")
             return
         }
 

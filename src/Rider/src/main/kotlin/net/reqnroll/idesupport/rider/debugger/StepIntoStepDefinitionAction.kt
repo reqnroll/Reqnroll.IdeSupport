@@ -18,6 +18,8 @@ import com.intellij.xdebugger.XSourcePosition
 import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.noAnswerMessage
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 import net.reqnroll.idesupport.rider.lsp.lspUriToLocalPath
 import org.eclipse.lsp4j.Location
@@ -98,8 +100,8 @@ class StepIntoStepDefinitionAction(platformStepInto: AnAction) : AnActionWrapper
 
     /** Asks the server for the step's definition. Blocks; call off the EDT. */
     private fun lookUpDefinition(project: Project, uri: String, line: Int, character: Int): Lookup {
-        val locations = ReqnrollRequestSender.definition(project, uri, line, character)
-            ?: return Lookup.Failed("The Reqnroll server did not answer")
+        val result = ReqnrollRequestSender.definition(project, uri, line, character)
+        val locations = result.valueOrNull() ?: return Lookup.Failed(result.noAnswerMessage)
         return when (val choice = chooseLocation(locations)) {
             is LocationChoice.Single -> Lookup.Found(choice.location)
             LocationChoice.None -> Lookup.Failed("No step definition with source found for this step")

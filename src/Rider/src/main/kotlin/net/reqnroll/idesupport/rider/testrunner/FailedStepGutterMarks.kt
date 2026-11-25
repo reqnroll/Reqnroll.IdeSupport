@@ -18,6 +18,7 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.lspUriToLocalPath
 import org.eclipse.lsp4j.DocumentSymbol
 import java.util.concurrent.ConcurrentHashMap
@@ -58,7 +59,7 @@ internal object FailedStepGutterMarks {
     fun update(project: Project, uri: String, results: Map<Int, RunResult>) {
         try {
             val needsSymbols = results.values.any { r -> r.rows.any { it.outcome == RunOutcome.FAILED } }
-            val symbols = if (needsSymbols) ReqnrollRequestSender.documentSymbol(project, uri) else null
+            val symbols = if (needsSymbols) ReqnrollRequestSender.documentSymbol(project, uri).valueOrNull() else null
             val marksByScenario = results.mapValues { (line, result) ->
                 if (symbols == null) emptyList() else computeMarks(symbols, line, result)
             }

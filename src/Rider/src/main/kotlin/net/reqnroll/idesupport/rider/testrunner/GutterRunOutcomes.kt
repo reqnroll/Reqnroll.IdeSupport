@@ -12,6 +12,7 @@ import com.jetbrains.rider.model.runnableProjectsModel
 import com.jetbrains.rider.projectView.solution
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.ReqnrollServerEvents
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 import net.reqnroll.idesupport.rider.lsp.protocol.GetTestOutcomeResponse
@@ -53,7 +54,7 @@ internal object GutterRunOutcomes {
     private fun ensureListener(project: Project) {
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
-            val registration = ReqnrollRequestSender.registerTestRun(project)
+            val registration = ReqnrollRequestSender.registerTestRun(project).valueOrNull()
             ReqnrollDebugLogger.info(
                 "GutterRunOutcomes: outcome listener ${if (registration?.success == true) "at ${registration.endpoint}" else "not started"}")
         }
@@ -87,7 +88,7 @@ internal object GutterRunOutcomes {
             val assembly = runnableProjects.firstOrNull { it.projectFilePath == ownerPath }
                 ?.let { RunTestRunner.outputAssemblyPath(it) } ?: continue
             val uri = localPathToLspUri(file.path)
-            val symbols = ReqnrollRequestSender.documentSymbol(project, uri) ?: continue
+            val symbols = ReqnrollRequestSender.documentSymbol(project, uri).valueOrNull() ?: continue
             val scenarios = RunLensSupport.collectMethodSymbols(symbols).mapNotNull { symbol ->
                 val line = symbol.selectionRange?.start?.line ?: return@mapNotNull null
                 RunLensSupport.scenarioTargets(project, uri, symbol)
@@ -96,7 +97,7 @@ internal object GutterRunOutcomes {
             }
 
             val changed = changedResults(assembly, scenarios, lastSeen) { type, method ->
-                ReqnrollRequestSender.getTestOutcome(project, assembly, type, method)
+                ReqnrollRequestSender.getTestOutcome(project, assembly, type, method).valueOrNull()
             }
             if (changed.isEmpty()) continue
             anyChanged = true

@@ -11,6 +11,7 @@ import com.intellij.psi.PsiFile
 import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.isDocumentStale
 import org.eclipse.lsp4j.TextEdit
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
@@ -52,7 +53,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
         // this instant, not whatever it looks like once the (up to ~10s) request returns.
         val requestModificationStamp = document.modificationStamp
 
-        // charTyped runs on the EDT; ReqnrollRequestSender.onTypeFormatting uses sendRequestSync,
+        // charTyped runs on the EDT; ReqnrollRequestSender.onTypeFormatting
         // which blocks the calling thread for up to its timeout — the request must run on a
         // background thread, same lesson as ReqnrollFeatureInlayHintsController's earlier
         // EDT-blocking fix. Only the edit application (WriteCommandAction) goes back on the EDT.
@@ -61,7 +62,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
 
             val edits = ReqnrollRequestSender.onTypeFormatting(
                 project, uri, line, character, "|", tabSize, insertSpaces,
-            )
+            ).valueOrNull()
             ReqnrollDebugLogger.verbose(
                 "ReqnrollFeatureOnTypeFormattingHandler: ${edits?.size ?: "null"} edit(s) for $uri",
             )

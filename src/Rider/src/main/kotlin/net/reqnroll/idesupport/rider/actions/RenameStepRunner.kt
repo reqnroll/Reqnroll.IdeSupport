@@ -9,6 +9,8 @@ import com.intellij.openapi.ui.Messages
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollNotificationSender
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.noAnswerMessage
+import net.reqnroll.idesupport.rider.lsp.valueOrNull
 import net.reqnroll.idesupport.rider.lsp.RenameOutcome
 import net.reqnroll.idesupport.rider.lsp.isDocumentStale
 import net.reqnroll.idesupport.rider.lsp.protocol.RenameAppliedParams
@@ -34,12 +36,12 @@ object RenameStepRunner {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Renaming Step", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.renameTargets(project, uri, line, character)
+                val result = ReqnrollRequestSender.renameTargets(project, uri, line, character)
+                val response = result.valueOrNull()
 
                 if (response == null) {
                     showOnEdt(project) {
-                        ReqnrollNotify.error(
-                            project, "The Reqnroll LSP server is not running or did not respond.", "Rename Step")
+                        ReqnrollNotify.error(project, result.noAnswerMessage, "Rename Step")
                     }
                     return
                 }
