@@ -42,6 +42,30 @@ Scenario: Repeated step keywords are replaced with And
     And the formatted text contains "    And second action"
     And the formatted text contains "    And second check"
 
+Scenario: Repeated step keywords are kept when disabled in .editorconfig
+    Given the file ".editorconfig" exists on disk with
+        """
+        root = true
+
+        [*.feature]
+        gherkin_normalize_repeated_keywords = false
+        """
+    When the feature file "KeepKeywords.feature" is opened with
+        """
+        Feature: Keywords
+        Scenario: Steps
+          Given first step
+          Given second step
+          When first action
+          When second action
+          And explicit and
+        """
+    And the document "KeepKeywords.feature" is formatted
+    Then formatting edits are returned
+    And the formatted text contains "    Given second step"
+    And the formatted text contains "    When second action"
+    And the formatted text contains "    And explicit and"
+
 Scenario: Data table cells are column-aligned
     When the feature file "Table.feature" is opened with
         """

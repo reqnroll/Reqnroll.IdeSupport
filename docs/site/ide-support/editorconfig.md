@@ -21,6 +21,7 @@ the `.editorconfig` keys is needed. They feed the
 | `gherkin_indent_rule_children` | Indent child elements of Rule (Background, Scenario, Scenario Outline) | boolean | `false` |
 | `gherkin_indent_steps` | Indent steps in scenarios | boolean | `true` |
 | `gherkin_indent_and_steps` | Apply additional indentation to `And`/`But` steps in scenarios | boolean | `false` |
+| `gherkin_normalize_repeated_keywords` | Replace the keyword of a step that repeats the previous step's keyword (e.g. a second consecutive `Given`) with `And`. Set to `false` to keep keywords as written; steps already written as `And`/`But` are never changed | boolean | `true` |
 | `gherkin_indent_datatable` | Indent DataTable arguments within steps | boolean | `true` |
 | `gherkin_indent_docstring` | Indent DocString arguments within steps | boolean | `true` |
 | `gherkin_indent_examples` | Indent the Examples block in Scenario Outlines | boolean | `false` |

@@ -30,6 +30,13 @@ public class GherkinFormatConfiguration
     public bool IndentAndSteps { get; set; }
 
     /// <summary>
+    ///     Specifies whether a step that repeats the keyword of the previous step (e.g. a second consecutive
+    ///     'Given') should have its keyword replaced with 'And'. When <c>false</c>, keywords are kept as written.
+    /// </summary>
+    [EditorConfigSetting("gherkin_normalize_repeated_keywords")]
+    public bool NormalizeRepeatedKeywords { get; set; } = true;
+
+    /// <summary>
     ///     Specifies whether DataTable arguments should be indented within the step.
     /// </summary>
     [EditorConfigSetting("gherkin_indent_datatable")]
@@ -81,6 +88,7 @@ public class GherkinFormatConfiguration
         IndentRuleChildren              = IndentRuleChildren,
         IndentSteps                     = IndentSteps,
         IndentAndSteps                  = IndentAndSteps,
+        NormalizeRepeatedKeywords       = NormalizeRepeatedKeywords,
         IndentDataTable                 = IndentDataTable,
         IndentDocString                 = IndentDocString,
         IndentExamples                  = IndentExamples,
@@ -102,6 +110,7 @@ public class GherkinFormatConfiguration
                                                                IndentRuleChildren == other.IndentRuleChildren &&
                                                                IndentSteps == other.IndentSteps &&
                                                                IndentAndSteps == other.IndentAndSteps &&
+                                                               NormalizeRepeatedKeywords == other.NormalizeRepeatedKeywords &&
                                                                IndentDataTable == other.IndentDataTable &&
                                                                IndentDocString == other.IndentDocString &&
                                                                IndentExamples == other.IndentExamples &&
@@ -128,6 +137,7 @@ public class GherkinFormatConfiguration
             hashCode = (hashCode * 397) ^ IndentRuleChildren.GetHashCode();
             hashCode = (hashCode * 397) ^ IndentSteps.GetHashCode();
             hashCode = (hashCode * 397) ^ IndentAndSteps.GetHashCode();
+            hashCode = (hashCode * 397) ^ NormalizeRepeatedKeywords.GetHashCode();
             hashCode = (hashCode * 397) ^ IndentDataTable.GetHashCode();
             hashCode = (hashCode * 397) ^ IndentDocString.GetHashCode();
             hashCode = (hashCode * 397) ^ IndentExamples.GetHashCode();

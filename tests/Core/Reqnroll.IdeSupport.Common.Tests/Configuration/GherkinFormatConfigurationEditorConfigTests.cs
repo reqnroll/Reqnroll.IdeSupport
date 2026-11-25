@@ -37,6 +37,7 @@ public class GherkinFormatConfigurationEditorConfigTests
     [InlineData("gherkin_indent_rule_children",    true,  nameof(GherkinFormatConfiguration.IndentRuleChildren))]
     [InlineData("gherkin_indent_steps",            false, nameof(GherkinFormatConfiguration.IndentSteps))]
     [InlineData("gherkin_indent_and_steps",        true,  nameof(GherkinFormatConfiguration.IndentAndSteps))]
+    [InlineData("gherkin_normalize_repeated_keywords", false, nameof(GherkinFormatConfiguration.NormalizeRepeatedKeywords))]
     [InlineData("gherkin_indent_datatable",        false, nameof(GherkinFormatConfiguration.IndentDataTable))]
     [InlineData("gherkin_indent_docstring",        false, nameof(GherkinFormatConfiguration.IndentDocString))]
     [InlineData("gherkin_indent_examples",         true,  nameof(GherkinFormatConfiguration.IndentExamples))]
@@ -49,6 +50,25 @@ public class GherkinFormatConfigurationEditorConfigTests
         var prop   = typeof(GherkinFormatConfiguration).GetProperty(propertyName)!;
 
         Assert.Equal(value, (bool)prop.GetValue(config)!);
+    }
+
+    [Fact]
+    public void NormalizeRepeatedKeywords_defaults_to_true_when_editorconfig_omits_it()
+    {
+        var config = ApplyOptions(new());
+        Assert.True(config.NormalizeRepeatedKeywords);
+    }
+
+    [Fact]
+    public void NormalizeRepeatedKeywords_participates_in_clone_and_equality()
+    {
+        var original = new GherkinFormatConfiguration { NormalizeRepeatedKeywords = false };
+        var clone    = original.Clone();
+
+        Assert.False(clone.NormalizeRepeatedKeywords);
+        Assert.Equal(original, clone);
+        Assert.Equal(original.GetHashCode(), clone.GetHashCode());
+        Assert.NotEqual(new GherkinFormatConfiguration(), original);
     }
 
     [Fact]
