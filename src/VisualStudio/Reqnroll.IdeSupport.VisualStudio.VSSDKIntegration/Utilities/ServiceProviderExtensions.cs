@@ -41,16 +41,4 @@ public static class ServiceProviderExtensions
         ErrorHandler.ThrowOnFailure(vsMonitorSelection.GetCmdUIContextCookie(ref id, out var cookie));
         return cookie;
     }
-
-    /// <summary>Returns the full path of the currently open solution file.</summary>
-    public static string GetSolutionFile(this IVsSolution solution)
-    {
-        if (solution == null) throw new ArgumentNullException(nameof(solution));
-        string empty1 = string.Empty;
-        string empty2 = string.Empty;
-        string empty3 = string.Empty;
-        ThreadHelper.ThrowIfNotOnUIThread(nameof(GetSolutionFile));
-        ErrorHandler.Succeeded(solution.GetSolutionInfo(out empty1, out empty2, out empty3));
-        return empty2;
-    }
 }

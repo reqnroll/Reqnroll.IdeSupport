@@ -154,12 +154,6 @@ public class VsProjectScope : IProjectScope
     /// <summary>Returns <see cref="ProjectName"/>.</summary>
     public override string ToString() => ProjectName;
 
-    /// <summary>Not implemented.</summary>
-    public ProjectSettings GetProjectSettings()
-    {
-        throw new NotImplementedException();
-    }
-
     /// <summary>Registers the configuration provider and project-settings provider for this project scope.</summary>
     public void InitializeServices()
     {
