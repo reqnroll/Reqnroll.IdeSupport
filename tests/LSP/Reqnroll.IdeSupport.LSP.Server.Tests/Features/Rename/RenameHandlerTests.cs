@@ -1570,6 +1570,102 @@ public class StepRenameHandlerTests
             "the disambiguation picker can still choose the editable binding; rename re-checks the final choice");
     }
 
+    // ── The disambiguation picker for an ambiguous .feature step leaves out the bindings a rename
+    //    would refuse, and every lookup that turns a picked index back into a binding uses the
+    //    same filtered list. ─────────────────────────────────────────────────────────────────
+
+    private const string LocalStepsCsText =
+        "using Reqnroll;\n" +
+        "namespace N\n" +
+        "{\n" +
+        "    [Binding]\n" +
+        "    public class Steps\n" +
+        "    {\n" +
+        $"        [Given(\"{ExternalStepText}\")]\n" +                // 0-based line 6
+        "        public void GivenTheExternalStepRuns() { }\n" +   // 1-based line 8
+        "    }\n" +
+        "}\n";
+
+    /// <summary>An ambiguous step bound to an external (uneditable) binding first, then a local one.</summary>
+    private ProjectStepDefinitionBinding SetupAmbiguousStepWithExternalFirst()
+    {
+        SetupBuffer(LocalStepsCsText);
+        var local = MakeBinding(
+            ScenarioBlock.Given, new Regex($"^{ExternalStepText}$"), ExternalStepText,
+            line: 8, method: "N.Steps.GivenTheExternalStepRuns()");
+        var external = MakeExternalBinding(SourceLocation.Unresolved("/_/src/Lib/ExternalSteps.cs", 12, 9));
+        SetupFeatureStepBoundTo(external, local);
+        return local;
+    }
+
+    private Task<RenameTargetsResponse?> RenameTargetsAtExternalStepAsync() =>
+        CreateTargetsSut().HandleRenameTargetsAsync(
+            new RenameTargetsParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = ExternalFeatureUri },
+                Position     = new Position(2, 10)
+            },
+            CancellationToken.None);
+
+    [Fact]
+    public async Task RenameTargets_from_feature_leaves_out_a_binding_whose_source_is_outside_the_solution()
+    {
+        SetupAmbiguousStepWithExternalFirst();
+
+        var response = await RenameTargetsAtExternalStepAsync();
+
+        response!.Targets.Should().ContainSingle("only the editable binding may be offered for rename");
+        response.Targets[0].Label.Should().EndWith("— Steps.GivenTheExternalStepRuns()");
+        response.Targets[0].AttributeIndex.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RenameTargets_from_feature_lists_every_candidate_when_none_is_editable()
+    {
+        SetupFeatureStepBoundTo(
+            MakeExternalBinding(SourceLocation.Unresolved("/_/src/Lib/ExternalSteps.cs", 12, 9)),
+            MakeExternalBinding(location: null));
+
+        var response = await RenameTargetsAtExternalStepAsync();
+
+        response!.Targets.Should().HaveCount(2,
+            "an empty list would read as 'no step definition found'; the rename itself refuses with the reason");
+    }
+
+    [Fact]
+    public async Task Rename_from_feature_resolves_a_picked_index_against_the_filtered_candidates()
+    {
+        SetupAmbiguousStepWithExternalFirst();
+        var sut = CreateSut();
+
+        // Index 0 of the (filtered) picker list is the local binding; in the unfiltered list it
+        // would be the external one.
+        await sut.HandleSelectRenameTargetAsync(
+            new SelectRenameTargetParams
+            {
+                Uri = ExternalFeatureUri.ToString(),
+                Version = 0,
+                AttributeIndex = 0,
+                Position = new Position(2, 10),
+            },
+            CancellationToken.None);
+        var result = await RenameExternalStepAsync(sut);
+
+        result!.Changes.Should().ContainKey(CsUri, "the picked local binding's attribute is the one renamed");
+    }
+
+    [Fact]
+    public async Task Rename_from_feature_without_a_pick_renames_the_editable_candidate_of_an_ambiguous_step()
+    {
+        SetupAmbiguousStepWithExternalFirst();
+
+        // Plain F2 with no picker session falls back to the first candidate, which must be the
+        // editable one rather than the external binding listed ahead of it.
+        var result = await RenameExternalStepAsync(CreateSut());
+
+        result!.Changes.Should().ContainKey(CsUri);
+    }
+
     [Fact]
     public async Task PrepareRename_from_cs_reports_why_a_binding_outside_every_workspace_project_cannot_be_renamed()
     {

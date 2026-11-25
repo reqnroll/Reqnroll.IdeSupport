@@ -145,9 +145,14 @@ Without the check, a readable file outside the solution was edited, and a missin
 `.feature` edits, leaving every renamed step unbound. `RenameBindingResolver.GetUneditableReason` applies it before any edit
 is built and the rejection uses the `-32803` edit-rejected contract, so all three clients show the reason. Unlike the other
 `prepareRename` rules it throws rather than returning null, so the user learns why instead of getting no rename box.
-`reqnroll/renameTargets` does not apply it (Rider reports a failed `renameTargets` as "server not running"), so the VS
-command and Rider show the reason only after the new name is entered. A workspace folder counts as well as project
-ownership because Rider registers only the projects in its runnable-projects model.
+For an ambiguous `.feature` step, `RenameBindingResolver.FindBindingsAtFeatureStep` leaves out the candidates that fail
+the rule whenever at least one passes, so the `reqnroll/renameTargets` picker never offers them and plain F2's
+first-candidate fallback never lands on them. Every path that lists or indexes those candidates goes through that one
+method (the picker, `reqnroll/selectRenameTarget`'s index-to-binding lookup, the index-only fallback and `prepareRename`'s
+placeholder), so a picked index always means the same binding. When no candidate passes, the list is kept whole and the
+rename is refused with the reason: `renameTargets` never fails with it (Rider reports a failed `renameTargets` as "server
+not running"), so in that case the VS command and Rider show the reason only after the new name is entered. A workspace
+folder counts as well as project ownership because Rider registers only the projects in its runnable-projects model.
 
 *Rule 3.* Cucumber expressions treat only `{ } ( ) \ /` as special, so `?`, `*`, `+`, `[...]`, `^`, `$`, `|` are plain literals
 there (a currency amount like `${float}`), while in a regex the full operator set changes matching. `StepRenameValidator`

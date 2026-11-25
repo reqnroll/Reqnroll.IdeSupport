@@ -36,16 +36,28 @@ internal sealed class RenameBindingResolver
     }
 
     /// <summary>
-    /// Finds all bindings that match the feature step at the given cursor position
-    /// by querying the binding match cache for the owning projects.
+    /// Finds the bindings a rename of the feature step at the given cursor position may target,
+    /// by querying the binding match cache for the owning projects. When the step matches several
+    /// bindings, those a rename would refuse (see <see cref="GetUneditableReason"/>) are left out
+    /// as long as at least one other remains.
     /// </summary>
+    /// <remarks>
+    /// Every rename path that lists or indexes the candidates at a <c>.feature</c> step goes through
+    /// here: the <c>reqnroll/renameTargets</c> picker, the <c>reqnroll/selectRenameTarget</c>
+    /// lookup that turns the picked index back into a binding, the index-only fallback, plain
+    /// F2's first-candidate fallback, and <c>prepareRename</c>'s placeholder. The filter has to
+    /// apply to all of them alike: an index chosen from a filtered picker list but resolved
+    /// against an unfiltered one would name a different binding. When no candidate is editable
+    /// the list is returned whole, so the rename is refused with the reason rather than reported
+    /// as "no step definition found".
+    /// </remarks>
     public List<ProjectStepDefinitionBinding> FindBindingsAtFeatureStep(
         DocumentUri uri, string path, Position position) =>
         FindBindingsAtFeatureStep(uri, path, position, out _);
 
     /// <summary>
-    /// Finds all bindings that match the feature step at the given cursor position, and the
-    /// matched step's own text span (excluding the keyword/indentation) via <paramref
+    /// Finds the rename candidates at the feature step, filtered as described on the overload
+    /// above, and the matched step's own text span (excluding the keyword/indentation) via <paramref
     /// name="matchedRange"/>. Callers that only need the range for editing (prepareRename must
     /// offer exactly the text that HandleRenameAsync will later replace at <c>usage.Range</c> —
     /// otherwise the keyword/indentation the client seeds the dialog with gets duplicated when
@@ -98,7 +110,24 @@ internal sealed class RenameBindingResolver
             }
         }
 
-        return matchedBindings.ToList();
+        return PreferEditable(matchedBindings.ToList());
+    }
+
+    /// <summary>
+    /// Drops the candidates a rename would refuse, unless that would leave none.
+    /// </summary>
+    private List<ProjectStepDefinitionBinding> PreferEditable(List<ProjectStepDefinitionBinding> candidates)
+    {
+        if (candidates.Count < 2)
+            return candidates;
+
+        var editable = candidates.Where(b => GetUneditableReason(b) == null).ToList();
+        if (editable.Count == 0 || editable.Count == candidates.Count)
+            return candidates;
+
+        _logger.LogVerbose(
+            $"RenameBindingResolver: left out {candidates.Count - editable.Count} of {candidates.Count} candidate(s) whose source is outside the solution");
+        return editable;
     }
 
     /// <summary>

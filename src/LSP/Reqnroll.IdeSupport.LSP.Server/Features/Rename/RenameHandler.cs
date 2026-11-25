@@ -239,15 +239,14 @@ public sealed class RenameHandler
             return null;
         }
 
-        // Refused up front only when no candidate is renameable. With a mix, the disambiguation
-        // picker may still choose an editable one, and HandleRenameAsync re-checks whichever binding
-        // is finally resolved. An error rather than null so the client shows the reason
-        // (VS Code shows the message in place of the rename box).
-        var uneditableReasons = featureBindings.Select(_bindingResolver.GetUneditableReason).ToList();
-        if (uneditableReasons.All(reason => reason != null))
+        // The candidates already exclude uneditable bindings whenever an editable one exists, so
+        // the first is uneditable only when they all are: refuse up front then. An error rather
+        // than null so the client shows the reason (VS Code shows the message in place of the
+        // rename box). HandleRenameAsync still re-checks whichever binding is finally resolved.
+        if (_bindingResolver.GetUneditableReason(featureBindings[0]) is { } notEditable)
         {
-            _logger.LogVerbose($"RenameHandler: prepareRename — {uneditableReasons[0]}");
-            throw RenameFailedError(uneditableReasons[0]!, "rename");
+            _logger.LogVerbose($"RenameHandler: prepareRename — {notEditable}");
+            throw RenameFailedError(notEditable, "rename");
         }
 
         // When ambiguous (2+ candidate bindings), a plain F2 rename would fall back to the
