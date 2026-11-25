@@ -42,6 +42,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     private readonly IEnableTelemetryChecker _enableTelemetryChecker;
     private readonly IIdeSupportLogger? _logger;
     private readonly ITelemetryDebugLog _debugLog;
+    private readonly ReqnrollProjectTelemetryGate _gate;
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromMilliseconds(500);
 
     /// <summary>MEF importing constructor; builds a real <see cref="TelemetryClient"/> backed by Application Insights.</summary>
@@ -59,18 +60,21 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     /// <summary>
     /// Test seam: inject a <see cref="TelemetryClient"/> backed by an in-memory channel so
     /// transmission can be asserted without contacting Application Insights, and an
-    /// <see cref="ITelemetryDebugLog"/> to assert what the host mirrored.
+    /// <see cref="ITelemetryDebugLog"/> to assert what the host mirrored. <paramref name="gate"/>
+    /// defaults to <see cref="ReqnrollProjectTelemetryGate.Shared"/>.
     /// </summary>
     internal TelemetryTransmitter(
         TelemetryClient telemetryClient,
         IEnableTelemetryChecker enableTelemetryChecker,
         IIdeSupportLogger? logger = null,
-        ITelemetryDebugLog? debugLog = null)
+        ITelemetryDebugLog? debugLog = null,
+        ReqnrollProjectTelemetryGate? gate = null)
     {
         _telemetryClient = telemetryClient;
         _enableTelemetryChecker = enableTelemetryChecker;
         _logger = logger;
         _debugLog = debugLog ?? NullTelemetryDebugLog.Instance;
+        _gate = gate ?? ReqnrollProjectTelemetryGate.Shared;
     }
 
     private static string? ReadBuiltInConnectionString()
@@ -140,9 +144,17 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
 
     /// <summary>
     /// Transmits <paramref name="telemetryEvent"/> to Application Insights unless telemetry is
-    /// disabled; always mirrors the event (sent or not) to the debug log.
+    /// disabled; always mirrors the event (sent or not) to the debug log. Until the language server
+    /// reports a Reqnroll project, everything but errors is held by <see cref="ReqnrollProjectTelemetryGate"/>,
+    /// and a held event keeps the time it was raised.
     /// </summary>
     public void TransmitEvent(ITelemetryEvent telemetryEvent)
+    {
+        var timestamp = DateTime.UtcNow;
+        _gate.Send(telemetryEvent.EventName, () => TransmitEventNow(telemetryEvent, timestamp));
+    }
+
+    private void TransmitEventNow(ITelemetryEvent telemetryEvent, DateTime timestamp)
     {
         var enabled = _enableTelemetryChecker.IsEnabled();
         try
@@ -157,7 +169,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
                 return;
             }
 
-            var eventTelemetry = new EventTelemetry(telemetryEvent.EventName) { Timestamp = DateTime.UtcNow };
+            var eventTelemetry = new EventTelemetry(telemetryEvent.EventName) { Timestamp = timestamp };
             foreach (var property in telemetryEvent.Properties)
             {
                 eventTelemetry.Properties.Add(property.Key, property.Value?.ToString() ?? string.Empty);

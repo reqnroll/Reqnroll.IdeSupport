@@ -7,6 +7,7 @@ import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
 import { builtInConnectionString, TelemetryEnvironment } from './telemetryConnections';
 import { TELEMETRY_ENVIRONMENT } from './generated/telemetryEnvironment';
 import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_PROPERTY } from './clientSession';
+import { ReqnrollProjectGate, reqnrollProjectGate } from './reqnrollProjectGate';
 
 // Same Application Insights resource VS's TelemetryTransmitter uses (see
 // src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.*.txt)
@@ -79,6 +80,14 @@ let reporter: TelemetryReporter | undefined;
 let logger: vscode.TelemetryLogger | undefined;
 // Set by the sender when the reporter throws, because the logger swallows sender errors.
 let lastSendError: string | undefined;
+
+// Holds every event but errors until the server reports a Reqnroll project; see reqnrollProjectGate.ts.
+let gate: ReqnrollProjectGate = reqnrollProjectGate;
+
+/** Test hook: replaces the Reqnroll-project gate `sendTelemetryEvent` goes through. Not used in production code. */
+export function setReqnrollProjectGateForTests(replacement: ReqnrollProjectGate | undefined): void {
+  gate = replacement ?? reqnrollProjectGate;
+}
 
 const EXTENSION_ID_PREFIX = /^[^/\s]+\.[^/\s]+\//;
 
@@ -305,8 +314,18 @@ function extensionVersion(): string {
  * notification forwarder in `registerTelemetry` calls this too), so mirroring the attempt here to
  * the local debug log — independent of `enabled`/whether a reporter exists, matching
  * VS's `TelemetryTransmitter.TransmitEvent` — covers both paths with one call site.
+ *
+ * Until the server reports a project that uses Reqnroll, everything but errors is held by the
+ * Reqnroll-project gate (`reqnrollProjectGate.ts`) and sent, or mirrored, only once it opens.
  */
 export function sendTelemetryEvent(
+  eventName: string,
+  properties?: Record<string, TelemetryPropertyValue>,
+): void {
+  gate.send(eventName, () => sendTelemetryEventNow(eventName, properties));
+}
+
+function sendTelemetryEventNow(
   eventName: string,
   properties?: Record<string, TelemetryPropertyValue>,
 ): void {

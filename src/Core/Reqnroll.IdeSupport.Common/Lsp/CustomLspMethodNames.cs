@@ -67,6 +67,12 @@ public static class CustomLspMethodNames
     /// standard <c>window/logMessage</c>, which clients route to a generic language-server channel.
     /// </summary>
     public const string ReqnrollLogMessage = "reqnroll/logMessage";
+    /// <summary>
+    /// Method name for the <c>reqnroll/reqnrollProjectDetected</c> notification: sent once per server
+    /// process, without parameters, when the first project that uses Reqnroll is seen. Clients hold
+    /// their non-error telemetry until it arrives, so a solution without Reqnroll sends none.
+    /// </summary>
+    public const string ReqnrollProjectDetected = "reqnroll/reqnrollProjectDetected";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
     public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>

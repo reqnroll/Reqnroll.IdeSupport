@@ -70,12 +70,18 @@ class ExtensionLifecycleTelemetry(
 }
 
 /**
- * Reports the extension lifecycle once per IDE process (the activity runs per opened project, so
- * only the first one counts), persisting state in the application-level [PropertiesComponent].
+ * Reports the extension lifecycle once per IDE process, when the language server first reports a
+ * project that uses Reqnroll, so a solution without Reqnroll neither sends lifecycle events nor
+ * counts as a day of use. State is persisted in the application-level [PropertiesComponent]. The
+ * activity runs per opened project, so only the first one arms the report.
  */
 class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
-        if (!reported.compareAndSet(false, true)) return
+        if (!armed.compareAndSet(false, true)) return
+        ReqnrollProjectTelemetryGate.shared.onOpened(::report)
+    }
+
+    private fun report() {
         try {
             val version = ReqnrollPlugin.descriptor()?.version ?: return
             val properties = PropertiesComponent.getInstance()
@@ -90,6 +96,6 @@ class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     }
 
     private companion object {
-        val reported = AtomicBoolean(false)
+        val armed = AtomicBoolean(false)
     }
 }

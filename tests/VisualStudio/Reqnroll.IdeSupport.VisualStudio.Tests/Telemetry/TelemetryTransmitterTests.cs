@@ -25,6 +25,15 @@ public class TelemetryTransmitterTests
     private readonly List<string> _verboseLogLines = new();
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
     private readonly CapturingDebugLog _debugLog = new();
+    // Open unless a test closes it, so tests about transmission are not held by the Reqnroll-project gate.
+    private ReqnrollProjectTelemetryGate _gate = OpenGate();
+
+    private static ReqnrollProjectTelemetryGate OpenGate()
+    {
+        var gate = new ReqnrollProjectTelemetryGate();
+        gate.Open();
+        return gate;
+    }
 
     [Fact]
     public void Should_NotSendTelemetry_WhenDisabled()
@@ -132,6 +141,60 @@ public class TelemetryTransmitterTests
     // instance the way it does for common collection interfaces, so a bare
     // Substitute.For<ITelemetryEvent>() has a null Properties and blows up in the
     // foreach inside TransmitEvent.
+    [Fact]
+    public void Should_HoldEvents_UntilAReqnrollProjectIsReported()
+    {
+        _gate = new ReqnrollProjectTelemetryGate();
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+
+        sut.TransmitEvent(FakeTelemetryEvent(TelemetryEvents.LifecycleExtensionLoaded));
+
+        _telemetryChannel.SentTelemtries.Should().BeEmpty();
+        _debugLog.Records.Should().BeEmpty();
+
+        _gate.Open();
+
+        _telemetryChannel.SentTelemtries.Should().ContainSingle()
+            .Which.Should().BeOfType<EventTelemetry>()
+            .Which.Name.Should().Be(TelemetryEvents.LifecycleExtensionLoaded);
+    }
+
+    [Fact]
+    public void Should_KeepTheTimeAHeldEventWasRaised()
+    {
+        _gate = new ReqnrollProjectTelemetryGate();
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        var before = DateTime.UtcNow;
+
+        sut.TransmitEvent(FakeTelemetryEvent(TelemetryEvents.LifecycleExtensionLoaded));
+        var after = DateTime.UtcNow;
+        _gate.Open();
+
+        _telemetryChannel.SentTelemtries.Single().Timestamp.UtcDateTime.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+    }
+
+    [Fact]
+    public void Should_SendErrors_BeforeAReqnrollProjectIsReported()
+    {
+        _gate = new ReqnrollProjectTelemetryGate();
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+
+        sut.TransmitEvent(FakeTelemetryEvent(TelemetryEvents.ServerProcessStartFailed));
+        sut.TransmitExceptionEvent(new InvalidOperationException("boom"), []);
+
+        _telemetryChannel.SentTelemtries.Should().HaveCount(2);
+    }
+
+    private static ITelemetryEvent FakeTelemetryEvent(string eventName)
+    {
+        var telemetryEvent = FakeTelemetryEvent();
+        telemetryEvent.EventName.Returns(eventName);
+        return telemetryEvent;
+    }
+
     private static ITelemetryEvent FakeTelemetryEvent()
     {
         var telemetryEvent = Substitute.For<ITelemetryEvent>();
@@ -168,7 +231,7 @@ public class TelemetryTransmitterTests
             if (m.Level == System.Diagnostics.TraceLevel.Info) _infoLogLines.Add(m.Message);
             else if (m.Level == System.Diagnostics.TraceLevel.Verbose) _verboseLogLines.Add(m.Message);
         });
-        return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, logger, _debugLog);
+        return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, logger, _debugLog, _gate);
     }
 
     // ── Unreachable endpoint ───────────────────────────────────────────────

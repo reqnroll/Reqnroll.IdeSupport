@@ -46,9 +46,9 @@ Every event, ordered by name. "From" says where the event originates: the LSP se
 | `Command.TagLink` | All clients | The user followed a clickable tag link. | 5 |
 | `Error.UnhandledException` | Server, VS Code, Rider | An exception was caught and reported. | 6 |
 | `Error.VsWellKnownIdsMismatch` | VS | The start-up self-check found a hard-coded Visual Studio command identifier that no longer matches. | 6 |
-| `Lifecycle.Extension.Installed` | All clients | First activation after installation. | 4 |
-| `Lifecycle.Extension.Loaded` | All clients | The extension activated. | 4 |
-| `Lifecycle.Extension.Upgraded` | All clients | First activation after a version change. | 4 |
+| `Lifecycle.Extension.Installed` | All clients | First activation after installation, once a Reqnroll project is detected. | 4 |
+| `Lifecycle.Extension.Loaded` | All clients | The first Reqnroll project was detected in this IDE process. | 4 |
+| `Lifecycle.Extension.Upgraded` | All clients | First activation after a version change, once a Reqnroll project is detected. | 4 |
 | `Lifecycle.Link.Clicked` | VS | A link in the welcome or upgrade dialog was opened. | 4 |
 | `Lifecycle.UpgradeDialog.Dismissed` | VS | The upgrade dialog was closed. | 4 |
 | `Lifecycle.Usage.Recorded` | All clients | Daily-use heartbeat; `UsageDays` is the running count of days used. | 4 |
@@ -128,6 +128,25 @@ turn sending on or off. The `prod` selection is tied to the build kind: a VS `De
 (`effectiveEnvironment`, `reqnroll.devSandbox`) are **always dev**, whatever `REQNROLL_TELEMETRY_ENV`
 requests; only a Release/packaged build can report to prod. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
 redirect to your own resource.
+
+**Reqnroll-project gate.** No IDE sends telemetry for a solution or workspace without Reqnroll,
+other than errors. The language server sends `reqnroll/reqnrollProjectDetected` (no params, once per
+server process; [`ReqnrollProjectPresenceNotifier`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Workspace/ReqnrollProjectPresenceNotifier.cs))
+when the first project that uses Reqnroll is reported: one that `ReqnrollProjectDetector` recognises
+by a Reqnroll package reference, a `Reqnroll.dll` next to its output assembly, or
+`ide.reqnroll.isReqnrollProject` in its `reqnroll.json`, with or without feature files. A project is
+checked when it is first reported and after every binding-registry replacement, which is what finds a
+Rider project once it is built. Until then each host's single send point holds every event, its own
+and the ones the server relays: VS's `TelemetryTransmitter.TransmitEvent` and Rider's
+`RiderTelemetryTransmitter.transmit` through `ReqnrollProjectTelemetryGate`, VS Code's
+`sendTelemetryEvent` through `reqnrollProjectGate.ts`. When the notification arrives the held events
+are sent in order (VS and Rider keep the time each was raised; VS Code stamps the send time), at most
+200 of them; the rest, and anything still held when the IDE closes, are dropped. Never held, and
+subject only to the opt-outs below: `Error.*` (including `Error.UnhandledException` and
+`Error.VsWellKnownIdsMismatch`), `Server.Process.StartFailed`, `Server.Process.ExitedUnexpectedly` and
+`Server.Process.ConnectionLost`. `Server.Process.Restarted` is held. The lifecycle events
+(`Lifecycle.Extension.*`, `Lifecycle.Usage.Recorded`) are not just held but computed only once the
+gate opens, so a day without a Reqnroll project is not counted as a day of use (§4).
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
@@ -564,9 +583,15 @@ events are all emitted by `VSSDKIntegration/Telemetry/TelemetryService.cs` (`Mon
 `ITelemetryTransmitter`. Events that fire before the LSP server starts (install, upgrade) can
 only originate here.
 
+All four lifecycle events, in every IDE, are computed only once the language server has reported a
+project that uses Reqnroll (the Reqnroll-project gate, §1): not at IDE start, and not at all in a
+solution without Reqnroll. In VS the welcome and upgrade dialogs wait for the same signal, since
+`WelcomeService` drives both. A day on which no Reqnroll project is seen is not counted in
+`UsageDays`.
+
 | Event | Emitter / when | Properties |
 |---|---|---|
-| `Lifecycle.Extension.Loaded` | `MonitorOpenProjectSystem` — on extension activation in an IDE scope | — |
+| `Lifecycle.Extension.Loaded` | `MonitorOpenProjectSystem` — once per VS process, when the first Reqnroll project is detected | — |
 | `Lifecycle.Extension.Installed` | `MonitorExtensionInstalled` — first activation after installation | — |
 | `Lifecycle.Extension.Upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
 | `Lifecycle.Usage.Recorded` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService`, right after incrementing `UsageDays`); the running day count is the `UsageDays` property | `UsageDays` |
@@ -587,17 +612,17 @@ IDEs expose the same install -> upgrade funnel and daily-use retention signal di
 
 | Event | Fires | Properties |
 |---|---|---|
-| `Lifecycle.Extension.Loaded` | every activation (VS Code: extension activation; Rider: first project startup of an IDE process) | — |
-| `Lifecycle.Extension.Installed` | first activation with no stored lifecycle state | — |
+| `Lifecycle.Extension.Loaded` | once per extension host (VS Code) or IDE process (Rider), when the first Reqnroll project is detected | — |
+| `Lifecycle.Extension.Installed` | first Reqnroll project detected with no stored lifecycle state | — |
 | `Lifecycle.Extension.Upgraded` | stored version is lower than the running version (a downgrade sends nothing) | `OldExtensionVersion` |
-| `Lifecycle.Usage.Recorded` | first activation of each new local calendar day after install (not on the install day) | `UsageDays` — running count of such days |
+| `Lifecycle.Usage.Recorded` | first Reqnroll project detected on each new local calendar day after install (not on the install day) | `UsageDays` — running count of such days |
 
 Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
 `reqnroll.telemetry.lifecycle` (`src/VSCode/src/extensionLifecycleTelemetry.ts`); Rider keeps the same
 three values in the application-level `PropertiesComponent` under `net.reqnroll.idesupport.telemetry.*`
 (`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
 `WelcomeService`, and unit-tested. A client with no stored lifecycle state reports
-`Lifecycle.Extension.Installed` on its first activation even if the extension was installed earlier; filter by `ExtensionVersion` when
+`Lifecycle.Extension.Installed` the first time it sees a Reqnroll project even if the extension was installed earlier; filter by `ExtensionVersion` when
 counting true new installs. `ai.user.id` remains per IDE, so one person using two IDEs counts as two users.
 `Server.Session.Started` (from all IDEs) is available as a cross-check.
 

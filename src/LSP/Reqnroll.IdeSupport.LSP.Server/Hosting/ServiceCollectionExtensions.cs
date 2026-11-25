@@ -162,6 +162,9 @@ public static class ServiceCollectionExtensions
             // each feature file is resolved against only its own project's bindings.
             // Messages for the user's Reqnroll output pane in the IDE (reqnroll/logMessage).
             .AddSingleton<IClientOutputLog, ClientOutputLog>()
+            // Sends reqnroll/reqnrollProjectDetected once the first project that uses Reqnroll is
+            // seen; clients hold their non-error telemetry until then.
+            .AddSingleton<ReqnrollProjectPresenceNotifier>()
             .AddSingleton<BindingRegistryProviderRouter>()
             .AddSingleton<IProjectBindingRegistryLookup>(sp => sp.GetRequiredService<BindingRegistryProviderRouter>())
             // Per-project tag index feeding tag completion: tags in use across the

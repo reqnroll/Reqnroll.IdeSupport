@@ -8,6 +8,7 @@ import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { CLIENT_SESSION_ID } from '../clientSession';
 import { setAppLogChannel } from '../logging/appNotify';
 import { TELEMETRY_UNAVAILABLE_NOTICE, TelemetryCircuitBreaker } from '../telemetryCircuitBreaker';
+import { ReqnrollProjectGate } from '../reqnrollProjectGate';
 import {
   deferTelemetryTeardownUntil,
   drainTelemetryTeardown,
@@ -17,6 +18,7 @@ import {
   resolveConnectionString,
   effectiveTelemetryEnvironment,
   sendTelemetryEvent,
+  setReqnrollProjectGateForTests,
   stripExtensionIdPrefix,
   withClientIdentity,
 } from '../telemetry';
@@ -512,6 +514,29 @@ suite('telemetry', () => {
         assert.strictEqual(records[0].props?.IdeClient, 'vscode');
         assert.strictEqual(records[0].props?.ClientSessionId, CLIENT_SESSION_ID);
       });
+    });
+
+    test('holds all but errors until a Reqnroll project is reported, then sends and mirrors them', () => {
+      const closed = new ReqnrollProjectGate();
+      setReqnrollProjectGateForTests(closed);
+      try {
+        sendTelemetryEvent('Lifecycle.Extension.Loaded');
+        sendTelemetryEvent('Error.UnhandledException');
+        assert.deepStrictEqual(
+          readRecords().map((r) => r.event),
+          ['Error.UnhandledException'],
+        );
+
+        closed.open();
+        assert.deepStrictEqual(
+          readRecords().map((r) => r.event),
+          ['Error.UnhandledException', 'Lifecycle.Extension.Loaded'],
+        );
+      } finally {
+        const open = new ReqnrollProjectGate();
+        open.open();
+        setReqnrollProjectGateForTests(open);
+      }
     });
 
     test('mirrors as enabled:false/transmitted:false when the kill switch is off, even though it still no-ops the reporter', () => {

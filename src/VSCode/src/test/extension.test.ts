@@ -27,6 +27,7 @@ import './lsp/codeLensRefresh.test';
 import './lsp/tagLinks.test';
 import './lsp/definitionNavigation.test';
 import './telemetry.test';
+import './reqnrollProjectGate.test';
 import './clientExceptionTelemetry.test';
 import './resolveServerPath.test';
 import './commands/renameStep.test';

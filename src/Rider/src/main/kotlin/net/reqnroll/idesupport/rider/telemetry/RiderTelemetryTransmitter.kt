@@ -161,6 +161,13 @@ object RiderTelemetryTransmitter {
      * `TelemetryTransmitter.TransmitEvent` and VS Code's `telemetry.ts#sendTelemetryEvent`.
      */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
+        // Until the server reports a Reqnroll project, everything but errors is held by the gate;
+        // a held event keeps the time it was raised.
+        val timestamp = Instant.now()
+        ReqnrollProjectTelemetryGate.shared.send(eventName) { transmitNow(eventName, properties, timestamp) }
+    }
+
+    private fun transmitNow(eventName: String, properties: Map<String, Any?>, timestamp: Instant) {
         val debugLog = RiderTelemetryDebugLog.fromEnvironment()
         val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
         val stringProps = stampedProperties(properties)
@@ -177,7 +184,7 @@ object RiderTelemetryTransmitter {
         }
 
         try {
-            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
+            val body = buildEnvelope(eventName, userId(), stringProps, timestamp, connection.instrumentationKey)
             post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
                 debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = reason)
             }

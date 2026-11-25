@@ -1,7 +1,8 @@
 import * as path from 'path';
 import Mocha from 'mocha';
 import type * as vscode from 'vscode';
-import { setTelemetryLoggerFactoryForTests } from '../telemetry';
+import { setReqnrollProjectGateForTests, setTelemetryLoggerFactoryForTests } from '../telemetry';
+import { ReqnrollProjectGate } from '../reqnrollProjectGate';
 
 /**
  * Bootstraps the Mocha `suite`/`test` globals inside the Extension Development Host and runs the
@@ -42,6 +43,12 @@ export function run(): Promise<void> {
       dispose: () => undefined,
     } as unknown as vscode.TelemetryLogger;
   });
+
+  // The telemetry suites assert that events are sent, which in production waits for the server to
+  // report a Reqnroll project. Send through an open gate; reqnrollProjectGate.test covers the gate.
+  const openGate = new ReqnrollProjectGate();
+  openGate.open();
+  setReqnrollProjectGateForTests(openGate);
 
   // extension.test.js pulls in the other suites (projectManager.test, lspInspectorLogger.test)
   // via its own imports, so registering just the entry point is enough.

@@ -58,6 +58,7 @@ import {
 import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
 import { ServerProcessTracker } from './lsp/serverProcessTracker';
 import { reportExtensionLifecycle } from './extensionLifecycleTelemetry';
+import { reqnrollProjectGate, registerReqnrollProjectDetected } from './reqnrollProjectGate';
 import {
   SOURCE_ACTIVATION,
   createReportingErrorHandler,
@@ -503,8 +504,11 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // before `client.start()` so a server that never comes up can still report; `registerTelemetry`
   // below reuses it. Attached before start so the first `Starting` transition is seen.
   ensureTelemetryReporter(context);
-  // Install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
-  void reportExtensionLifecycle(context, sendTelemetryEvent);
+  // Install / upgrade / daily-usage lifecycle events, parity with Visual Studio. They wait until the
+  // server reports a project that uses Reqnroll, so a workspace without Reqnroll neither sends them
+  // nor counts as a day of use. Subscribed before start() so every server (re)start is covered.
+  context.subscriptions.push(registerReqnrollProjectDetected(client));
+  reqnrollProjectGate.onOpened(() => void reportExtensionLifecycle(context, sendTelemetryEvent));
   serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent, serverProcessTracker);
   context.subscriptions.push(serverLifecycle);
 
