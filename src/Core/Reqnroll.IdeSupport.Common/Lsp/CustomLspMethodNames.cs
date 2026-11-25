@@ -61,6 +61,12 @@ public static class CustomLspMethodNames
     public const string ReqnrollDocumentSymbolHierarchical = "reqnroll/documentSymbolHierarchical";
     /// <summary>Method name for the <c>reqnroll/documentActivated</c> notification.</summary>
     public const string ReqnrollDocumentActivated = "reqnroll/documentActivated";
+    /// <summary>
+    /// Method name for the <c>reqnroll/logMessage</c> notification: a message from the server for the
+    /// client's own Reqnroll output pane, with the same <c>{ type, message }</c> parameters as the
+    /// standard <c>window/logMessage</c>, which clients route to a generic language-server channel.
+    /// </summary>
+    public const string ReqnrollLogMessage = "reqnroll/logMessage";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
     public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>

@@ -1,6 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
@@ -8,7 +9,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>A <c>.cs</c> file selected for Roslyn reconciliation, paired with the text to parse.</summary>
-internal sealed record CsFileToReconcile(string FilePath, string Text);
+public sealed record CsFileToReconcile(string FilePath, string Text);
 
 /// <summary>
 /// Selects the <c>.cs</c> files <see cref="BindingRegistryChangedHandler"/> should
@@ -20,8 +21,10 @@ internal sealed record CsFileToReconcile(string FilePath, string Text);
 ///   <item>closed step-definition files on disk whose last-write time is newer than the
 ///   project's compiled output assembly — i.e. edited then saved without a rebuild.</item>
 /// </list>
+/// It also supplies every binding source file of a project (<see cref="GetBindingSourceFiles"/>)
+/// for the source-level fallback that runs when the connector cannot discover bindings.
 /// </summary>
-internal sealed class CsFileReconciliationSelector
+internal sealed class CsFileReconciliationSelector : IBindingSourceFileProvider
 {
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly ICSharpFileTextCache _csharpFileTextCache;
@@ -71,18 +74,7 @@ internal sealed class CsFileReconciliationSelector
         //    "Minimal"). IDocumentBufferService never holds .cs content (Gherkin-only, by
         //    design) — this reads from ICSharpFileTextCache instead, which TextDocumentSyncHandler
         //    keeps live for every open .cs file regardless of what triggered the last edit.
-        var openByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in _csharpFileTextCache.All)
-        {
-            var path = entry.Uri.GetFileSystemPath();
-            if (!string.IsNullOrEmpty(path)
-                && path!.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrEmpty(entry.Text)
-                && _scopeManager.ResolveOwners(entry.Uri).Contains(project))
-            {
-                openByPath[path] = entry.Text;
-            }
-        }
+        var openByPath = CollectOpenBuffers(project);
 
         var result = openByPath.Select(kvp => new CsFileToReconcile(kvp.Key, kvp.Value)).ToList();
 
@@ -117,6 +109,57 @@ internal sealed class CsFileReconciliationSelector
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Returns every <c>.cs</c> file of <paramref name="project"/>, regardless of build state: open
+    /// project-owned buffers with their buffer text, plus every other project step-definition file
+    /// with its on-disk text. Files that cannot be read are logged and left out.
+    /// </summary>
+    public IReadOnlyList<CsFileToReconcile> GetBindingSourceFiles(LspReqnrollProject project)
+    {
+        if (string.IsNullOrEmpty(project.ProjectFolder))
+            return [];
+
+        var openByPath = CollectOpenBuffers(project);
+        var result = openByPath.Select(kvp => new CsFileToReconcile(kvp.Key, kvp.Value)).ToList();
+
+        foreach (var path in EnumerateProjectStepDefinitionFiles(project))
+        {
+            if (openByPath.ContainsKey(path))
+                continue;
+
+            try
+            {
+                result.Add(new CsFileToReconcile(path, _fileSystem.File.ReadAllText(path)));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    $"[Source fallback] Could not read '{path}' for source-level discovery: {ex.Message}");
+            }
+        }
+
+        return result;
+    }
+
+    // Open, project-owned .cs buffers keyed by path, with their live text.
+    private Dictionary<string, string> CollectOpenBuffers(LspReqnrollProject project)
+    {
+        var openByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in _csharpFileTextCache.All)
+        {
+            var path = entry.Uri.GetFileSystemPath();
+            if (!string.IsNullOrEmpty(path)
+                && path!.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(entry.Text)
+                && _scopeManager.ResolveOwners(entry.Uri).Contains(project))
+            {
+                openByPath[path] = entry.Text;
+            }
+        }
+
+        return openByPath;
     }
 
     private DateTime? GetAssemblyWriteTimeUtc(LspReqnrollProject project)

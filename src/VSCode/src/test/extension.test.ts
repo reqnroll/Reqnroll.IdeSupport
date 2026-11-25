@@ -18,6 +18,7 @@ import './lsp/serverLifecycleTelemetry.test';
 import './lsp/serverProcessTracker.test';
 import './lsp/serverCrashReport.test';
 import './lsp/serverRestart.test';
+import './lsp/serverLogMessages.test';
 // Must precede `commands/stepCodeLens.test` and `commands/hookCodeLens.test` below (and, for the
 // same reason, everything else that could reach a real `activate()`): `getCodeLensRefreshEvent`
 // guards a module-level singleton that only its first caller in the whole process actually wires

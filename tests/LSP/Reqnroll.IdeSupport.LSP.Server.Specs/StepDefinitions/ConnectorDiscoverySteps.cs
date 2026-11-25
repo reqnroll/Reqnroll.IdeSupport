@@ -58,4 +58,54 @@ public sealed class ConnectorDiscoverySteps
             }
         });
     }
+
+    /// <summary>
+    /// Announces a Reqnroll project whose output assembly exists but is not a valid assembly, so
+    /// the real out-of-process connector starts and fails to load it.
+    /// </summary>
+    [When("the project is announced with an output assembly the connector cannot load")]
+    public async Task WhenTheProjectIsAnnouncedWithAnUnloadableAssembly()
+    {
+        Skip.IfNot(FixtureDiscovery.IsAvailable,
+            "The connector binaries were not deployed next to the test host; build the solution so " +
+            "the specs' DeployDiscoveryAssets target runs.");
+
+        await _ctx.EnsureStartedAsync().ConfigureAwait(false);
+
+        var project = _ctx.RegisterProject(
+            LspScenarioContext.DefaultProjectFileName,
+            targetFrameworkMoniker: FixtureTargetFrameworkMoniker);
+
+        var assemblyPath = Path.Combine(project.ProjectFolder, "bin", "Debug", "net10.0", "Sample.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(assemblyPath)!);
+        await File.WriteAllTextAsync(assemblyPath, "this is not an assembly").ConfigureAwait(false);
+
+        _ctx.Harness.Client.SendProjectLoaded(new
+        {
+            workspaceFolder = _ctx.WorkspaceFolder,
+            projectFile = project.ProjectFile,
+            projectFolder = project.ProjectFolder,
+            outputAssemblyPath = assemblyPath,
+            targetFrameworkMoniker = project.TargetFrameworkMoniker,
+            packageReferences = new object[]
+            {
+                new { packageId = "Reqnroll", version = "2.1.0", installPath = "" }
+            }
+        });
+    }
+
+    [Then(@"a warning containing ""([^""]*)"" is sent to the Reqnroll output pane within (\d+) seconds")]
+    public async Task ThenAWarningIsSentToTheOutputPane(string text, int seconds)
+    {
+        // MessageType.Warning in the LSP LogMessageParams shape.
+        const int warning = 2;
+        var sent = await _ctx.Harness.WaitForReqnrollLogMessageAsync(
+                (type, message) => type == warning && message.Contains(text, StringComparison.Ordinal),
+                seconds * 1000)
+            .ConfigureAwait(false);
+
+        Assert.True(sent,
+            $"expected a reqnroll/logMessage warning containing '{text}'; received: " +
+            string.Join(" | ", _ctx.Harness.ReqnrollLogMessages.Select(m => $"[{m.Type}] {m.Message}")));
+    }
 }

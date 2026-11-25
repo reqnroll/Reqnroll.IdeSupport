@@ -70,6 +70,49 @@ public sealed class LspServerHarness : IAsyncDisposable
         get { lock (_pushLock) return _pushes.ToArray(); }
     }
 
+    private readonly object _logMessageLock = new();
+    private readonly List<(int Type, string Message)> _logMessages = new();
+    private TaskCompletionSource<int> _logMessageSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>The <c>reqnroll/logMessage</c> notifications (for the IDE's Reqnroll output pane) received so far.</summary>
+    public IReadOnlyList<(int Type, string Message)> ReqnrollLogMessages
+    {
+        get { lock (_logMessageLock) return _logMessages.ToArray(); }
+    }
+
+    /// <summary>Waits until a <c>reqnroll/logMessage</c> matching <paramref name="match"/> has arrived.</summary>
+    public async Task<bool> WaitForReqnrollLogMessageAsync(Func<int, string, bool> match, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            Task signal;
+            lock (_logMessageLock)
+            {
+                if (_logMessages.Any(m => match(m.Type, m.Message)))
+                    return true;
+                signal = _logMessageSignal.Task;
+            }
+
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                return false;
+            await Task.WhenAny(signal, Task.Delay(remaining)).ConfigureAwait(false);
+        }
+    }
+
+    private void RecordReqnrollLogMessage(int type, string message)
+    {
+        TaskCompletionSource<int> previous;
+        lock (_logMessageLock)
+        {
+            _logMessages.Add((type, message));
+            previous = _logMessageSignal;
+            _logMessageSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        previous.TrySetResult(0);
+    }
+
     private readonly object _applyEditLock = new();
     private ApplyWorkspaceEditParams? _lastApplyEdit;
     private TaskCompletionSource<int> _applyEditSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -186,6 +229,15 @@ public sealed class LspServerHarness : IAsyncDisposable
                 int? startLine = p["startLine"]?.Type == JTokenType.Integer ? p["startLine"]!.Value<int>() : null;
                 int? endLine = p["endLine"]?.Type == JTokenType.Integer ? p["endLine"]!.Value<int>() : null;
                 RecordPush(uri, count, startLine, endLine);
+                return Task.CompletedTask;
+            });
+
+            // Sink for the server's messages for the IDE's Reqnroll output pane.
+            options.OnNotification("reqnroll/logMessage", (JToken p) =>
+            {
+                RecordReqnrollLogMessage(
+                    p["type"]?.Value<int>() ?? 0,
+                    p["message"]?.Value<string>() ?? string.Empty);
                 return Task.CompletedTask;
             });
 

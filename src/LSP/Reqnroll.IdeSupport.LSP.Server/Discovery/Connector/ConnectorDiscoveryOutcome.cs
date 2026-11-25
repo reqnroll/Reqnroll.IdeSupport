@@ -15,10 +15,16 @@ public enum ConnectorDiscoveryStatus
     Failed,
 
     /// <summary>
-    /// Discovery could not run: no output assembly (path unset or not built yet), or the project is
-    /// not a Reqnroll test project. Nothing was discovered and nothing failed.
+    /// Discovery could not run because there is no output assembly (path unset or not built yet).
+    /// Nothing was discovered and nothing failed.
     /// </summary>
     Skipped,
+
+    /// <summary>
+    /// The project is not a Reqnroll test project, so the connector was not invoked. Unlike
+    /// <see cref="Skipped"/>, no binding discovery is expected for the project at all.
+    /// </summary>
+    NotReqnrollProject,
 }
 
 /// <summary>
@@ -33,8 +39,12 @@ public enum ConnectorDiscoveryStatus
 /// <param name="Status">How the run ended.</param>
 /// <param name="Registry">The new registry when discovered; otherwise the caller's last-good registry.</param>
 /// <param name="Hash">The new assembly hash when discovered; otherwise the caller's last hash.</param>
+/// <param name="FailureReason">
+/// For <see cref="ConnectorDiscoveryStatus.Failed"/>: the connector's error message, or the message
+/// of the exception it threw; otherwise <see langword="null"/>.
+/// </param>
 public sealed record ConnectorDiscoveryOutcome(
-    ConnectorDiscoveryStatus Status, ProjectBindingRegistry Registry, string Hash)
+    ConnectorDiscoveryStatus Status, ProjectBindingRegistry Registry, string Hash, string? FailureReason = null)
 {
     /// <summary>A new registry for a changed assembly.</summary>
     public static ConnectorDiscoveryOutcome Discovered(ProjectBindingRegistry registry, string hash) =>
@@ -44,13 +54,17 @@ public sealed record ConnectorDiscoveryOutcome(
     public static ConnectorDiscoveryOutcome Unchanged(ProjectBindingRegistry lastGood, string lastHash) =>
         new(ConnectorDiscoveryStatus.Unchanged, lastGood, lastHash);
 
-    /// <summary>The connector failed; the last-good state is kept.</summary>
-    public static ConnectorDiscoveryOutcome Failed(ProjectBindingRegistry lastGood, string lastHash) =>
-        new(ConnectorDiscoveryStatus.Failed, lastGood, lastHash);
+    /// <summary>The connector failed, for <paramref name="reason"/>; the last-good state is kept.</summary>
+    public static ConnectorDiscoveryOutcome Failed(ProjectBindingRegistry lastGood, string lastHash, string? reason = null) =>
+        new(ConnectorDiscoveryStatus.Failed, lastGood, lastHash, reason);
 
     /// <summary>Discovery could not run; the last-good state is kept.</summary>
     public static ConnectorDiscoveryOutcome Skipped(ProjectBindingRegistry lastGood, string lastHash) =>
         new(ConnectorDiscoveryStatus.Skipped, lastGood, lastHash);
+
+    /// <summary>The project is not a Reqnroll test project; the last-good state is kept.</summary>
+    public static ConnectorDiscoveryOutcome NotReqnrollProject(ProjectBindingRegistry lastGood, string lastHash) =>
+        new(ConnectorDiscoveryStatus.NotReqnrollProject, lastGood, lastHash);
 
     /// <summary>
     /// Deconstructs into the registry and hash only, for callers that just want the resulting state.

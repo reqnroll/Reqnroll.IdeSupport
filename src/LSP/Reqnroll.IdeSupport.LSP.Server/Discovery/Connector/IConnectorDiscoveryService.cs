@@ -29,7 +29,8 @@ public interface IConnectorDiscoveryService
     /// <paramref name="lastHash"/> unchanged, with a status saying why:
     /// <see cref="ConnectorDiscoveryStatus.Unchanged"/> (assembly hash match),
     /// <see cref="ConnectorDiscoveryStatus.Failed"/> (the connector threw or reported failure) or
-    /// <see cref="ConnectorDiscoveryStatus.Skipped"/> (no output assembly, or not a Reqnroll test project).
+    /// <see cref="ConnectorDiscoveryStatus.Skipped"/> (no output assembly) or
+    /// <see cref="ConnectorDiscoveryStatus.NotReqnrollProject"/> (not a Reqnroll test project).
     /// </returns>
     ConnectorDiscoveryOutcome RunDiscovery(
         IProjectScope scope,
