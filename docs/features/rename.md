@@ -138,6 +138,16 @@ sequenceDiagram
 | 6 | Matching feature steps must not contain outline placeholders | "Could not rename step with placeholders in scenario outline: {step text}" | rename |
 | 7 | Owning project needs a valid registry with membership populated | "The project is not initialized yet" / "No Reqnroll project with feature files found" | prepareRename |
 | 8 | For linked bindings, every including project's feature files must be reachable | un-reachable files are logged and the user warned with `window/showMessage` | rename (post-edit) |
+| 9 | The binding's source must be inside the solution: it has a source location, that location exists on this machine, and the file is owned by a registered project or lies under a workspace folder | "'{method}' is declared in a referenced assembly that has no source information…" / "…whose source ('{path}') is not on this machine…" / "…declared in '{path}', which is outside the solution…" | prepareRename (`.cs`; `.feature` only when no candidate passes) + rename |
+
+*Rule 9.* A binding discovered from a referenced assembly whose source is not part of the solution is unalterable.
+Without the check, a readable file outside the solution was edited, and a missing or unresolved location produced only the
+`.feature` edits, leaving every renamed step unbound. `RenameBindingResolver.GetUneditableReason` applies it before any edit
+is built and the rejection uses the `-32803` edit-rejected contract, so all three clients show the reason. Unlike the other
+`prepareRename` rules it throws rather than returning null, so the user learns why instead of getting no rename box.
+`reqnroll/renameTargets` does not apply it (Rider reports a failed `renameTargets` as "server not running"), so the VS
+command and Rider show the reason only after the new name is entered. A workspace folder counts as well as project
+ownership because Rider registers only the projects in its runnable-projects model.
 
 *Rule 3.* Cucumber expressions treat only `{ } ( ) \ /` as special, so `?`, `*`, `+`, `[...]`, `^`, `$`, `|` are plain literals
 there (a currency amount like `${float}`), while in a regex the full operator set changes matching. `StepRenameValidator`
