@@ -172,7 +172,7 @@ classDiagram
 | `ResolveTestTargetsHandler`, `ResolveContainerTestTargetsHandler` | `src/LSP/…LSP.Server/Features/TestTargets` | The two LSP requests. |
 | `RunTestCodeLensService`, `ScenarioTestTargetService` | `src/VisualStudio/…Extension/RunTestCodeLens`, `…/TestTargets` | VS: symbol-tree walk and per-line resolution. |
 | `RunTestCodeLensTaggerProvider`, `RunTestCodeLensDataPoint`, `TestExplorerCommandIds` | `src/VisualStudio/…VSSDKIntegration/RunTestCodeLens` | VS: tag placement, lens details, Run/Debug/Show-in-Test-Explorer commands. |
-| `RunTestCodeVisionProvider`, `RunLensSupport`, `RunTestTargetCache`, `RunTestRunner`, `RunTestResultStore`, `FailedStepLocator`, `FailedStepGutterMarks` | `src/Rider/src/main/kotlin/…/testrunner` | Rider: lens, target memoization, `dotnet test` execution, results, failed-step mark. |
+| `RunTestCodeVisionProvider`, `RunLensSupport`, `RunTestTargetCache`, `RunTestRunner`, `DotnetTestModeDetector`, `DotnetTestModeStrategy`, `RunOutcomeCollector`, `RunTestResultStore`, `FailedStepLocator`, `FailedStepGutterMarks` | `src/Rider/src/main/kotlin/…/testrunner` | Rider: lens, target memoization, `dotnet test` execution, mode detection, per-mode command line, outcome collection, results, failed-step mark. |
 
 ## 6. Generator naming rules
 
@@ -311,8 +311,10 @@ The lens is a `CodeVisionProvider`, because the plugin registers `.feature` with
 `RunLineMarkerContributor` is PSI-based. It renders inline with ▶/✓/✗ glyphs, not as a gutter icon.
 `RunTestRunner` owns execution: it runs `dotnet test --filter` against the targets, ORing one exact
 `FullyQualifiedName=` term per distinct method (`buildTestFilter`; a row-tests Outline collapses to one term).
-It runs in the project directory (so `global.json` is found) and varies its arguments by `DotnetTestMode`
-(`VS_TEST`, `MTP_COMPAT`, `MTP_NATIVE`); details are in the outcomes pipeline. There is no Debug action.
+It runs in the project directory (so `global.json` is found). `DotnetTestModeDetector` picks the `DotnetTestMode`
+(`VS_TEST`, `MTP_COMPAT`, `MTP_NATIVE`), and a `DotnetTestModeStrategy` per mode supplies the arguments and
+reads the result (TRX or exit code); `RunOutcomeCollector` adds the server's per-method outcomes. Details are in
+the outcomes pipeline. There is no Debug action.
 
 **Failed-step gutter mark.** The server's step-trace parser reports each failed row's first failing step.
 `FailedStepLocator` maps that execution index to a `.feature` line using the `documentSymbol` tree, in the order

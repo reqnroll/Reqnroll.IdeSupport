@@ -114,7 +114,7 @@ internal object GutterRunOutcomes {
     /**
      * The new result of each of [scenarios] whose server outcome changed since [seen] last recorded it, keyed by
      * scenario line. A scenario counts only when every one of its methods has a usable outcome (found, not stale,
-     * not running — see [RunTestRunner.combineIfComplete]); its methods' outcomes are then recorded in [seen].
+     * not running — see [RunOutcomeCollector.combineIfComplete]); its methods' outcomes are then recorded in [seen].
      * `internal` for testability.
      */
     internal fun changedResults(
@@ -127,7 +127,7 @@ internal object GutterRunOutcomes {
         for (scenario in scenarios) {
             val methods = scenario.targets.map { it.declaringTypeFullName to it.methodName }.distinct()
             val responses = methods.map { (type, method) -> lookup(type, method) }
-            val result = RunTestRunner.combineIfComplete(responses) ?: continue
+            val result = RunOutcomeCollector.combineIfComplete(responses) ?: continue
 
             val keys = methods.map { (type, method) -> methodKey(assembly, type, method) }
             val isNew = keys.zip(responses).any { (key, response) -> seen[key] != response }

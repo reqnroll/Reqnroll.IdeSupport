@@ -81,7 +81,7 @@ sequenceDiagram
 | `RenameFeatureStepAction`, `RenameCSharpStepAction`, `RenameStepRunner`, `RenameWorkspaceEditApplier` | Step rename (`.feature` bound to Shift+F6; `.cs` context-menu only). |
 | `ReqnrollCommentByLineCommentAction` | Overrides the platform's `CommentByLineComment` action by ID. |
 | `ReqnrollGoToDefinitionAction`, `ReqnrollGoToDefinitionPromoter` | Make F12 / Ctrl+B / Ctrl+click reach the server on Rider 2026.2+. |
-| `RunTestRunner`, `RunLensSupport`, `FailedStepGutterMarks` | Run lens and execution; see [../Test-Runner-Integration-Design.md](../Test-Runner-Integration-Design.md). |
+| `RunTestRunner`, `DotnetTestModeDetector`, `DotnetTestModeStrategy`, `RunOutcomeCollector`, `RunLensSupport`, `FailedStepGutterMarks` | Run lens and execution: orchestration, `dotnet test` mode detection, per-mode command line and result, server/TRX outcome collection; see [../Test-Runner-Integration-Design.md](../Test-Runner-Integration-Design.md). |
 | `StepIntoStepDefinitionAction`, `StepIntoStepDefinitionInstaller`, `StepDefinitionBodyLocator` | Step Into from a stopped `.feature` step: runs to the step definition's body; see [../Rider-Feature-Breakpoints-Plan.md](../Rider-Feature-Breakpoints-Plan.md) §4. |
 | `ReqnrollToggleFeatureInlayHintsAction` | "Show Feature Inlay Hints" toggle. |
 | `ReqnrollDebugLogger` | File logging gated on the dev-sandbox property. |
