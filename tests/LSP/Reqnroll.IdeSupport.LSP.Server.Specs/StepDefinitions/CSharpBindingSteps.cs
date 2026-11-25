@@ -59,13 +59,12 @@ public sealed class CSharpBindingSteps
     }
 
     [When(@"the C# step definition file ""(.*)"" is deleted")]
-    public async Task WhenTheCsharpFileIsDeleted(string fileName)
+    public void WhenTheCsharpFileIsDeleted(string fileName)
     {
+        // The server applies the workspace/didChangeWatchedFiles notification asynchronously, so
+        // a step that checks the outcome has to poll for it rather than assume it has landed.
         var uri = _ctx.UriFor(fileName);
         _ctx.Harness.Client.NotifyCsFileDeleted(uri);
-        // Allow the server to process the workspace/didChangeWatchedFiles notification and
-        // update the binding registry before the next request.
-        await Task.Delay(300).ConfigureAwait(false);
     }
 
     // ── Then ───────────────────────────────────────────────────────────────────

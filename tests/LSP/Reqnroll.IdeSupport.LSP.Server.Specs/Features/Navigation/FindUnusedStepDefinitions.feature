@@ -167,8 +167,7 @@ Scenario: Deleting a C# source file removes its step definitions from Find Unuse
     Then 1 unused step definition is returned
     And the unused step definitions include expression "I press delete"
     When the C# step definition file "StepsToDelete.cs" is deleted
-    And unused step definitions are requested
-    Then 0 unused step definitions are returned
+    Then 0 unused step definitions are returned within 5 seconds
 
 # ── Ownership: a binding file linked into two projects ──────────────────────────
 #
