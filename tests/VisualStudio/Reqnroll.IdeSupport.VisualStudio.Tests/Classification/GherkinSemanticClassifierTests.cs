@@ -215,6 +215,117 @@ public class GherkinSemanticClassifierTests
         GC.KeepAlive(classifier);
     }
 
+    // ── whole-document replacements (Format Document and its Undo) ──────────
+
+    private const string UnformattedFeature = "Feature: F\nScenario: S\nGiven a\nGiven b\nThen c";
+    private const string FormattedFeature = "Feature: F\nScenario: S\nGiven a\nAnd b\nThen c";
+
+    // A snapshot of the given text whose lines end at each "\n" (the line break is not part of the line).
+    private static ITextSnapshot SnapshotOf(string text)
+    {
+        var lines = new List<(int Start, int End)>();
+        var start = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '\n') continue;
+            lines.Add((start, i));
+            start = i + 1;
+        }
+
+        lines.Add((start, text.Length));
+        return SnapshotWithLinesByPosition(text.Length, lines.ToArray());
+    }
+
+    // A change that replaces the whole of oldText with newText.
+    private static ITextChange WholeTextReplacement(string oldText, string newText)
+    {
+        var change = TextChange(oldPosition: 0, oldEnd: oldText.Length, newEnd: newText.Length);
+        change.OldText.Returns(oldText);
+        change.NewText.Returns(newText);
+        change.OldLength.Returns(oldText.Length);
+        change.NewLength.Returns(newText.Length);
+        return change;
+    }
+
+    private static List<ClassifiedToken> TokensOf(string text) =>
+        text.Split('\n')
+            .Select((line, number) => new ClassifiedToken(number, 0, line.IndexOfAny(new[] { ':', ' ' }), "reqnroll.keyword"))
+            .ToList();
+
+    [Fact]
+    public void ToTokenTextChange_leaves_out_the_text_a_whole_document_replacement_kept()
+    {
+        var change = WholeTextReplacement(UnformattedFeature, FormattedFeature);
+
+        var result = GherkinSemanticClassifier.ToTokenTextChange(
+            change, SnapshotOf(UnformattedFeature), SnapshotOf(FormattedFeature));
+
+        (result.OldStartLine, result.OldStartChar).Should().Be((3, 0), "the first difference is the keyword of line 3");
+        (result.OldEndLine, result.OldEndChar).Should().Be((3, 5), "'Given' was replaced");
+        (result.NewEndLine, result.NewEndChar).Should().Be((3, 3), "by 'And'");
+    }
+
+    [Theory]
+    [InlineData("abc", "abc", 3, 0)]                  // nothing changed: the whole text is the common start
+    [InlineData("abXcd", "abYcd", 2, 2)]
+    [InlineData("ab", "abc", 2, 0)]                   // text added at the end
+    [InlineData("a\r\nb", "a\r\nc", 3, 0)]            // a whole CRLF line break stays in the common start
+    [InlineData("a\rX\nb", "a\rY\nb", 2, 2)]          // a lone "\r" ends a line on its own
+    [InlineData("a\r\nb", "a\rc\nb", 1, 1)]           // neither end stops inside the old "\r\n"
+    public void UnchangedEnds_counts_the_common_start_and_end_without_splitting_a_line_break(
+        string oldText, string newText, int expectedPrefix, int expectedSuffix)
+    {
+        var change = WholeTextReplacement(oldText, newText);
+
+        GherkinSemanticClassifier.UnchangedEnds(change).Should().Be((expectedPrefix, expectedSuffix));
+    }
+
+    [Fact]
+    public void UnchangedEnds_does_not_read_the_text_of_an_insertion_or_a_deletion()
+    {
+        var change = Substitute.For<ITextChange>();
+        change.OldLength.Returns(0);
+        change.NewLength.Returns(1);
+
+        GherkinSemanticClassifier.UnchangedEnds(change).Should().Be((0, 0));
+        _ = change.DidNotReceive().OldText;
+        _ = change.DidNotReceive().NewText;
+    }
+
+    [Theory]
+    [InlineData(UnformattedFeature, FormattedFeature)] // Format Document
+    [InlineData(FormattedFeature, UnformattedFeature)] // its Undo
+    public void A_whole_document_replacement_keeps_the_tokens_of_the_lines_it_did_not_change(string beforeText, string afterText)
+    {
+        var store = new SemanticTokenClassificationStore();
+        var before = SnapshotOf(beforeText);
+        var after = SnapshotOf(afterText);
+        var buffer = Substitute.For<ITextBuffer>();
+        buffer.Properties.Returns(new PropertyCollection());
+        buffer.CurrentSnapshot.Returns(after);
+        var document = Substitute.For<ITextDocument>();
+        document.FilePath.Returns(FilePath);
+        var classifier = new GherkinSemanticClassifier(
+            buffer, Substitute.For<IClassificationTypeRegistryService>(), new FakeTextDocumentFactory(document), store);
+        store.SetTokens(FileKey, TokensOf(beforeText));
+
+        buffer.ChangedHighPriority += Raise.EventWith(
+            buffer, ChangedArgs(before, after, WholeTextReplacement(beforeText, afterText)));
+
+        store.TryGetTokens(FileKey, out var moved).Should().BeTrue();
+        moved.Select(t => t.Line).Should().Equal(0, 1, 2, 3, 4);
+
+        // The server sees the same single edited line and pushes just that line's tokens.
+        var serverTokens = TokensOf(afterText);
+        store.ApplyRange(FileKey, 3, 3, new[] { serverTokens[3] }).Should().BeTrue();
+
+        store.TryGetTokens(FileKey, out var merged).Should().BeTrue();
+        merged.Select(t => (t.Line, t.StartChar, t.Length)).Should().Equal(
+            serverTokens.Select(t => (t.Line, t.StartChar, t.Length)),
+            "after the ranged push the store holds as many tokens as the server reports, all where the server put them");
+        GC.KeepAlive(classifier);
+    }
+
     // TextContentChangedEventArgs reads its changes from the version of the snapshot before the edit.
     private static TextContentChangedEventArgs ChangedArgs(ITextSnapshot before, ITextSnapshot after, params ITextChange[] changes)
     {
