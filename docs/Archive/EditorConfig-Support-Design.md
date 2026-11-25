@@ -44,6 +44,7 @@ These keys are defined by Reqnroll and have no standard EditorConfig meaning. Th
 | `gherkin_indent_rule_children` | `GherkinFormatConfiguration.IndentRuleChildren` | bool | `false` |
 | `gherkin_indent_steps` | `GherkinFormatConfiguration.IndentSteps` | bool | `true` |
 | `gherkin_indent_and_steps` | `GherkinFormatConfiguration.IndentAndSteps` | bool | `false` |
+| `gherkin_normalize_repeated_keywords` | `GherkinFormatConfiguration.NormalizeRepeatedKeywords` | bool | `true` |
 | `gherkin_indent_datatable` | `GherkinFormatConfiguration.IndentDataTable` | bool | `true` |
 | `gherkin_indent_docstring` | `GherkinFormatConfiguration.IndentDocString` | bool | `true` |
 | `gherkin_indent_examples` | `GherkinFormatConfiguration.IndentExamples` | bool | `false` |
