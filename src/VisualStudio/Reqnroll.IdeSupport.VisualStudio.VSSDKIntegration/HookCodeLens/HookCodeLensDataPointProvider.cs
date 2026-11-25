@@ -16,15 +16,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// Classic <see cref="IAsyncCodeLensDataPointProvider"/> supplying the own-level hook-match-count
 /// CodeLens (Feature:/Scenario: lines) — the
 /// counterpart to <see cref="StepHooksCodeLensDataPointProvider"/>, which renders the step-hooks
-/// lens that shares a Scenario: line with it. Paired with <see cref="HookCodeLensTaggerProvider"/>,
+/// lens that shares a Scenario: line with it. Paired with <see cref="LineCodeLens.FeatureCodeLensTaggerProvider"/>,
 /// which supplies the tag positions.
 /// </summary>
 /// <remarks>
-/// Both providers receive a data point for every tag and each filters the server's response to its
-/// own lens kind, contributing no indicator when that kind is absent from the line — this is the
+/// Both providers are offered the line's one tag and each creates a data point only when the tag's
+/// descriptor lists its own lens kind, then filters the server's response to that kind — this is the
 /// same shape Roslyn uses to put "N references | N changes" on one C# member. See
-/// <see cref="HookElementDescription"/>'s remarks for why the two kinds cannot instead be split by
-/// giving each its own tag.
+/// <see cref="FeatureCodeLensTaggerProvider"/> for why every kind on a line shares one tag.
 /// </remarks>
 /// <remarks>
 /// Runs out-of-process, in the CodeLens ServiceHub host — confirmed live via <c>tasklist</c> against
@@ -55,13 +54,14 @@ internal sealed class HookCodeLensDataPointProvider : IAsyncCodeLensDataPointPro
 
     /// <inheritdoc />
     /// <remarks>
-    /// Only checks that the descriptor decodes structurally. A descriptor identifies a line, not a
-    /// lens, so this provider cannot tell in advance whether that line actually carries an own-level
-    /// lens — that's resolved in <see cref="HookCodeLensDataPoint.GetDataAsync"/> via the callback
-    /// round-trip, which contributes no indicator when the line has no lens of this kind.
+    /// Accepts only descriptors whose line carries an own-level hooks lens. The host offers the
+    /// line's tag to every provider (Run included), and a data point it creates keeps an
+    /// indicator slot in the row even when <see cref="HookCodeLensDataPoint.GetDataAsync"/> returns
+    /// an empty description — so declining here is what keeps a line without hooks from showing an
+    /// empty entry. See <see cref="LineElementDescription"/>.
     /// </remarks>
     public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token) =>
-        Task.FromResult(LineElementDescription.TryDecode(descriptor.ElementDescription, out _));
+        Task.FromResult(LineElementDescription.HasLensKind(descriptor.ElementDescription, LineLensKinds.Hooks));
 
     /// <inheritdoc />
     public Task<IAsyncCodeLensDataPoint> CreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)

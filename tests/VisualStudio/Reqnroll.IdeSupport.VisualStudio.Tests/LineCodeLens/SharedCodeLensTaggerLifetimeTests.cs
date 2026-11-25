@@ -7,7 +7,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LineCodeLens;
 
 /// <summary>
-/// The Run and hook-count CodeLens tagger providers hand every consumer of a buffer the
+/// The .feature CodeLens tagger provider hands every consumer of a buffer the
 /// same <see cref="LineKeyedCodeLensTagger{TEntry}"/> (a per-buffer singleton in
 /// <see cref="ITextBuffer.Properties"/>). VS's tag aggregator (<c>TagAggregator&lt;T&gt;.UnregisterTagger</c>
 /// in <c>Microsoft.VisualStudio.Platform.VSEditor.dll</c>) calls <see cref="IDisposable.Dispose"/> on every
@@ -97,7 +97,7 @@ public class SharedCodeLensTaggerLifetimeTests
         {
             var snapshot = CreateSnapshot(lineCount: 5);
             var buffer = CreateFeatureBuffer(snapshot, filePath);
-            var provider = new RunTestCodeLensTaggerProvider();
+            var provider = new FeatureCodeLensTaggerProvider();
 
             first = provider.CreateTagger<ICodeLensTag>(buffer)!;   // e.g. the main editor view
             var second = provider.CreateTagger<ICodeLensTag>(buffer)!; // e.g. a split or peek view
@@ -108,7 +108,7 @@ public class SharedCodeLensTaggerLifetimeTests
 
             var fetchesBefore = Volatile.Read(ref fetchCount);
             Volatile.Write(ref line, 3);
-            RunTestCodeLensRedirect.TaggerRegistry.InvalidateFile(fileUri);
+            FeatureCodeLensTaggerProvider.TaggerRegistry.InvalidateFile(fileUri);
 
             (await WaitForTagOnLineAsync(second, snapshot, line: 3)).Should().BeTrue("the remaining consumer's tagger must still refresh when the registry invalidates its file");
             fetchCount.Should().BeGreaterThan(fetchesBefore);
@@ -118,8 +118,8 @@ public class SharedCodeLensTaggerLifetimeTests
         {
             RunTestCodeLensRedirect.GetTagLocationsAsync = null;
             // The registry is process-wide: leave no tagger behind to answer another test's invalidation.
-            if (first is LineKeyedCodeLensTagger<RunTestLensLocation> tagger)
-                RunTestCodeLensRedirect.TaggerRegistry.UnregisterTagger(tagger, fileUri);
+            if (first is LineKeyedCodeLensTagger<FeatureLineLensEntry> tagger)
+                FeatureCodeLensTaggerProvider.TaggerRegistry.UnregisterTagger(tagger, fileUri);
         }
     }
 
@@ -143,7 +143,7 @@ public class SharedCodeLensTaggerLifetimeTests
         {
             var snapshot = CreateSnapshot(lineCount: 5);
             var buffer = CreateFeatureBuffer(snapshot, filePath);
-            var provider = new HookCodeLensTaggerProvider();
+            var provider = new FeatureCodeLensTaggerProvider();
 
             first = provider.CreateTagger<ICodeLensTag>(buffer)!;
             var second = provider.CreateTagger<ICodeLensTag>(buffer)!;
@@ -163,8 +163,77 @@ public class SharedCodeLensTaggerLifetimeTests
         finally
         {
             HookCodeLensRedirect.GetLensesAsync = null;
-            if (first is LineKeyedCodeLensTagger<HookFeatureLensEntry> tagger)
-                HookCodeLensRedirect.TaggerRegistry.UnregisterTagger(tagger, fileUri);
+            if (first is LineKeyedCodeLensTagger<FeatureLineLensEntry> tagger)
+                FeatureCodeLensTaggerProvider.TaggerRegistry.UnregisterTagger(tagger, fileUri);
+        }
+    }
+
+    [Fact]
+    public async Task Fetch_returns_null_only_when_neither_source_is_wired()
+    {
+        RunTestCodeLensRedirect.GetTagLocationsAsync = null;
+        HookCodeLensRedirect.GetLensesAsync = null;
+
+        (await FeatureCodeLensTaggerProvider.FetchAsync("file:///C:/repo/a.feature", CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Fetch_uses_the_wired_source_when_the_other_is_not_wired_yet()
+    {
+        HookCodeLensRedirect.GetLensesAsync = (_, _) =>
+            Task.FromResult<IReadOnlyList<HookFeatureLensEntry>>(new[]
+            {
+                new HookFeatureLensEntry(2, "1 hook", 2, 0, OwnLevelOnly: true, AlwaysShowPicker: false),
+            });
+        try
+        {
+            RunTestCodeLensRedirect.GetTagLocationsAsync = null;
+
+            var entries = await FeatureCodeLensTaggerProvider.FetchAsync("file:///C:/repo/a.feature", CancellationToken.None);
+
+            entries.Should().ContainSingle().Which.Should().Match<FeatureLineLensEntry>(e => e.Line == 2 && e.Kind == LineLensKinds.Hooks);
+        }
+        finally
+        {
+            HookCodeLensRedirect.GetLensesAsync = null;
+        }
+    }
+
+    [Fact]
+    public async Task Run_and_hook_lenses_on_the_same_line_share_one_tag_listing_every_kind()
+    {
+        // VS keeps one CodeLens tag per line and offers it to every data-point provider, so the
+        // tag must describe every lens kind on that line, whichever source it came from.
+        const string filePath = @"C:\repo\shared-line.feature";
+        var fileUri = new Uri(filePath).AbsoluteUri;
+        RunTestCodeLensRedirect.GetTagLocationsAsync = (_, _) =>
+            Task.FromResult<IReadOnlyList<RunTestLensLocation>>(new[] { new RunTestLensLocation(1, "Scenario|S") });
+        HookCodeLensRedirect.GetLensesAsync = (_, _) =>
+            Task.FromResult<IReadOnlyList<HookFeatureLensEntry>>(new[]
+            {
+                new HookFeatureLensEntry(1, "1 hook", 1, 0, OwnLevelOnly: true, AlwaysShowPicker: false),
+                new HookFeatureLensEntry(1, "2 step hooks", 2, 4, OwnLevelOnly: false, AlwaysShowPicker: true),
+            });
+        ITagger<ICodeLensTag>? created = null;
+        try
+        {
+            var snapshot = CreateSnapshot(lineCount: 5);
+            var buffer = CreateFeatureBuffer(snapshot, filePath);
+            created = new FeatureCodeLensTaggerProvider().CreateTagger<ICodeLensTag>(buffer)!;
+
+            (await WaitForTagOnLineAsync(created, snapshot, line: 1)).Should().BeTrue();
+            var description = created.GetTags(WholeDocument(snapshot)).Single().Tag.Descriptor.ElementDescription;
+
+            LineElementDescription.HasLensKind(description, LineLensKinds.Run).Should().BeTrue();
+            LineElementDescription.HasLensKind(description, LineLensKinds.Hooks).Should().BeTrue();
+            LineElementDescription.HasLensKind(description, LineLensKinds.StepHooks).Should().BeTrue();
+        }
+        finally
+        {
+            RunTestCodeLensRedirect.GetTagLocationsAsync = null;
+            HookCodeLensRedirect.GetLensesAsync = null;
+            if (created is LineKeyedCodeLensTagger<FeatureLineLensEntry> tagger)
+                FeatureCodeLensTaggerProvider.TaggerRegistry.UnregisterTagger(tagger, fileUri);
         }
     }
 }

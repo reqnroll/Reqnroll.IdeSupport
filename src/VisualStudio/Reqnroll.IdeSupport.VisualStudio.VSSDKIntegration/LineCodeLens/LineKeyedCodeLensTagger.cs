@@ -22,14 +22,12 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Exactly one tag per line, even when a feature reports more than one entry kind for it (e.g. a
-/// Scenario: line carrying both an own-level hooks lens and a step-hooks lens) — the classic
-/// CodeLens engine renders one adornment row per location and lets every registered
-/// <c>IAsyncCodeLensDataPointProvider</c> contribute an indicator to it (the same shape Roslyn uses
-/// for "N references | N changes" on a C# member). A feature that needs several entry kinds on one
-/// line groups them under this same tag and lets its own data-point providers pick out their kind —
-/// see <c>HookLensSupport</c>'s original remarks (now folded into that feature's own code) for why
-/// splitting them into separate tags never worked.
+/// Exactly one tag per line, even when the entries report more than one lens kind for it (e.g. a
+/// Scenario: line carrying a Run lens, an own-level hooks lens and a step-hooks lens) — the classic
+/// CodeLens engine renders one adornment row per location, keeps only one tag for it, and offers
+/// that tag to every registered <c>IAsyncCodeLensDataPointProvider</c> (the same shape Roslyn uses
+/// for "N references | N changes" on a C# member). Every lens kind on a line therefore has to be
+/// described by this one tag; see <see cref="FeatureCodeLensTaggerProvider"/>.
 /// </para>
 /// <para>
 /// Keyed by 0-based line so <see cref="GetTags"/> returns the *same* <see cref="ICodeLensTag"/>

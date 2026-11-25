@@ -155,7 +155,7 @@ internal sealed class RunTestCodeLensService
     /// <summary>
     /// Fetches every Run-lens tag placement for <paramref name="fileUri"/>: the
     /// symbol-tree walk alone, with no <c>reqnroll/resolveTestTargets</c> calls at all. Used by
-    /// <c>RunTestCodeLensTaggerProvider</c>, which only needs to know which lines get a tag and a
+    /// <c>FeatureCodeLensTaggerProvider</c>, which only needs to know which lines get a tag and a
     /// cheap change-detection key — the actual resolved target(s) are only fetched lazily, per
     /// visible line, via <see cref="GetTargetsForLineAsync"/> when that line's own CodeLens data
     /// point is created. Splitting these two concerns is what keeps this feature's cost

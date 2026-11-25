@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -16,12 +18,11 @@ public sealed class RunTestCodeLensRevisionCollection
 }
 
 /// <summary>
-/// Unit tests for <see cref="RunTestCodeLensTaggerProvider.EncodeElementDescription"/> — the
-/// Run-CodeLens-specific revision-key formatting built on the shared
-/// <see cref="LineElementDescription"/> envelope (keyed off <see cref="RunTestLensLocation"/> rather than the resolved
-/// <see cref="RunTestTargetEntry"/>, since the tagger does not resolve targets at all — see
-/// <see cref="RunTestCodeLensTaggerProvider.FetchAsync"/>). Mirrors <c>HookElementDescriptionTests</c>'s
-/// shape for <c>HookCodeLensTaggerProvider</c>'s counterpart.
+/// Unit tests for <see cref="RunLensTagEntries.ToTagEntry"/> — the Run-CodeLens-specific
+/// revision-key formatting — as encoded by <see cref="FeatureCodeLensTaggerProvider.EncodeElementDescription"/>
+/// into the shared <see cref="LineElementDescription"/> envelope (keyed off <see cref="RunTestLensLocation"/>
+/// rather than the resolved <see cref="RunTestTargetEntry"/>, since the tagger does not resolve
+/// targets at all). Mirrors <c>HookElementDescriptionTests</c>'s shape.
 /// </summary>
 /// <remarks>
 /// The revision component is load-bearing rather than cosmetic: <c>LineKeyedCodeLensTagger{TEntry}</c>
@@ -30,10 +31,13 @@ public sealed class RunTestCodeLensRevisionCollection
 /// get its data point recreated.
 /// </remarks>
 [Collection(RunTestCodeLensRevisionCollection.Name)]
-public class RunTestCodeLensTaggerProviderTests
+public class RunLensTagEntriesTests
 {
     private static RunTestLensLocation Location(int line = 1, string key = "Scenario|AddTwoNumbers") =>
         new(line, key);
+
+    private static string Encode(int line, IEnumerable<RunTestLensLocation> entries) =>
+        FeatureCodeLensTaggerProvider.EncodeElementDescription(line, entries.Select(RunLensTagEntries.ToTagEntry));
 
     // ── Round-trip ────────────────────────────────────────────────────────────
 
@@ -43,7 +47,7 @@ public class RunTestCodeLensTaggerProviderTests
     [InlineData(4_096)]
     public void Encode_then_TryDecode_recovers_the_line(int line)
     {
-        var encoded = RunTestCodeLensTaggerProvider.EncodeElementDescription(line, new[] { Location(line: line) });
+        var encoded = Encode(line, new[] { Location(line: line) });
 
         LineElementDescription.TryDecode(encoded, out var decoded).Should().BeTrue();
         decoded.Should().Be(line);
@@ -54,8 +58,8 @@ public class RunTestCodeLensTaggerProviderTests
     [Fact]
     public void The_encoding_changes_when_the_scenario_name_changes()
     {
-        var before = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Location(key: "Scenario|AddTwoNumbers") });
-        var after  = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Location(key: "Scenario|AddThreeNumbers") });
+        var before = Encode(1, new[] { Location(key: "Scenario|AddTwoNumbers") });
+        var after  = Encode(1, new[] { Location(key: "Scenario|AddThreeNumbers") });
 
         after.Should().NotBe(before);
     }
@@ -66,8 +70,8 @@ public class RunTestCodeLensTaggerProviderTests
         // A plain Scenario re-authored as a Scenario Outline (or vice versa) must be treated as a
         // different tag, since the CodeLens label text ("Run Scenario" vs "Run Scenarios") depends
         // on it.
-        var before = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Location(key: "Scenario|AddTwoNumbers") });
-        var after  = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Location(key: "Scenario Outline|AddTwoNumbers") });
+        var before = Encode(1, new[] { Location(key: "Scenario|AddTwoNumbers") });
+        var after  = Encode(1, new[] { Location(key: "Scenario Outline|AddTwoNumbers") });
 
         after.Should().NotBe(before);
     }
@@ -77,8 +81,8 @@ public class RunTestCodeLensTaggerProviderTests
     {
         var entries = new[] { Location() };
 
-        RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries)
-            .Should().Be(RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries));
+        Encode(1, entries)
+            .Should().Be(Encode(1, entries));
     }
 
     [Fact]
@@ -87,18 +91,18 @@ public class RunTestCodeLensTaggerProviderTests
         // A lens that resolved to no target before the build must be re-created after the refresh that
         // follows it, so the descriptor has to differ even though the scenario itself is unchanged.
         var entries = new[] { Location() };
-        var before = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries);
+        var before = Encode(1, entries);
 
         RunTestCodeLensRedirect.InvalidateAll();
 
-        RunTestCodeLensTaggerProvider.EncodeElementDescription(1, entries).Should().NotBe(before);
+        Encode(1, entries).Should().NotBe(before);
     }
 
     [Fact]
     public void Two_different_lines_encode_differently_even_with_identical_scenario_identity()
     {
-        var line1 = RunTestCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Location(line: 1) });
-        var line9 = RunTestCodeLensTaggerProvider.EncodeElementDescription(9, new[] { Location(line: 9) });
+        var line1 = Encode(1, new[] { Location(line: 1) });
+        var line9 = Encode(9, new[] { Location(line: 9) });
 
         line9.Should().NotBe(line1);
     }
@@ -106,7 +110,7 @@ public class RunTestCodeLensTaggerProviderTests
     [Fact]
     public void TryDecode_of_a_line_with_no_tag_still_yields_the_line()
     {
-        var encoded = RunTestCodeLensTaggerProvider.EncodeElementDescription(3, System.Array.Empty<RunTestLensLocation>());
+        var encoded = Encode(3, System.Array.Empty<RunTestLensLocation>());
 
         LineElementDescription.TryDecode(encoded, out var decoded).Should().BeTrue();
         decoded.Should().Be(3);
