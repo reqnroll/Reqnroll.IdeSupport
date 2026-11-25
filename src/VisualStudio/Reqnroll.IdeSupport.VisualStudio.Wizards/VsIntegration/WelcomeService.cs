@@ -37,7 +37,8 @@ public class WelcomeService : IWelcomeService
     /// <summary>
     /// Called when an IDE scope becomes active. Shows the welcome dialog on first install,
     /// or the upgrade/changelog dialog when the installed version has changed, and
-    /// updates install/usage status in the registry.
+    /// updates the install status in the registry. Day-of-use counting is left to
+    /// <see cref="OnReqnrollProjectDetected"/>.
     /// </summary>
     public void OnIdeScopeActivityStarted(IIdeScope ideScope)
     {
@@ -70,15 +71,6 @@ public class WelcomeService : IWelcomeService
         }
         else
         {
-            if (status.LastUsedDate != today)
-            {
-                // A shiny new day with Reqnroll
-                status.UsageDays++;
-                status.LastUsedDate = today;
-                _registryManager.UpdateStatus(status);
-                telemetryService.MonitorExtensionDaysOfUsage(status.UsageDays);
-            }
-
             if (status.InstalledVersion < currentVersion)
             {
                 // Upgrading user
@@ -110,6 +102,25 @@ public class WelcomeService : IWelcomeService
                 });
             }
         }
+    }
+
+    /// <summary>
+    /// Called once the language server reports a project that uses Reqnroll: counts today as a
+    /// day of use (once per day, not on the install day). A day on which VS opens no Reqnroll
+    /// project is therefore not counted.
+    /// </summary>
+    public void OnReqnrollProjectDetected(IIdeScope ideScope)
+    {
+        var today = DateTime.Today;
+        var status = _registryManager.GetInstallStatus();
+        if (!status.IsInstalled || status.LastUsedDate == today)
+            return;
+
+        // A shiny new day with Reqnroll
+        status.UsageDays++;
+        status.LastUsedDate = today;
+        _registryManager.UpdateStatus(status);
+        ideScope.TelemetryService.MonitorExtensionDaysOfUsage(status.UsageDays);
     }
 
     protected virtual void ScheduleAndShow(Action showAction)

@@ -583,18 +583,22 @@ events are all emitted by `VSSDKIntegration/Telemetry/TelemetryService.cs` (`Mon
 `ITelemetryTransmitter`. Events that fire before the LSP server starts (install, upgrade) can
 only originate here.
 
-All four lifecycle events, in every IDE, are computed only once the language server has reported a
-project that uses Reqnroll (the Reqnroll-project gate, §1): not at IDE start, and not at all in a
-solution without Reqnroll. In VS the welcome and upgrade dialogs wait for the same signal, since
-`WelcomeService` drives both. A day on which no Reqnroll project is seen is not counted in
-`UsageDays`.
+No lifecycle event is sent before the language server has reported a project that uses Reqnroll
+(the Reqnroll-project gate, §1). `Lifecycle.Extension.Loaded` and `Lifecycle.Usage.Recorded` are
+computed only then, in every IDE, so a day on which no Reqnroll project is seen is not counted in
+`UsageDays`. VS Code and Rider compute `Installed`/`Upgraded` then too. In VS the welcome and upgrade
+dialogs still run at startup (`WelcomeService.OnIdeScopeActivityStarted`), which records the new
+install or version in the registry and raises `Installed`/`Upgraded` and the dialog events; the gate
+holds those until a Reqnroll project is seen. So in VS an install or upgrade whose first session never
+sees a Reqnroll project is not reported at all; the day-of-use count happens in
+`WelcomeService.OnReqnrollProjectDetected`.
 
 | Event | Emitter / when | Properties |
 |---|---|---|
 | `Lifecycle.Extension.Loaded` | `MonitorOpenProjectSystem` — once per VS process, when the first Reqnroll project is detected | — |
 | `Lifecycle.Extension.Installed` | `MonitorExtensionInstalled` — first activation after installation | — |
 | `Lifecycle.Extension.Upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
-| `Lifecycle.Usage.Recorded` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService`, right after incrementing `UsageDays`); the running day count is the `UsageDays` property | `UsageDays` |
+| `Lifecycle.Usage.Recorded` | `MonitorExtensionDaysOfUsage` — daily-active-use heartbeat (`WelcomeService.OnReqnrollProjectDetected`, right after incrementing `UsageDays`); the running day count is the `UsageDays` property | `UsageDays` |
 | `Project.FeatureFile.Added` | `MonitorCommandAddFeatureFile` — feature file added via command/wizard | project settings¹ |
 | `Project.ReqnrollConfig.Added` | `MonitorCommandAddReqnrollConfigFile` — `reqnroll.json` added via command/wizard | project settings¹ |
 | `Project.Creation.Started` | `MonitorProjectTemplateWizardStarted` — "add new Reqnroll project" wizard opens | — |

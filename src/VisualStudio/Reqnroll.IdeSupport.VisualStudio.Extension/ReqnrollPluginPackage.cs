@@ -301,10 +301,16 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             var welcomeService = new WelcomeService(
                 registryManager, versionProvider, dialogService, fileSystem);
 
-            // The lifecycle part waits until the language server reports a project that uses
-            // Reqnroll, so a solution without Reqnroll sends no lifecycle telemetry, does not count
-            // as a day of use and shows no welcome or upgrade dialog. Not awaited: that may be never.
-            _logger.LogInfo("RunWelcomeServiceAsync: waiting for a Reqnroll project before OnIdeScopeActivityStarted.");
+            // The welcome/upgrade dialog runs at startup, whatever the solution contains. The
+            // telemetry it raises (installed, upgraded, dialog dismissed, links clicked) goes through
+            // the transmitter, so ReqnrollProjectTelemetryGate holds it until a Reqnroll project is seen.
+            _logger.LogInfo("RunWelcomeServiceAsync: calling OnIdeScopeActivityStarted...");
+            welcomeService.OnIdeScopeActivityStarted(ideScope);
+            _logger.LogInfo("RunWelcomeServiceAsync: OnIdeScopeActivityStarted returned (dialog scheduled with 7s delay).");
+
+            // Lifecycle.Extension.Loaded and the day-of-use count wait until the language server
+            // reports a project that uses Reqnroll, so a solution without Reqnroll is not counted.
+            // Not awaited: that may be never.
             _ = JoinableTaskFactory.RunAsync(async () =>
             {
                 try
@@ -313,14 +319,12 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
                     await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
 
                     // Restores the legacy "Lifecycle.Extension.Loaded" signal (from the legacy
-                    // MonitoringService.MonitorOpenProjectSystem, which also triggered the welcome flow
-                    // itself — here that triggering happens explicitly below via WelcomeService, so
-                    // this call is telemetry-only).
+                    // MonitoringService.MonitorOpenProjectSystem, which also triggered the welcome
+                    // flow itself — here that happens explicitly above, so this call is telemetry-only).
                     telemetryService.MonitorOpenProjectSystem(ideScope);
 
-                    _logger.LogInfo("RunWelcomeServiceAsync: Reqnroll project detected; calling OnIdeScopeActivityStarted...");
-                    welcomeService.OnIdeScopeActivityStarted(ideScope);
-                    _logger.LogInfo("RunWelcomeServiceAsync: OnIdeScopeActivityStarted returned (dialog scheduled with 7s delay).");
+                    _logger.LogInfo("RunWelcomeServiceAsync: Reqnroll project detected; recording the day of use.");
+                    welcomeService.OnReqnrollProjectDetected(ideScope);
                 }
                 catch (OperationCanceledException)
                 {
