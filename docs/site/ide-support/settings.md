@@ -94,6 +94,7 @@ completion.
 | `gherkinFormat.indentRuleChildren` | boolean | `false` | Indent children of `Rule` elements |
 | `gherkinFormat.indentSteps` | boolean | `true` | Indent steps in scenarios |
 | `gherkinFormat.indentAndSteps` | boolean | `false` | Extra indent for `And`/`But` steps |
+| `gherkinFormat.normalizeRepeatedKeywords` | boolean | `true` | Replace repeated step keywords (e.g. a second consecutive `Given`) with `And`; `false` keeps keywords as written. Also settable via `gherkin_normalize_repeated_keywords` in `.editorconfig` |
 | `gherkinFormat.indentDataTable` | boolean | `true` | Indent `DataTable` arguments |
 | `gherkinFormat.indentDocString` | boolean | `true` | Indent `DocString` arguments |
 | `gherkinFormat.indentExamples` | boolean | `false` | Indent `Examples` blocks |

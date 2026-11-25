@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 /// <b>The problem this solves (live report, 2026-08-26):</b>
 /// resolving <i>every</i> scenario in a <c>.feature</c> file on every call (a single
 /// whole-file <c>GetTargetsAsync(fileUri)</c>) is called from two independent
-/// places that both go through one shared delegate: <c>RunTestCodeLensTaggerProvider</c>
+/// places that both go through one shared delegate: <c>FeatureCodeLensTaggerProvider</c>
 /// (in-process, once per tagger refresh) and, for every <i>visible Scenario line's own</i>
 /// <c>RunTestCodeLensDataPoint.GetDataAsync</c>, an out-of-process ServiceHub callback that only
 /// ever used its own line's entry out of the whole-file result. On a large feature file with N

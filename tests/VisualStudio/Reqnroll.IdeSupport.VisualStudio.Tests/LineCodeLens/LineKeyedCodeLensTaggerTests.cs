@@ -62,7 +62,7 @@ public class LineKeyedCodeLensTaggerTests
         new(t => t.RequestRefresh());
 
     private static string Encode(int line, IEnumerable<TestEntry> entries) =>
-        LineElementDescription.Encode(line, entries.Select(e => e.Value));
+        LineElementDescription.Encode(line, new[] { "test" }, entries.Select(e => e.Value));
 
     private static LineKeyedCodeLensTagger<TestEntry> CreateSut(
         ITextBuffer buffer,

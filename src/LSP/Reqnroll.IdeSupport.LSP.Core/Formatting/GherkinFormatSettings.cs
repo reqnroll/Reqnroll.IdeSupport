@@ -23,6 +23,8 @@ public class GherkinFormatSettings
     public int StepIndentLevelWithinStepContainer => Configuration.IndentSteps ? 1 : 0;
     /// <summary>Gets the additional indent level for "And"/"But" steps relative to other steps (0 or 1).</summary>
     public int AndStepIndentLevelWithinSteps => Configuration.IndentAndSteps ? 1 : 0;
+    /// <summary>Gets whether a step repeating the previous step's keyword is rewritten to "And".</summary>
+    public bool NormalizeRepeatedKeywords => Configuration.NormalizeRepeatedKeywords;
     /// <summary>Gets the indent level for a data table relative to its enclosing step (0 or 1).</summary>
     public int DataTableIndentLevelWithinStep => Configuration.IndentDataTable ? 1 : 0;
     /// <summary>Gets the indent level for a doc string relative to its enclosing step (0 or 1).</summary>

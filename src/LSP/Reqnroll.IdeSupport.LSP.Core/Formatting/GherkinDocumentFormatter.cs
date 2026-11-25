@@ -6,7 +6,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.Formatting;
 
 /// <summary>
 /// Formats a parsed Gherkin document by applying consistent indentation, normalising
-/// tag lines, aligning data-table cells, and replacing repeated step keywords with "And".
+/// tag lines, aligning data-table cells, and (unless disabled by <see cref="GherkinFormatSettings.NormalizeRepeatedKeywords"/>) replacing
+/// repeated step keywords with "And".
 /// Works on a <see cref="DocumentLinesEditBuffer"/> so that callers control which lines
 /// are included in the output.
 /// </summary>
@@ -80,7 +81,7 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
             {
                 stepIndentLevel += formatSettings.AndStepIndentLevelWithinSteps;
             }
-            else
+            else if (formatSettings.NormalizeRepeatedKeywords)
             {
                 if (step.Keyword == previousKeyword)
                 {

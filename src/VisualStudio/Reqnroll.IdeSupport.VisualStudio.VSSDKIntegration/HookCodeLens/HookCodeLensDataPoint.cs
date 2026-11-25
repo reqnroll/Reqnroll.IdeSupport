@@ -49,8 +49,8 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
 
     /// <param name="isStepHooksLens">
     /// Which of the two lens kinds this data point renders. Supplied by the owning provider, not
-    /// decoded from the descriptor: a tag marks a whole line, and both providers share it (see
-    /// <see cref="HookElementDescription"/>'s remarks).
+    /// decoded from the descriptor: a tag marks a whole line, and every provider shares it (see
+    /// <see cref="LineCodeLens.FeatureCodeLensTaggerProvider"/>).
     /// </param>
     public HookCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, bool isStepHooksLens)
     {
@@ -88,11 +88,10 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
             lenses = Array.Empty<HookFeatureLensEntry>();
         }
 
-        // Both providers get a data point for every tag, because a tag marks a line rather than an
-        // individual lens (see HookElementDescription's remarks) and neither provider can know in
-        // advance whether its own kind is present. Pick out this data point's kind here; when the
-        // line has no lens of this kind, the empty Description leaves this provider contributing no
-        // indicator while the other one still renders normally.
+        // The provider only created this data point because the tag's descriptor listed this lens
+        // kind, so an entry is normally present. It can still be missing when the server's lenses
+        // changed after the tag was built; the empty Description then covers the gap until the
+        // tagger's next refresh replaces the tag.
         var entry = lenses.FirstOrDefault(e => e.Line == _line && e.AlwaysShowPicker == _isStepHooksLens);
         if (entry is null)
         {

@@ -22,7 +22,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// copy of static state. <see cref="ICodeLensCallbackService"/>/<see cref="ICodeLensCallbackListener"/>
 /// is the SDK's purpose-built JSON-RPC mechanism for an OOP CodeLens component to call back into VS;
 /// this listener is the devenv-side target, exported as an ordinary MEF part so it composes into the
-/// same in-proc container <see cref="HookCodeLensTaggerProvider"/> already lives in (where
+/// same in-proc container <see cref="LineCodeLens.FeatureCodeLensTaggerProvider"/> already lives in (where
 /// <see cref="HookCodeLensRedirect"/> is actually populated).
 /// </summary>
 /// <remarks>

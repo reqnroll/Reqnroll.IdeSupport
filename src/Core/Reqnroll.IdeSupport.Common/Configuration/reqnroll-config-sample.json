@@ -15,6 +15,7 @@
         "indentRuleChildren": false,
         "indentSteps": true,
         "indentAndSteps": false,
+        "normalizeRepeatedKeywords": true,
         "indentDataTable": true,
         "indentDocString": true,
         "indentExamples": false,
