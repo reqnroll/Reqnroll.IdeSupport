@@ -33,15 +33,11 @@ public static class RunTestCodeLensRedirect
     /// <summary>
     /// Delegate set by the Extension project: <c>(fileUri, ct) → every Run-lens tag placement for
     /// that .feature file</c> — symbol-tree only, no <c>resolveTestTargets</c> calls.
-    /// Called in-process by <see cref="RunTestCodeLensTaggerProvider"/> to know which lines get a
+    /// Called in-process by <see cref="FeatureCodeLensTaggerProvider"/> to know which lines get a
     /// tag; the actual resolution happens lazily via <see cref="GetTargetsForLineAsync"/> once a
     /// line's own data point is created.
     /// </summary>
     public static Func<string, CancellationToken, Task<IReadOnlyList<RunTestLensLocation>>>? GetTagLocationsAsync { get; set; }
-
-    /// <summary>The shared tagger registry every <see cref="LineKeyedCodeLensTagger{TEntry}"/> for this feature registers itself with.</summary>
-    internal static readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<RunTestLensLocation>> TaggerRegistry =
-        new(tagger => tagger.RequestRefresh());
 
     /// <summary>
     /// Set by the Extension project alongside <see cref="GetTargetsAsync"/> — lets this class
@@ -78,7 +74,7 @@ public static class RunTestCodeLensRedirect
     {
         InvalidateCachedFile?.Invoke(fileUri);
         Interlocked.Increment(ref _targetsRevision);
-        TaggerRegistry.InvalidateFile(fileUri);
+        FeatureCodeLensTaggerProvider.TaggerRegistry.InvalidateFile(fileUri);
     }
 
     /// <summary>Requests a re-pull of Run targets for every tracked <c>.feature</c> file. Safe to call from any thread.</summary>
@@ -86,7 +82,7 @@ public static class RunTestCodeLensRedirect
     {
         InvalidateAllCached?.Invoke();
         Interlocked.Increment(ref _targetsRevision);
-        TaggerRegistry.InvalidateAll();
+        FeatureCodeLensTaggerProvider.TaggerRegistry.InvalidateAll();
     }
 
     private static int _targetsRevision;
@@ -103,7 +99,7 @@ public static class RunTestCodeLensRedirect
 
     /// <summary>
     /// Monotonic counter bumped whenever the in-proc <c>TestOutcomeStore</c> changes. Folded into every
-    /// Run lens tag's <c>ElementDescription</c> (see <c>RunTestCodeLensTaggerProvider.EncodeElementDescription</c>)
+    /// Run lens tag's <c>ElementDescription</c> (see <c>RunLensTagEntries.ToTagEntry</c>)
     /// so a refresh after a test run yields a <em>new</em> descriptor per line, which is what makes the
     /// CodeLens host discard the OOP data point and call <c>GetDataAsync</c> again — the tagger reuses the
     /// existing tag when the description is unchanged, and an identical descriptor would leave the old
@@ -120,6 +116,6 @@ public static class RunTestCodeLensRedirect
     public static void NotifyOutcomesChanged()
     {
         Interlocked.Increment(ref _outcomeRevision);
-        TaggerRegistry.InvalidateAll();
+        FeatureCodeLensTaggerProvider.TaggerRegistry.InvalidateAll();
     }
 }

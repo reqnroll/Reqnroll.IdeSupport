@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
@@ -6,8 +8,8 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.HookCodeLens;
 
 /// <summary>
-/// Unit tests for <see cref="HookCodeLensTaggerProvider.EncodeElementDescription"/> (the
-/// hook-feature-specific revision-key formatting) and <see cref="LineElementDescription"/> (the
+/// Unit tests for <see cref="HookLensTagEntries.ToTagEntry"/> (the hook-feature-specific
+/// revision-key formatting) as encoded by <see cref="FeatureCodeLensTaggerProvider.EncodeElementDescription"/> and <see cref="LineElementDescription"/> (the
 /// shared pipe-delimited envelope it's built on) — the string the in-process tagger smuggles
 /// through <c>ICodeLensDescriptor.ElementDescription</c> to the out-of-process data point providers.
 /// The encoding identifies a <em>line</em> rather than an individual lens, and is split into a
@@ -30,6 +32,9 @@ public class HookElementDescriptionTests
         bool alwaysShowPicker = false) =>
         new(line, title, navLine, navChar, ownLevelOnly, alwaysShowPicker);
 
+    private static string Encode(int line, IEnumerable<HookFeatureLensEntry> entries) =>
+        FeatureCodeLensTaggerProvider.EncodeElementDescription(line, entries.Select(HookLensTagEntries.ToTagEntry));
+
     // ── Round-trip ────────────────────────────────────────────────────────────
 
     [Theory]
@@ -38,7 +43,7 @@ public class HookElementDescriptionTests
     [InlineData(4_096)]
     public void Encode_then_TryDecode_recovers_the_line(int line)
     {
-        var encoded = HookCodeLensTaggerProvider.EncodeElementDescription(line, new[] { Entry(line: line) });
+        var encoded = Encode(line, new[] { Entry(line: line) });
 
         LineElementDescription.TryDecode(encoded, out var decoded).Should().BeTrue();
         decoded.Should().Be(line);
@@ -49,7 +54,7 @@ public class HookElementDescriptionTests
     {
         // The point of the line-level encoding: one descriptor per line, shared by the
         // own-level and step-hooks providers.
-        var encoded = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[]
+        var encoded = Encode(1, new[]
         {
             Entry(title: "1 hook",       navLine: 1, navChar: 0, alwaysShowPicker: false),
             Entry(title: "2 step hooks", navLine: 2, navChar: 4, alwaysShowPicker: true),
@@ -64,8 +69,8 @@ public class HookElementDescriptionTests
     [Fact]
     public void The_encoding_changes_when_a_count_changes()
     {
-        var before = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Entry(title: "1 hook") });
-        var after  = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Entry(title: "2 hooks") });
+        var before = Encode(1, new[] { Entry(title: "1 hook") });
+        var after  = Encode(1, new[] { Entry(title: "2 hooks") });
 
         after.Should().NotBe(before);
     }
@@ -73,8 +78,8 @@ public class HookElementDescriptionTests
     [Fact]
     public void The_encoding_changes_when_a_lens_kind_is_added_to_the_line()
     {
-        var ownLevelOnly = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Entry(title: "1 hook") });
-        var bothKinds    = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[]
+        var ownLevelOnly = Encode(1, new[] { Entry(title: "1 hook") });
+        var bothKinds    = Encode(1, new[]
         {
             Entry(title: "1 hook",       alwaysShowPicker: false),
             Entry(title: "2 step hooks", alwaysShowPicker: true),
@@ -88,8 +93,8 @@ public class HookElementDescriptionTests
     {
         // A step-hooks lens whose first step shifted still needs a new descriptor, because the
         // data point resolves its nav target from the entry rather than the descriptor.
-        var before = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Entry(navLine: 2, alwaysShowPicker: true) });
-        var after  = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Entry(navLine: 7, alwaysShowPicker: true) });
+        var before = Encode(1, new[] { Entry(navLine: 2, alwaysShowPicker: true) });
+        var after  = Encode(1, new[] { Entry(navLine: 7, alwaysShowPicker: true) });
 
         after.Should().NotBe(before);
     }
@@ -100,8 +105,8 @@ public class HookElementDescriptionTests
         // Tag reuse depends on this: an unrelated line changing must not churn this line's tag.
         var entries = new[] { Entry(title: "1 hook"), Entry(title: "2 step hooks", alwaysShowPicker: true) };
 
-        HookCodeLensTaggerProvider.EncodeElementDescription(1, entries)
-            .Should().Be(HookCodeLensTaggerProvider.EncodeElementDescription(1, entries));
+        Encode(1, entries)
+            .Should().Be(Encode(1, entries));
     }
 
     [Fact]
@@ -112,15 +117,15 @@ public class HookElementDescriptionTests
         var ownLevel  = Entry(title: "1 hook",       navLine: 1, navChar: 0, alwaysShowPicker: false);
         var stepHooks = Entry(title: "2 step hooks", navLine: 2, navChar: 4, alwaysShowPicker: true);
 
-        HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { ownLevel, stepHooks })
-            .Should().Be(HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { stepHooks, ownLevel }));
+        Encode(1, new[] { ownLevel, stepHooks })
+            .Should().Be(Encode(1, new[] { stepHooks, ownLevel }));
     }
 
     [Fact]
     public void Two_different_lines_encode_differently_even_with_identical_lens_content()
     {
-        var line1 = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[] { Entry(line: 1) });
-        var line9 = HookCodeLensTaggerProvider.EncodeElementDescription(9, new[] { Entry(line: 9) });
+        var line1 = Encode(1, new[] { Entry(line: 1) });
+        var line9 = Encode(9, new[] { Entry(line: 9) });
 
         line9.Should().NotBe(line1);
     }
@@ -142,9 +147,9 @@ public class HookElementDescriptionTests
     [Fact]
     public void TryDecode_of_a_line_with_no_entries_still_yields_the_line()
     {
-        // Defensive: an empty revision is structurally valid, and the providers must not reject
-        // the descriptor outright — GetDataAsync resolves emptiness from a live fetch instead.
-        var encoded = HookCodeLensTaggerProvider.EncodeElementDescription(3, System.Array.Empty<HookFeatureLensEntry>());
+        // Defensive: an empty entry group is structurally valid and still decodes to its line; it
+        // just lists no lens kind, so no provider creates a data point for it.
+        var encoded = Encode(3, System.Array.Empty<HookFeatureLensEntry>());
 
         LineElementDescription.TryDecode(encoded, out var decoded).Should().BeTrue();
         decoded.Should().Be(3);

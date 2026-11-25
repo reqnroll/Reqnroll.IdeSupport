@@ -34,13 +34,9 @@ public static class HookCodeLensRedirect
     // VsShellUtilities.OpenDocument/IVsTextView.SetCaretPos directly — so it needs no LSP bridge
     // and isn't a delegate here.
 
-    /// <summary>The shared tagger registry every <see cref="LineKeyedCodeLensTagger{TEntry}"/> for this feature registers itself with.</summary>
-    internal static readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<HookFeatureLensEntry>> TaggerRegistry =
-        new(tagger => tagger.RequestRefresh());
-
     /// <summary>Requests a re-pull of hook-match lenses for <paramref name="fileUri"/>. Safe to call from any thread.</summary>
-    public static void InvalidateFile(string fileUri) => TaggerRegistry.InvalidateFile(fileUri);
+    public static void InvalidateFile(string fileUri) => FeatureCodeLensTaggerProvider.TaggerRegistry.InvalidateFile(fileUri);
 
     /// <summary>Requests a re-pull of hook-match lenses for every tracked <c>.feature</c> file. Safe to call from any thread.</summary>
-    public static void InvalidateAll() => TaggerRegistry.InvalidateAll();
+    public static void InvalidateAll() => FeatureCodeLensTaggerProvider.TaggerRegistry.InvalidateAll();
 }

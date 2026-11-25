@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 /// Scenario/Scenario Outline lines (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step")) — VS's own built-in test CodeLens
 /// (<c>TestStatusProvider</c>, `Microsoft.VisualStudio.TestWindow.CodeLens.dll`) is itself a
 /// provider in this exact API family, scoped to <c>CSharp</c>/<c>Basic</c>/<c>C/C++</c>; this is the
-/// same shape, scoped to <c>Gherkin</c> instead. Paired with <see cref="RunTestCodeLensTaggerProvider"/>.
+/// same shape, scoped to <c>Gherkin</c> instead. Paired with <see cref="LineCodeLens.FeatureCodeLensTaggerProvider"/>.
 /// </summary>
 /// <remarks>
 /// Runs out-of-process, in the CodeLens ServiceHub host — same confirmed process boundary as
@@ -58,10 +58,16 @@ internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPoint
     }
 
     /// <inheritdoc />
-    /// <remarks>Only checks that the descriptor decodes structurally — whether the line actually has a resolved target is determined in <see cref="RunTestCodeLensDataPoint.GetDataAsync"/> via the callback round-trip.</remarks>
+    /// <remarks>
+    /// Accepts only descriptors whose line carries a Run lens, so a line with only hook lenses
+    /// doesn't get an empty Run indicator (see <see cref="LineElementDescription"/>). Whether the line actually has a
+    /// resolved target is still determined in <see cref="RunTestCodeLensDataPoint.GetDataAsync"/> via
+    /// the callback round-trip.
+    /// </remarks>
     public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        var canCreate = LineElementDescription.TryDecode(descriptor.ElementDescription, out var decodedLine);
+        var canCreate = LineElementDescription.HasLensKind(descriptor.ElementDescription, LineLensKinds.Run);
+        LineElementDescription.TryDecode(descriptor.ElementDescription, out var decodedLine);
         Logger.LogVerbose($"RunTestCodeLensDataPointProvider: CanCreateDataPointAsync({descriptor.FilePath}, ElementDescription='{descriptor.ElementDescription}') -> {canCreate} (line={decodedLine})");
         return Task.FromResult(canCreate);
     }
