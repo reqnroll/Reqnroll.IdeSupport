@@ -100,7 +100,7 @@ sequenceDiagram
 | F17 Go to hooks | Custom: `reqnroll/findHooks` + QuickPick | Custom + `NavigationPickerDialog` | Custom: `GoToHooksAction` | No |
 | F18 Step-usage CodeLens | OOB (native `CodeLensProvider`) | **Custom**: `StepCodeLensService` over `LspInterceptingPipe`; refresh via `reqnroll/refreshCodeLens` | Glue: `StepUsagesCodeVisionProvider` | **Yes**: refresh message |
 | F23 Inlay hints | OOB | OOB | Glue: `ReqnrollFeatureInlayHintsController` via `Editor.inlayModel` | No |
-| F24 Hook-match CodeLens (`.feature`) | Glue: `hookCodeLens.ts` provider; click reuses `findHooks` | **Custom**: classic CodeLens API (`HookCodeLensTaggerProvider` + data-point providers); out-of-process data points call back through `ICodeLensCallbackService` | Glue: `HookCodeVisionProvider` + `StepHooksCodeVisionProvider` | No |
+| F24 Hook-match CodeLens (`.feature`) | Glue: `hookCodeLens.ts` provider; click reuses `findHooks` | **Custom**: classic CodeLens API (`FeatureCodeLensTaggerProvider`, shared with the Run lens, + data-point providers); out-of-process data points call back through `ICodeLensCallbackService` | Glue: `HookCodeVisionProvider` + `StepHooksCodeVisionProvider` | No |
 | F25 Hook-binding match-count CodeLens (`.cs`) | Glue: shares the F18 provider; `goToMatchingScenarios.ts` | **Custom**: `HookMatchCountCodeLensProvider` (second `ICodeLensProvider`) | Glue via `StepUsagesCodeVisionProvider` dispatch | No |
 | F26 Run / outcomes | None of its own (C# Dev Kit); opt-in read-only outcome lens | **Custom**: classic CodeLens bridge to Test Explorer | Glue: `RunTestCodeVisionProvider` + own `dotnet test` | No |
 | F27 C# binding validation | OOB | OOB | OOB | No |

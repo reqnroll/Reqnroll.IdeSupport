@@ -171,7 +171,7 @@ classDiagram
 | `ICSharpSyntaxTreeCache` | `src/LSP/…LSP.Core/Parsing/CSharp` | Shared parse cache with last-write-time freshness; also used by rename. |
 | `ResolveTestTargetsHandler`, `ResolveContainerTestTargetsHandler` | `src/LSP/…LSP.Server/Features/TestTargets` | The two LSP requests. |
 | `RunTestCodeLensService`, `ScenarioTestTargetService` | `src/VisualStudio/…Extension/RunTestCodeLens`, `…/TestTargets` | VS: symbol-tree walk and per-line resolution. |
-| `RunTestCodeLensTaggerProvider`, `RunTestCodeLensDataPoint`, `TestExplorerCommandIds` | `src/VisualStudio/…VSSDKIntegration/RunTestCodeLens` | VS: tag placement, lens details, Run/Debug/Show-in-Test-Explorer commands. |
+| `RunLensTagEntries`, `RunTestCodeLensDataPoint`, `TestExplorerCommandIds` | `src/VisualStudio/…VSSDKIntegration/RunTestCodeLens` | VS: tag placement (through the shared `FeatureCodeLensTaggerProvider`, one tag per line for the Run and hook lenses), lens details, Run/Debug/Show-in-Test-Explorer commands. |
 | `RunTestCodeVisionProvider`, `RunLensSupport`, `RunTestTargetCache`, `RunTestRunner`, `RunTestResultStore`, `FailedStepLocator`, `FailedStepGutterMarks` | `src/Rider/src/main/kotlin/…/testrunner` | Rider: lens, target memoization, `dotnet test` execution, results, failed-step mark. |
 
 ## 6. Generator naming rules
