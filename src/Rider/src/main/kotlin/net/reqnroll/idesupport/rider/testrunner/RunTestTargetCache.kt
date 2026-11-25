@@ -36,6 +36,25 @@ internal object RunTestTargetCache {
         entries[Key(uri, line)] = Entry(identity, targets)
     }
 
+    /**
+     * Returns the cached targets for (uri, line) under [identity], or calls [resolve] and caches what it returns.
+     * [resolve] returns null when no answer came back (no running server, timeout, error): the result is then
+     * empty for this call only and nothing is cached, so the next recompute asks again instead of serving an
+     * empty list until the next `reqnroll/refreshCodeLenses`. An empty list from [resolve] is a real answer
+     * (not built yet, or no matching test) and is cached like any other.
+     */
+    fun getOrResolve(
+        uri: String,
+        line: Int,
+        identity: String,
+        resolve: () -> List<ScenarioTestTargetItem>?,
+    ): List<ScenarioTestTargetItem> {
+        get(uri, line, identity)?.let { return it }
+        val resolved = resolve() ?: return emptyList()
+        put(uri, line, identity, resolved)
+        return resolved
+    }
+
     /** Drops every cached line for [uri] — real staleness signal, e.g. the file's bindings changed underneath an unchanged scenario name. */
     fun invalidateFile(uri: String) {
         entries.keys.removeIf { it.uri == uri }

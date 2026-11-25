@@ -123,15 +123,12 @@ internal object RunLensSupport {
             // reasoning as VS's `container:{Kind}|{Name}` lens key) — prefixed so a container's
             // identity can never collide with a scenario's `detail|name` at the same line.
             val identity = "container:${symbol.kind}|${symbol.name}"
-            val targets = RunTestTargetCache.get(uri, startLine, identity) ?: run {
-                val response = ReqnrollRequestSender.resolveContainerTestTargets(
+            val targets = RunTestTargetCache.getOrResolve(uri, startLine, identity) {
+                ReqnrollRequestSender.resolveContainerTestTargets(
                     project, uri,
                     range.start.line, range.start.character,
                     range.end.line, range.end.character,
-                )
-                val resolved = response?.targets.orEmpty()
-                RunTestTargetCache.put(uri, startLine, identity, resolved)
-                resolved
+                )?.let { it.targets.orEmpty() }
             }
             if (targets.isEmpty()) continue
 
@@ -147,21 +144,19 @@ internal object RunLensSupport {
     /**
      * The generated test method(s) of one scenario/Outline [symbol] (which has a selection range), from
      * [RunTestTargetCache] while the scenario's identity (kind + name) is unchanged, otherwise resolved with
-     * `reqnroll/resolveTestTargets` and cached. Empty when none resolve (not built yet).
+     * `reqnroll/resolveTestTargets` and cached. Empty when none resolve (not built yet), or when no response came
+     * back, which is not cached.
      */
     fun scenarioTargets(project: Project, uri: String, symbol: DocumentSymbol): List<ScenarioTestTargetItem> {
         val selectionRange = symbol.selectionRange ?: return emptyList()
         val startLine = selectionRange.start.line
         val identity = "${symbol.detail}|${symbol.name}"
-        return RunTestTargetCache.get(uri, startLine, identity) ?: run {
-            val response = ReqnrollRequestSender.resolveTestTargets(
+        return RunTestTargetCache.getOrResolve(uri, startLine, identity) {
+            ReqnrollRequestSender.resolveTestTargets(
                 project, uri,
                 selectionRange.start.line, selectionRange.start.character,
                 selectionRange.end.line, selectionRange.end.character,
-            )
-            val resolved = response?.targets.orEmpty()
-            RunTestTargetCache.put(uri, startLine, identity, resolved)
-            resolved
+            )?.let { it.targets.orEmpty() }
         }
     }
 
