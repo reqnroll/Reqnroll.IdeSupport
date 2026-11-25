@@ -315,6 +315,119 @@ public class RenamePostApplyCoordinatorTests
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
+    // ── A push VS does not apply is reported to the user, since the rename
+    //    response has already gone and cannot carry the failure. ─────────────
+
+    private void SetupApplyEditResponse(ApplyWorkspaceEditResponse? response)
+    {
+        var fakeReturns = Substitute.For<IResponseRouterReturns>();
+        fakeReturns.Returning<ApplyWorkspaceEditResponse>(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(response!));
+        _languageServer.SendRequest(Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>())
+            .Returns(fakeReturns);
+    }
+
+    [Fact]
+    public async Task Push_reports_renameNotApplied_with_VS_reason_when_VS_rejects_the_edit_Async()
+    {
+        SetupApplyEditResponse(new ApplyWorkspaceEditResponse { Applied = false, FailureReason = "File is read-only" });
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), null, null);
+
+        await sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRenameNotApplied,
+            Arg.Is<RenameNotAppliedParams>(p =>
+                p.Uri == FeatureUri &&
+                p.Message.StartsWith("The step was not renamed") &&
+                p.Message.Contains("(File is read-only)")));
+    }
+
+    [Fact]
+    public async Task Push_reports_renameNotApplied_when_VS_returns_no_response_Async()
+    {
+        SetupApplyEditResponse(null);
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), null, null);
+
+        await sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRenameNotApplied,
+            Arg.Is<RenameNotAppliedParams>(p => p.Message == RenamePostApplyCoordinator.BuildRejectedMessage(null)));
+    }
+
+    [Fact]
+    public async Task Push_reports_renameNotApplied_when_the_applyEdit_request_throws_Async()
+    {
+        _languageServer.SendRequest(Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>())
+            .Returns(_ => throw new InvalidOperationException("pipe closed"));
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), null, null);
+
+        await sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        _languageServer.Received(1).SendNotification(
+            CustomLspMethodNames.ReqnrollRenameNotApplied,
+            Arg.Is<RenameNotAppliedParams>(p => p.Uri == FeatureUri && p.Message.Contains("(pipe closed)")));
+    }
+
+    [Fact]
+    public async Task Push_does_not_report_renameNotApplied_when_VS_applies_the_edit_Async()
+    {
+        SetupApplyEditRequest(applied: true);
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), null, null);
+
+        await sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        _languageServer.DidNotReceive().SendNotification(
+            CustomLspMethodNames.ReqnrollRenameNotApplied, Arg.Any<RenameNotAppliedParams>());
+    }
+
+    [Fact]
+    public async Task Push_still_drops_the_staged_updates_when_reporting_renameNotApplied_throws_Async()
+    {
+        SetupApplyEditRequest(applied: false);
+        _languageServer
+            .When(s => s.SendNotification(CustomLspMethodNames.ReqnrollRenameNotApplied, Arg.Any<RenameNotAppliedParams>()))
+            .Do(_ => throw new InvalidOperationException("pipe closed"));
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), CsUri, "class C {}");
+
+        var push = () => sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        await push.Should().NotThrowAsync();
+        await _csharpDiscoveryService.DidNotReceive().UpdateFromSourceAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Push_does_not_report_renameNotApplied_when_VS_applied_but_the_cache_commit_throws_Async()
+    {
+        SetupApplyEditRequest(applied: true);
+        _csharpDiscoveryService
+            .UpdateFromSourceAsync(Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new InvalidOperationException("registry gone"));
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), CsUri, "class C {}");
+
+        var push = () => sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        await push.Should().NotThrowAsync();
+        _languageServer.DidNotReceive().SendNotification(
+            CustomLspMethodNames.ReqnrollRenameNotApplied, Arg.Any<RenameNotAppliedParams>());
+    }
+
+    [Fact]
+    public void Rejected_message_omits_the_parenthesis_when_VS_gives_no_reason()
+    {
+        RenamePostApplyCoordinator.BuildRejectedMessage("  ").Should().Be(
+            "The step was not renamed: Visual Studio could not apply the edit. " +
+            "Check that the files it changes are not read-only or locked, then rename it again.");
+    }
+
     // ── Document generation ──────────────────────────────────────────────
 
     [Fact]

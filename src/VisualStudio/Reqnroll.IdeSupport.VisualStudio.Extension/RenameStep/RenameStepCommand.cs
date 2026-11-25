@@ -164,10 +164,9 @@ internal sealed class RenameStepCommand : Command
                 // — e.g. a step-rename validation failure. Show it in a modal
                 // rather than a status bar message that is easy to miss.
                 //
-                // There is no "VS failed to apply the edit" case: the server returns the
-                // rename response before pushing workspace/applyEdit, so a
-                // rejected push has no in-flight request left to fail and is logged server-side
-                // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
+                // A push that VS fails to apply is not reported here: the server returns the
+                // rename response before pushing workspace/applyEdit, so it reports that failure
+                // with reqnroll/renameNotApplied, which RenameNotAppliedInterceptor shows.
                 await EditRejection.ReportAsync(_logger, "RenameStepCommand", ex.Message, cancellationToken)
                     .ConfigureAwait(false);
                 return;

@@ -184,10 +184,11 @@ internal sealed class RenamePostApplyCoordinator
     /// </para>
     /// <para>
     /// Deliberately fire-and-forget: there is no caller left to await it, since the response has
-    /// already gone. A rejected push (locked/read-only file, or unsaved conflicting changes) cannot
-    /// therefore be reported to the user as a failed rename — it is
-    /// logged, and the staged cache updates are dropped so server state still matches reality,
-    /// which is the part that matters.
+    /// already gone. A rejected push (locked/read-only file, or unsaved conflicting changes) can
+    /// therefore not fail the rename request. Instead the staged cache updates are dropped, so server
+    /// state still matches the files, and the user is told with a
+    /// <c>reqnroll/renameNotApplied</c> notification, which the Visual Studio client shows in the
+    /// same dialog it uses for a rename the server refused.
     /// </para>
     /// </remarks>
     public void SchedulePostResponseApply(DocumentUri renameUri, WorkspaceEditBuilder builder)
@@ -216,19 +217,70 @@ internal sealed class RenamePostApplyCoordinator
 
         // CancellationToken.None, not the request's token: by the time this runs the request has
         // completed and OmniSharp has cancelled its token, which would abort the push immediately.
+        ApplyWorkspaceEditResponse? response;
         try
         {
-            var applied = await PushEditToVisualStudioAsync(builder, CancellationToken.None);
-            await CompletePendingCommitAsync(renameUri, applied, CancellationToken.None);
+            response = await PushEditToVisualStudioAsync(builder, CancellationToken.None);
         }
         catch (Exception ex)
         {
             _logger.LogError($"RenamePostApplyCoordinator: post-response workspace/applyEdit for '{renameUri}' failed: {ex}");
             await CompletePendingCommitAsync(renameUri, applied: false, CancellationToken.None);
+            ReportNotApplied(renameUri, BuildFailedMessage(ex.Message));
+            return;
+        }
+
+        var applied = response is { Applied: true };
+        if (!applied)
+            ReportNotApplied(renameUri, BuildRejectedMessage(response?.FailureReason));
+
+        // A failure here is the server's own cache commit, after VS has answered: the files are
+        // as VS left them, so it is logged rather than reported as a rename that did not happen.
+        try
+        {
+            await CompletePendingCommitAsync(renameUri, applied, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"RenamePostApplyCoordinator: committing the rename for '{renameUri}' after workspace/applyEdit (applied={applied}) failed: {ex}");
         }
     }
 
-    private async Task<bool> PushEditToVisualStudioAsync(WorkspaceEditBuilder builder, CancellationToken cancellationToken)
+    /// <summary>The message shown when Visual Studio answers the push with <c>applied: false</c>.</summary>
+    /// <remarks>
+    /// It does not claim that no file changed: whether Visual Studio applies a multi-file edit as a
+    /// whole or file by file is not known, so a rejection may follow a partial apply.
+    /// </remarks>
+    internal static string BuildRejectedMessage(string? failureReason)
+    {
+        var reason = string.IsNullOrWhiteSpace(failureReason) ? string.Empty : $" ({failureReason!.Trim()})";
+        return $"The step was not renamed: Visual Studio could not apply the edit{reason}. " +
+               "Check that the files it changes are not read-only or locked, then rename it again.";
+    }
+
+    /// <summary>The message shown when the push itself fails, with no answer from Visual Studio.</summary>
+    internal static string BuildFailedMessage(string errorMessage)
+        => $"The step was not renamed: the edit could not be sent to Visual Studio ({errorMessage}).";
+
+    /// <summary>
+    /// Tells Visual Studio the rename edit was not applied. Best effort: when the push failed because
+    /// the connection is gone, this fails too, and the failure has already been logged.
+    /// </summary>
+    private void ReportNotApplied(DocumentUri renameUri, string message)
+    {
+        try
+        {
+            _languageServer.SendNotification(
+                CustomLspMethodNames.ReqnrollRenameNotApplied,
+                new RenameNotAppliedParams { Uri = renameUri, Message = message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"RenamePostApplyCoordinator: {CustomLspMethodNames.ReqnrollRenameNotApplied} for '{renameUri}' failed: {ex.Message}");
+        }
+    }
+
+    private async Task<ApplyWorkspaceEditResponse?> PushEditToVisualStudioAsync(WorkspaceEditBuilder builder, CancellationToken cancellationToken)
     {
         // VS never advertises changeAnnotationSupport (Phase 0), so builder's edits are
         // already plain TextEdit here — this push is unannotated DocumentChanges regardless.
@@ -258,14 +310,12 @@ internal sealed class RenamePostApplyCoordinator
         var response = await _languageServer.SendRequest(LspStandardMethodNames.WorkspaceApplyEdit, pushParams)
             .Returning<ApplyWorkspaceEditResponse>(cancellationToken);
 
-        if (response is not { Applied: true })
-        {
+        if (response is { Applied: true })
+            _logger.LogVerbose("RenamePostApplyCoordinator: VS applied workspace/applyEdit");
+        else
             _logger.LogWarning($"RenamePostApplyCoordinator: VS rejected workspace/applyEdit (reason: '{response?.FailureReason}') — not refreshing server caches");
-            return false;
-        }
 
-        _logger.LogVerbose("RenamePostApplyCoordinator: VS applied workspace/applyEdit");
-        return true;
+        return response;
     }
 
     /// <summary>

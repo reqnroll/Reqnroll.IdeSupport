@@ -53,6 +53,12 @@ public static class CustomLspMethodNames
     public const string ReqnrollSelectRenameTarget = "reqnroll/selectRenameTarget";
     /// <summary>Method name for the <c>reqnroll/renameApplied</c> notification.</summary>
     public const string ReqnrollRenameApplied = "reqnroll/renameApplied";
+    /// <summary>
+    /// Method name for the <c>reqnroll/renameNotApplied</c> notification: the server telling Visual
+    /// Studio that the rename edit it pushed with <c>workspace/applyEdit</c> was not applied, with a
+    /// message for the user.
+    /// </summary>
+    public const string ReqnrollRenameNotApplied = "reqnroll/renameNotApplied";
     /// <summary>Method name for the <c>reqnroll/refreshCodeLens</c> notification.</summary>
     public const string ReqnrollRefreshCodeLens = "reqnroll/refreshCodeLens";
     /// <summary>Method name for the <c>reqnroll/semanticTokens</c> push notification.</summary>

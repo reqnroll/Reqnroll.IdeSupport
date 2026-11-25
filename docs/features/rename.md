@@ -185,8 +185,10 @@ versions are always null (`OptionalVersionedTextDocumentIdentifier` without a ve
   Shift+F6; the `.cs` side is context-menu only.
 
 **Post-apply.** `RenamePostApplyCoordinator` pushes the edit for Visual Studio only; only when its `ApplyWorkspaceEditResponse`
-comes back `Applied = true` does cache work proceed (a reported failure such as a locked file short-circuits before
-any cache is touched). It first refreshes the registry for the edited `.cs` file, then bumps the content generation of each
+comes back `Applied = true` does cache work proceed. A reported failure, such as a locked file, or a push that fails
+outright short-circuits before any cache is touched, and the server sends `reqnroll/renameNotApplied` with a message that
+Visual Studio shows in the same dialog as a refused rename: the rename response has already gone, so it cannot carry the
+failure. It first refreshes the registry for the edited `.cs` file, then bumps the content generation of each
 touched `.feature` file that is **not open**, invalidates its match sets and re-derives them from the post-rename text,
 which was computed when the rename was staged. Open files get this from the `didChange` their edit triggers, but a closed
 file never does. A rewrite of closed files ends with one code lens refresh, since the registry refresh before it ran
@@ -197,7 +199,7 @@ before those usages were back in the cache. The rules are in
 
 | Scenario | Behaviour |
 |---|---|
-| C# file read-only or checked out | The edit fails for that file; `rename` returns a `ResponseError` naming it; no partial rename applied. |
+| A file the edit changes is read-only or locked | The client cannot apply the edit. VS Code applies the edit as a whole and shows "Rename failed — the edit could not be applied". Rider checks every target is writable before writing and shows an error. Visual Studio answers the pushed `workspace/applyEdit` with `applied: false` and the server sends `reqnroll/renameNotApplied`, which Visual Studio shows in a dialog. Either way the server learns `applied: false` (from `reqnroll/renameApplied`, or from the push's answer) and drops the staged cache updates. |
 | Membership pending (no `projectFiles` baseline) | Rename proceeds for resolvable files, then `window/showMessage` says the project's steps may not have been updated. |
 | Linked project has not sent membership | Same as pending; logged and reported; user advised to reload the project. |
 | Registry becomes `Invalid` between prepare and rename | `ResponseError("The binding registry has been invalidated. Please try again after the project finishes loading.")` |
