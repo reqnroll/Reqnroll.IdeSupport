@@ -70,7 +70,7 @@ public static class CustomLspMethodNames
     /// <summary>
     /// Method name for the <c>reqnroll/reqnrollProjectDetected</c> notification: sent once per server
     /// process, without parameters, when the first project that uses Reqnroll is seen. Clients hold
-    /// their non-error telemetry until it arrives, so a solution without Reqnroll sends none.
+    /// their telemetry until it arrives, except errors, server start failures, install and upgrade.
     /// </summary>
     public const string ReqnrollProjectDetected = "reqnroll/reqnrollProjectDetected";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>

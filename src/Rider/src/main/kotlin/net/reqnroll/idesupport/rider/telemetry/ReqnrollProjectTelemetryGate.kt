@@ -68,11 +68,14 @@ class ReqnrollProjectTelemetryGate {
         val shared = ReqnrollProjectTelemetryGate()
 
         /**
-         * Errors and server start failures: sent even before a Reqnroll project is seen, because
-         * they are worth knowing about whatever the solution contains. The opt-out still applies.
+         * Errors, server start failures, and install/upgrade: sent even before a Reqnroll project is
+         * seen, because they are worth knowing about whatever the solution contains. The opt-out
+         * still applies.
          */
         fun isAlwaysAllowed(eventName: String): Boolean =
             eventName.startsWith("Error.") ||
+                eventName == RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_INSTALLED ||
+                eventName == RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_UPGRADED ||
                 eventName == RiderTelemetryTransmitter.SERVER_PROCESS_START_FAILED ||
                 eventName == RiderTelemetryTransmitter.SERVER_PROCESS_EXITED_UNEXPECTEDLY ||
                 eventName == RiderTelemetryTransmitter.SERVER_PROCESS_CONNECTION_LOST

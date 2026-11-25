@@ -301,9 +301,9 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             var welcomeService = new WelcomeService(
                 registryManager, versionProvider, dialogService, fileSystem);
 
-            // The welcome/upgrade dialog runs at startup, whatever the solution contains. The
-            // telemetry it raises (installed, upgraded, dialog dismissed, links clicked) goes through
-            // the transmitter, so ReqnrollProjectTelemetryGate holds it until a Reqnroll project is seen.
+            // The welcome/upgrade dialog runs at startup, whatever the solution contains. Installed
+            // and upgraded are sent straight away; the dialog's own events (dismissed, links clicked)
+            // are held by ReqnrollProjectTelemetryGate until a Reqnroll project is seen.
             _logger.LogInfo("RunWelcomeServiceAsync: calling OnIdeScopeActivityStarted...");
             welcomeService.OnIdeScopeActivityStarted(ideScope);
             _logger.LogInfo("RunWelcomeServiceAsync: OnIdeScopeActivityStarted returned (dialog scheduled with 7s delay).");

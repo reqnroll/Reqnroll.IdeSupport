@@ -6,12 +6,15 @@ import { TelemetryEvents } from './telemetryEvents';
 export const MAX_HELD_EVENTS = 200;
 
 /**
- * Errors and server start failures: sent even before a Reqnroll project is seen, because they are
- * worth knowing about whatever the workspace contains. Consent and opt-out still apply to them.
+ * Errors, server start failures, and install/upgrade: sent even before a Reqnroll project is seen,
+ * because they are worth knowing about whatever the workspace contains. Consent and opt-out still
+ * apply to them.
  */
 export function isAlwaysAllowed(eventName: string): boolean {
   return (
     eventName.startsWith('Error.') ||
+    eventName === TelemetryEvents.lifecycleExtensionInstalled ||
+    eventName === TelemetryEvents.lifecycleExtensionUpgraded ||
     eventName === TelemetryEvents.serverProcessStartFailed ||
     eventName === TelemetryEvents.serverProcessExitedUnexpectedly ||
     eventName === TelemetryEvents.serverProcessConnectionLost

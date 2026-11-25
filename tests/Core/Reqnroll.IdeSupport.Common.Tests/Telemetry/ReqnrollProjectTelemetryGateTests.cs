@@ -49,10 +49,12 @@ public class ReqnrollProjectTelemetryGateTests
     [Theory]
     [InlineData(TelemetryEvents.ErrorUnhandledException)]
     [InlineData(TelemetryEvents.ErrorVsWellKnownIdsMismatch)]
+    [InlineData(TelemetryEvents.LifecycleExtensionInstalled)]
+    [InlineData(TelemetryEvents.LifecycleExtensionUpgraded)]
     [InlineData(TelemetryEvents.ServerProcessStartFailed)]
     [InlineData(TelemetryEvents.ServerProcessExitedUnexpectedly)]
     [InlineData(TelemetryEvents.ServerProcessConnectionLost)]
-    public void Errors_and_server_start_failures_are_never_held(string eventName)
+    public void Errors_install_upgrade_and_server_start_failures_are_never_held(string eventName)
     {
         Send(eventName);
 
@@ -60,9 +62,11 @@ public class ReqnrollProjectTelemetryGateTests
     }
 
     [Fact]
-    public void A_restart_is_held_like_any_other_event()
+    public void A_restart_loaded_and_the_usage_heartbeat_are_held_like_any_other_event()
     {
         ReqnrollProjectTelemetryGate.IsAlwaysAllowed(TelemetryEvents.ServerProcessRestarted).Should().BeFalse();
+        ReqnrollProjectTelemetryGate.IsAlwaysAllowed(TelemetryEvents.LifecycleExtensionLoaded).Should().BeFalse();
+        ReqnrollProjectTelemetryGate.IsAlwaysAllowed(TelemetryEvents.LifecycleUsageRecorded).Should().BeFalse();
     }
 
     [Fact]

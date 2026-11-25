@@ -43,9 +43,11 @@ class ReqnrollProjectTelemetryGateTest {
     }
 
     @Test
-    fun `errors and server start failures are never held`() {
+    fun `errors, install, upgrade and server start failures are never held`() {
         val alwaysSent = listOf(
             "Error.UnhandledException",
+            "Lifecycle.Extension.Installed",
+            "Lifecycle.Extension.Upgraded",
             "Server.Process.StartFailed",
             "Server.Process.ExitedUnexpectedly",
             "Server.Process.ConnectionLost",
@@ -54,6 +56,8 @@ class ReqnrollProjectTelemetryGateTest {
 
         assertEquals(alwaysSent, sent)
         assertFalse(ReqnrollProjectTelemetryGate.isAlwaysAllowed("Server.Process.Restarted"))
+        assertFalse(ReqnrollProjectTelemetryGate.isAlwaysAllowed("Lifecycle.Extension.Loaded"))
+        assertFalse(ReqnrollProjectTelemetryGate.isAlwaysAllowed("Lifecycle.Usage.Recorded"))
     }
 
     @Test

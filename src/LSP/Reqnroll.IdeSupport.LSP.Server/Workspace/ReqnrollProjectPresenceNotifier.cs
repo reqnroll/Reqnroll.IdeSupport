@@ -11,8 +11,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 /// <summary>
 /// Tells the client, once per server process, that the workspace contains a project that uses
 /// Reqnroll, by sending <see cref="CustomLspMethodNames.ReqnrollProjectDetected"/>. Clients hold
-/// their non-error telemetry until then, so an IDE that loads the extension for a solution without
-/// Reqnroll sends no telemetry other than errors.
+/// their telemetry until then, so an IDE that loads the extension for a solution without Reqnroll
+/// sends only errors, server start failures, and install or upgrade events.
 /// </summary>
 /// <remarks>
 /// <para>

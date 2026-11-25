@@ -14,18 +14,19 @@ interface LifecycleStore {
 }
 
 /**
- * Port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
- * `Lifecycle.Extension.Loaded` on every start, `Lifecycle.Extension.Installed` on the first ever, `Lifecycle.Extension.Upgraded`
- * when the plugin version increased, and a `Lifecycle.Usage.Recorded` heartbeat (property `UsageDays`) on the first start of each
- * new local day (not on the install day, like VS). Pure: store and sink are injected.
+ * Port of the decision logic in VS's `WelcomeService`, in two halves. [reportInstallOrUpgrade] runs at
+ * startup and is sent whether or not the solution uses Reqnroll: `Lifecycle.Extension.Installed` on the
+ * first start ever (which also seeds the state, so the install day is not a usage day, like VS) and
+ * `Lifecycle.Extension.Upgraded` when the plugin version increased. [reportUse] runs once the server
+ * reports a project that uses Reqnroll: `Lifecycle.Extension.Loaded`, and a `Lifecycle.Usage.Recorded`
+ * heartbeat (property `UsageDays`) on the first such report of each new local day. Pure: store and sink
+ * are injected.
  */
 class ExtensionLifecycleTelemetry(
     private val store: LifecycleStore,
     private val send: (eventName: String, properties: Map<String, Any?>) -> Unit,
 ) {
-    fun report(today: LocalDate, currentVersion: String) {
-        send(RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_LOADED, emptyMap())
-
+    fun reportInstallOrUpgrade(today: LocalDate, currentVersion: String) {
         val installedVersion = store.get(INSTALLED_VERSION_KEY)
         if (installedVersion.isNullOrEmpty()) {
             send(RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_INSTALLED, emptyMap())
@@ -35,19 +36,24 @@ class ExtensionLifecycleTelemetry(
             return
         }
 
-        if (store.get(LAST_USED_DATE_KEY) != today.toString()) {
-            val usageDays = (store.get(USAGE_DAYS_KEY)?.toIntOrNull() ?: 0) + 1
-            store.set(USAGE_DAYS_KEY, usageDays.toString())
-            store.set(LAST_USED_DATE_KEY, today.toString())
-            send(RiderTelemetryTransmitter.LIFECYCLE_USAGE_RECORDED, mapOf(RiderTelemetryTransmitter.USAGE_DAYS_PROPERTY to usageDays))
-        }
-
         if (compareVersions(installedVersion, currentVersion) < 0) {
             send(
                 RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_UPGRADED,
                 mapOf(RiderTelemetryTransmitter.OLD_EXTENSION_VERSION_PROPERTY to installedVersion),
             )
             store.set(INSTALLED_VERSION_KEY, currentVersion)
+        }
+    }
+
+    fun reportUse(today: LocalDate) {
+        send(RiderTelemetryTransmitter.LIFECYCLE_EXTENSION_LOADED, emptyMap())
+
+        if (store.get(INSTALLED_VERSION_KEY).isNullOrEmpty()) return
+        if (store.get(LAST_USED_DATE_KEY) != today.toString()) {
+            val usageDays = (store.get(USAGE_DAYS_KEY)?.toIntOrNull() ?: 0) + 1
+            store.set(USAGE_DAYS_KEY, usageDays.toString())
+            store.set(LAST_USED_DATE_KEY, today.toString())
+            send(RiderTelemetryTransmitter.LIFECYCLE_USAGE_RECORDED, mapOf(RiderTelemetryTransmitter.USAGE_DAYS_PROPERTY to usageDays))
         }
     }
 
@@ -70,26 +76,30 @@ class ExtensionLifecycleTelemetry(
 }
 
 /**
- * Reports the extension lifecycle once per IDE process, when the language server first reports a
- * project that uses Reqnroll, so a solution without Reqnroll neither sends lifecycle events nor
- * counts as a day of use. State is persisted in the application-level [PropertiesComponent]. The
- * activity runs per opened project, so only the first one arms the report.
+ * Reports the extension lifecycle once per IDE process (the activity runs per opened project, so only
+ * the first one counts), persisting state in the application-level [PropertiesComponent]. Install and
+ * upgrade are reported at that first project startup; `Loaded` and the daily heartbeat wait until the
+ * language server reports a project that uses Reqnroll, so a solution without Reqnroll is not counted
+ * as a day of use.
  */
 class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         if (!armed.compareAndSet(false, true)) return
-        ReqnrollProjectTelemetryGate.shared.onOpened(::report)
+        val version = ReqnrollPlugin.descriptor()?.version ?: return
+        withLifecycle { it.reportInstallOrUpgrade(LocalDate.now(), version) }
+        ReqnrollProjectTelemetryGate.shared.onOpened { withLifecycle { it.reportUse(LocalDate.now()) } }
     }
 
-    private fun report() {
+    // Synchronized: the install/upgrade report and the use report read and rewrite the same keys,
+    // and the second runs on the language-server thread when the notification arrives.
+    private fun withLifecycle(action: (ExtensionLifecycleTelemetry) -> Unit) = synchronized(lock) {
         try {
-            val version = ReqnrollPlugin.descriptor()?.version ?: return
             val properties = PropertiesComponent.getInstance()
             val store = object : LifecycleStore {
                 override fun get(key: String): String? = properties.getValue(key)
                 override fun set(key: String, value: String) = properties.setValue(key, value)
             }
-            ExtensionLifecycleTelemetry(store, RiderTelemetryTransmitter::transmit).report(LocalDate.now(), version)
+            action(ExtensionLifecycleTelemetry(store, RiderTelemetryTransmitter::transmit))
         } catch (ex: Exception) {
             // Telemetry must never break the plugin.
         }
@@ -97,5 +107,6 @@ class ReqnrollExtensionLifecycleActivity : ProjectActivity {
 
     private companion object {
         val armed = AtomicBoolean(false)
+        val lock = Any()
     }
 }

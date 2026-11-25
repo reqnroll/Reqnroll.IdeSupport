@@ -50,6 +50,8 @@ suite('ReqnrollProjectGate', () => {
 
   for (const eventName of [
     'Error.UnhandledException',
+    'Lifecycle.Extension.Installed',
+    'Lifecycle.Extension.Upgraded',
     'Server.Process.StartFailed',
     'Server.Process.ExitedUnexpectedly',
     'Server.Process.ConnectionLost',
@@ -60,8 +62,10 @@ suite('ReqnrollProjectGate', () => {
     });
   }
 
-  test('holds a restart like any other event', () => {
+  test('holds a restart, loaded and the usage heartbeat like any other event', () => {
     assert.strictEqual(isAlwaysAllowed('Server.Process.Restarted'), false);
+    assert.strictEqual(isAlwaysAllowed('Lifecycle.Extension.Loaded'), false);
+    assert.strictEqual(isAlwaysAllowed('Lifecycle.Usage.Recorded'), false);
   });
 
   test('holds at most the cap and drops the rest', () => {

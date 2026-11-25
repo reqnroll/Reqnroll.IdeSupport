@@ -18,7 +18,8 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// included: the server sends the notification before anything it would report about the Reqnroll
 /// project, so the gate is open by the time those arrive. Errors and server start failures are
 /// never held (see <see cref="IsAlwaysAllowed"/>): they are worth knowing about whatever the
-/// solution contains, and the normal consent and opt-out checks still apply to them.
+/// solution contains, and the normal consent and opt-out checks still apply to them. The same
+/// goes for install and upgrade, which are reported whether or not a Reqnroll project is seen.
 /// </para>
 /// <para>
 /// Held events are sent in order when the gate opens. At most <see cref="MaxHeldEvents"/> are kept;
@@ -58,10 +59,13 @@ public sealed class ReqnrollProjectTelemetryGate
 
     /// <summary>
     /// <see langword="true"/> for events sent even before a Reqnroll project is seen: errors
-    /// (<c>Error.*</c>) and the server failing to start or exiting unexpectedly.
+    /// (<c>Error.*</c>), the extension being installed or upgraded, and the server failing to start
+    /// or exiting unexpectedly.
     /// </summary>
     public static bool IsAlwaysAllowed(string? eventName) =>
         (eventName is not null && eventName.StartsWith("Error.", StringComparison.Ordinal)) ||
+        eventName == TelemetryEvents.LifecycleExtensionInstalled ||
+        eventName == TelemetryEvents.LifecycleExtensionUpgraded ||
         eventName == TelemetryEvents.ServerProcessStartFailed ||
         eventName == TelemetryEvents.ServerProcessExitedUnexpectedly ||
         eventName == TelemetryEvents.ServerProcessConnectionLost;
