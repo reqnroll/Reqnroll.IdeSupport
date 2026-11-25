@@ -90,16 +90,60 @@ internal sealed class GherkinSemanticClassifier : IClassifier
         _store.ApplyTextChanges(_fileKey, changes);
     }
 
-    /// <summary>Describes one edit of a buffer in line and character coordinates, as the token store needs it.</summary>
+    /// <summary>
+    /// Describes one edit of a buffer in line and character coordinates, as the token store needs it. Text the edit
+    /// replaced with itself, at its start or its end, is left out: a whole-document replacement whose only real change
+    /// is on one line (as Format Document and its Undo can make) then moves the tokens of every other line instead of
+    /// dropping them, and the edit covers the same lines the server treats as edited when it plans its next push.
+    /// </summary>
     internal static TokenTextChange ToTokenTextChange(ITextChange change, ITextSnapshot before, ITextSnapshot after)
     {
-        var oldStart = before.GetLineFromPosition(change.OldPosition);
-        var oldEnd = before.GetLineFromPosition(change.OldEnd);
-        var newEnd = after.GetLineFromPosition(change.NewEnd);
+        var (prefix, suffix) = UnchangedEnds(change);
+        var oldPosition = change.OldPosition + prefix;
+        var oldEndPosition = change.OldEnd - suffix;
+        var newEndPosition = change.NewEnd - suffix;
+
+        var oldStart = before.GetLineFromPosition(oldPosition);
+        var oldEnd = before.GetLineFromPosition(oldEndPosition);
+        var newEnd = after.GetLineFromPosition(newEndPosition);
         return new TokenTextChange(
-            oldStart.LineNumber, change.OldPosition - oldStart.Start.Position,
-            oldEnd.LineNumber, change.OldEnd - oldEnd.Start.Position,
-            newEnd.LineNumber, change.NewEnd - newEnd.Start.Position);
+            oldStart.LineNumber, oldPosition - oldStart.Start.Position,
+            oldEnd.LineNumber, oldEndPosition - oldEnd.Start.Position,
+            newEnd.LineNumber, newEndPosition - newEnd.Start.Position);
+    }
+
+    /// <summary>
+    /// How many characters at the start and at the end of a change are the same in its old and new text. Neither end
+    /// stops between the <c>\r</c> and the <c>\n</c> of a line break, so each trimmed position is one the buffer's
+    /// line model can place.
+    /// </summary>
+    internal static (int Prefix, int Suffix) UnchangedEnds(ITextChange change)
+    {
+        // Typing and deleting (one side empty) have nothing to trim; reading the texts would only allocate.
+        if (change.OldLength == 0 || change.NewLength == 0)
+            return (0, 0);
+
+        var oldText = change.OldText ?? string.Empty;
+        var newText = change.NewText ?? string.Empty;
+        var limit = Math.Min(oldText.Length, newText.Length);
+
+        var prefix = 0;
+        while (prefix < limit && oldText[prefix] == newText[prefix])
+            prefix++;
+        if (prefix > 0 && oldText[prefix - 1] == '\r' && (CharAt(oldText, prefix) == '\n' || CharAt(newText, prefix) == '\n'))
+            prefix--;
+
+        var suffix = 0;
+        while (suffix < limit - prefix
+               && oldText[oldText.Length - 1 - suffix] == newText[newText.Length - 1 - suffix])
+            suffix++;
+        if (suffix > 0 && oldText[oldText.Length - suffix] == '\n'
+            && (CharAt(oldText, oldText.Length - suffix - 1) == '\r' || CharAt(newText, newText.Length - suffix - 1) == '\r'))
+            suffix--;
+
+        return (prefix, suffix);
+
+        static char CharAt(string text, int index) => index >= 0 && index < text.Length ? text[index] : '\0';
     }
 
     /// <summary>Returns classification spans for the given snapshot span by looking up the cached semantic tokens.</summary>

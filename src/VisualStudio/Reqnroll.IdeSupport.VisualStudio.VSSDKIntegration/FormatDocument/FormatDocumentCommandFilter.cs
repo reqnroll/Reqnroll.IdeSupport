@@ -274,7 +274,11 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
         ThreadHelper.ThrowIfNotOnUIThread();
 
         var snapshot = textBuffer.CurrentSnapshot;
-        using var edit = textBuffer.CreateEdit();
+
+        // The server answers with one edit over the whole range it formatted, even when it changed a single line.
+        // Minimal-change differencing makes the buffer raise changes only where the text really differs, so the
+        // caret, markers and cached semantic tokens of untouched lines survive both the format and its Undo.
+        using var edit = textBuffer.CreateEdit(EditOptions.DefaultMinimalChange, reiteratedVersionNumber: null, editTag: null);
 
         foreach (var e in edits)
         {
