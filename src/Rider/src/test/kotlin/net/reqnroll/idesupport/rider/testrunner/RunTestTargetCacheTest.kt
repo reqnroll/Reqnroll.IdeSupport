@@ -84,4 +84,49 @@ class RunTestTargetCacheTest {
 
         assertEquals(emptyList(), RunTestTargetCache.get("file:///F.feature", 1, "Scenario|Unbound"))
     }
+
+    // ── getOrResolve ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `getOrResolve caches what resolve returns and does not call it again for the same identity`() {
+        var calls = 0
+        val first = RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|S") { calls++; targets("AddNumbers") }
+        val second = RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|S") { calls++; targets("Other") }
+
+        assertEquals(targets("AddNumbers"), first)
+        assertEquals(targets("AddNumbers"), second)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `getOrResolve returns empty without caching when no response came back`() {
+        val result = RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|S") { null }
+
+        assertEquals(emptyList(), result)
+        // Nothing cached, so the next recompute asks the server again instead of hiding the Run lens.
+        assertNull(RunTestTargetCache.get("file:///F.feature", 1, "Scenario|S"))
+        assertEquals(
+            targets("AddNumbers"),
+            RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|S") { targets("AddNumbers") },
+        )
+    }
+
+    @Test
+    fun `getOrResolve caches an empty answer from the server`() {
+        var calls = 0
+        RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|Unbound") { calls++; emptyList() }
+        val second = RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|Unbound") { calls++; targets("Late") }
+
+        assertEquals(emptyList(), second)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `getOrResolve does not let a failed resolve evict an entry cached under another identity`() {
+        RunTestTargetCache.put("file:///F.feature", 1, "Scenario|Old", targets("Old"))
+
+        RunTestTargetCache.getOrResolve("file:///F.feature", 1, "Scenario|New") { null }
+
+        assertEquals(targets("Old"), RunTestTargetCache.get("file:///F.feature", 1, "Scenario|Old"))
+    }
 }
