@@ -8,6 +8,7 @@ import {
   findOwningProjectFile,
   isInProjectBuildOutput,
   ProjectManager,
+  ProjectManagerDeps,
 } from '../../lsp/projectManager';
 import { ReqnrollMethods } from '../../lsp/lspMethods';
 import { ProjectProperties } from '../../lsp/msbuildEvaluator';
@@ -111,21 +112,18 @@ interface WatcherListeners {
   delete?: UriListener;
 }
 
-const STUBBED_WORKSPACE_MEMBERS = [
-  'createFileSystemWatcher',
-  'findFiles',
-  'onDidChangeWorkspaceFolders',
-] as const;
-
 /**
- * Replaces the slice of `vscode.workspace` ProjectManager touches at construction time with
- * deterministic stand-ins, so a ProjectManager (built with {@link stubDeps}, which keeps MSBuild
- * out of the loop) can be driven with synthetic watcher events without a real file system, a real
- * `dotnet msbuild` run, or workspace folders. Mirrors the save/restore-via-Object.defineProperty
- * technique used by manualDocumentSync.test.ts for vscode.workspace's event emitters.
+ * Builds ProjectManager deps whose file watchers are deterministic stand-ins, so a ProjectManager
+ * can be driven with synthetic watcher events without a real file system, a real `dotnet msbuild`
+ * run (see {@link stubDeps}), or workspace folders. The stand-ins go through ProjectManager's deps
+ * rather than onto the shared `vscode.workspace` object: the extension under test builds its own
+ * ProjectManager whenever its language client finishes starting, which can happen while one of
+ * these tests runs, and a manager built against stubbed workspace members keeps dead watchers and
+ * an empty project scan for the rest of the test run.
  */
 async function withStubbedProjectEnvironment(
   fn: (env: {
+    deps: Partial<ProjectManagerDeps>;
     fireCreate: (uri: vscode.Uri) => void;
     fireChange: (uri: vscode.Uri) => void;
     fireDelete: (uri: vscode.Uri) => void;
@@ -133,20 +131,15 @@ async function withStubbedProjectEnvironment(
     fireSourceDelete: (uri: vscode.Uri) => void;
   }) => Promise<void>,
 ): Promise<void> {
-  const originalMembers = STUBBED_WORKSPACE_MEMBERS.map(
-    (name) => [name, Object.getOwnPropertyDescriptor(vscode.workspace, name)!] as const,
-  );
-
   const projectWatcherListeners: WatcherListeners = {};
   const sourceWatcherListeners: WatcherListeners = {};
 
-  const makeWatcher = (pattern: vscode.GlobPattern): vscode.FileSystemWatcher => {
+  const makeWatcher = (pattern: string): vscode.FileSystemWatcher => {
     // ProjectManager arms two watchers: the project/solution one (*.csproj) and the
     // *.cs/*.feature one. Each gets its own listener slots so a test can drive either.
-    const listeners: WatcherListeners =
-      typeof pattern === 'string' && pattern.includes('csproj')
-        ? projectWatcherListeners
-        : sourceWatcherListeners;
+    const listeners: WatcherListeners = pattern.includes('csproj')
+      ? projectWatcherListeners
+      : sourceWatcherListeners;
     return {
       onDidCreate: (listener: UriListener) => {
         listeners.create = listener;
@@ -164,32 +157,18 @@ async function withStubbedProjectEnvironment(
     } as unknown as vscode.FileSystemWatcher;
   };
 
-  Object.defineProperty(vscode.workspace, 'createFileSystemWatcher', {
-    configurable: true,
-    value: makeWatcher,
+  await fn({
+    deps: {
+      ...stubDeps,
+      createFileSystemWatcher: makeWatcher,
+      onDidChangeWorkspaceFolders: () => ({ dispose: () => undefined }),
+    },
+    fireCreate: (uri) => projectWatcherListeners.create?.(uri),
+    fireChange: (uri) => projectWatcherListeners.change?.(uri),
+    fireDelete: (uri) => projectWatcherListeners.delete?.(uri),
+    fireSourceCreate: (uri) => sourceWatcherListeners.create?.(uri),
+    fireSourceDelete: (uri) => sourceWatcherListeners.delete?.(uri),
   });
-  Object.defineProperty(vscode.workspace, 'findFiles', {
-    configurable: true,
-    value: () => Promise.resolve([] as vscode.Uri[]),
-  });
-  Object.defineProperty(vscode.workspace, 'onDidChangeWorkspaceFolders', {
-    configurable: true,
-    value: () => ({ dispose: () => undefined }),
-  });
-
-  try {
-    await fn({
-      fireCreate: (uri) => projectWatcherListeners.create?.(uri),
-      fireChange: (uri) => projectWatcherListeners.change?.(uri),
-      fireDelete: (uri) => projectWatcherListeners.delete?.(uri),
-      fireSourceCreate: (uri) => sourceWatcherListeners.create?.(uri),
-      fireSourceDelete: (uri) => sourceWatcherListeners.delete?.(uri),
-    });
-  } finally {
-    for (const [name, descriptor] of originalMembers) {
-      Object.defineProperty(vscode.workspace, name, descriptor);
-    }
-  }
 }
 
 /** Injected ProjectManager deps: no workspace scan and a fast null-returning MSBuild evaluation. */
@@ -412,12 +391,12 @@ suite('ProjectManager', () => {
     test('re-evaluates the owning project when a .csproj is edited', async function () {
       this.timeout(15000);
 
-      await withStubbedProjectEnvironment(async ({ fireCreate, fireChange }) => {
+      await withStubbedProjectEnvironment(async ({ deps, fireCreate, fireChange }) => {
         const { client, notifications } = fakeClient();
         const projectFile = path.join('C:', 'work', 'App.csproj');
         const uri = fakeProjectUri(projectFile);
 
-        const manager = new ProjectManager(client, stubDeps);
+        const manager = new ProjectManager(client, deps);
         try {
           fireCreate(uri);
           await waitFor(
@@ -448,12 +427,12 @@ suite('ProjectManager', () => {
     test('still registers on create and unregisters on delete', async function () {
       this.timeout(15000);
 
-      await withStubbedProjectEnvironment(async ({ fireCreate, fireDelete }) => {
+      await withStubbedProjectEnvironment(async ({ deps, fireCreate, fireDelete }) => {
         const { client, notifications } = fakeClient();
         const projectFile = path.join('C:', 'work', 'Added.csproj');
         const uri = fakeProjectUri(projectFile);
 
-        const manager = new ProjectManager(client, stubDeps);
+        const manager = new ProjectManager(client, deps);
         try {
           fireCreate(uri);
           await waitFor(
@@ -494,7 +473,7 @@ suite('ProjectManager', () => {
       let resends = 0;
       await withStubbedProjectEnvironment(async (env) => {
         const { client, notifications } = fakeClient();
-        const manager = new ProjectManager(client, stubDeps);
+        const manager = new ProjectManager(client, env.deps);
         try {
           env.fireCreate(fakeProjectUri(projectFile));
           await waitFor(
