@@ -46,6 +46,7 @@ public class DocumentationCommentIdBuilderTests
                 public void Arrays(int[] vector, string[][] jagged, int[,] matrix, Book[,,] cube) { }
                 public void Nested(Book.Chapter chapter, List<Book.Chapter> chapters) { }
                 public void Dynamic(dynamic anything, object plain) { }
+                public void NestedFromAnotherAssembly(Environment.SpecialFolder folder) { }
                 public void NativeInts(nint a, nuint b) { }
                 public void ByRef(ref int a, out string b, in long c) { b = ""; }
                 public unsafe void Pointer(int* p) { }
