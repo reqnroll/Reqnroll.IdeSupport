@@ -84,4 +84,13 @@ public sealed class StepDefinitionItem
     /// <summary>0-based column of the binding method in <see cref="SourceFile"/>.</summary>
     [JsonProperty("sourceChar")]
     public int SourceChar { get; set; }
+
+    /// <summary>
+    /// The exact identity of the binding method, when discovery determined it; otherwise
+    /// <see langword="null"/>. Lets a client that can resolve symbols navigate to a binding with no
+    /// local source (<see cref="IsResolved"/> <see langword="false"/>), such as one in a referenced
+    /// package; <see cref="SourceFile"/> and the position are then absent or meaningless.
+    /// </summary>
+    [JsonProperty("methodIdentity", NullValueHandling = NullValueHandling.Ignore)]
+    public MethodIdentityItem? MethodIdentity { get; set; }
 }

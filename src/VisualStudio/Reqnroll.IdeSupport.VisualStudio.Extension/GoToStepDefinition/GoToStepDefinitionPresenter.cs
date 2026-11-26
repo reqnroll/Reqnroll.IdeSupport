@@ -77,7 +77,7 @@ internal sealed class GoToStepDefinitionPresenter
             return;
         }
 
-        _goToDefinitionRun?.Invoke(items.Count(item => item.IsResolved && item.SourceFile is { Length: > 0 }));
+        _goToDefinitionRun?.Invoke(items.Count(IsNavigable));
 
         if (items.Count == 0)
         {
@@ -90,7 +90,13 @@ internal sealed class GoToStepDefinitionPresenter
         if (items.Count == 1)
         {
             var item = items[0];
-            if (!item.IsResolved || item.SourceFile is not { Length: > 0 })
+            if (!HasLocalSource(item) && item.MethodIdentity is not null)
+            {
+                await NavigateByIdentityAsync(item, item.MethodIdentity, fileUri, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (!HasLocalSource(item) || item.SourceFile is not { } sourceFile)
             {
                 // Same wording as the unresolved row in the Find Unused Step Definitions list.
                 _logger.LogInformation(
@@ -103,7 +109,7 @@ internal sealed class GoToStepDefinitionPresenter
             }
 
             var target = new NavigationTarget(
-                $"{Path.GetFileName(item.SourceFile)}:{item.SourceLine + 1}", item.SourceFile, item.SourceLine, item.SourceChar);
+                $"{Path.GetFileName(sourceFile)}:{item.SourceLine + 1}", sourceFile, item.SourceLine, item.SourceChar);
             await NavigationPickerHelper
                 .PickAndNavigateAsync(new[] { target }, _navigationLogger, "Go to Step Definition", cancellationToken)
                 .ConfigureAwait(false);
@@ -114,6 +120,33 @@ internal sealed class GoToStepDefinitionPresenter
         _logger.LogInformation(
             "GoToStepDefinitionPresenter: {ItemCount} step definitions; rendering {Title}.", items.Count, title);
         await _renderer.RenderAsync(title, items, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether Go To Definition can open <paramref name="item"/>: from its local source file, or, with
+    /// no local source, through Visual Studio's symbol navigation by its method identity.
+    /// </summary>
+    internal static bool IsNavigable(StepDefinitionListItem item) =>
+        HasLocalSource(item) || item.MethodIdentity is not null;
+
+    private static bool HasLocalSource(StepDefinitionListItem item) =>
+        item.IsResolved && item.SourceFile is { Length: > 0 };
+
+    private async Task NavigateByIdentityAsync(
+        StepDefinitionListItem item, BindingMethodIdentity identity, string fileUri, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "GoToStepDefinitionPresenter: {ClassName}.{MethodName} has no local source; navigating to {DocumentationCommentId}.",
+            item.ClassName, item.MethodName, identity.DocumentationCommentId);
+
+        var navigated = await ExternalBindingNavigator
+            .NavigateAsync(identity, new Uri(fileUri).LocalPath, _navigationLogger, cancellationToken)
+            .ConfigureAwait(false);
+        if (!navigated)
+            await ShowStatusAsync(
+                $"Reqnroll: could not open {item.ClassName}.{item.MethodName} — its source is not on this machine " +
+                "and Visual Studio could not navigate to it (rebuild the project, or enable navigation to decompiled sources).",
+                cancellationToken);
     }
 
     private static Task ShowStatusAsync(string message, CancellationToken cancellationToken) =>

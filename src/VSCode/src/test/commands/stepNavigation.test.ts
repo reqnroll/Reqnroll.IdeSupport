@@ -227,6 +227,27 @@ suite('stepNavigation', () => {
         ['A', 'B'],
       );
     });
+
+    test('keeps apart bindings that record no source but have different method identities', () => {
+      // Two bindings from an assembly built without a PDB: no file, position 0:0 for both.
+      const external = (methodName: string) => ({
+        methodName,
+        isResolved: false,
+        sourceLine: 0,
+        sourceChar: 0,
+        methodIdentity: {
+          assemblyIdentity: 'External, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null',
+          documentationCommentId: `M:External.Steps.${methodName}`,
+        },
+      });
+
+      const result = distinctByPosition([external('A'), external('B'), external('A')]);
+
+      assert.deepStrictEqual(
+        result.map((r) => r.methodName),
+        ['A', 'B'],
+      );
+    });
   });
 
   suite('resolveRelativePathIn', () => {

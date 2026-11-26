@@ -132,3 +132,21 @@ Scenario: Repeated edits to one .cs replace its bindings rather than accumulatin
 	Then the feature step "I press subtract" is reported as bound
 	And the feature step "I press add" is reported as bound
 	And no "reqnroll.binding" diagnostic is published for "Repeat.feature"
+
+Scenario: Bindings found by the connector are reported with their method identity
+	Given the LSP server is started
+	When the project is announced with the prebuilt bindings fixture
+	And the feature file "Identity.feature" is opened with
+		"""
+		Feature: Identity
+
+		Scenario: S
+			Given a step on the second same-named class
+			Given a step the fixture never defines
+		"""
+	Then the feature step "a step on the second same-named class" is reported as bound within 30 seconds
+	And the feature step "a step the fixture never defines" is reported as unbound
+	When step definitions are requested at line 3 column 10 in "Identity.feature"
+	Then the only step definition result is identified as "M:ReqnrollBindingsFixture.Identity.Second.SharedNameSteps.GivenAStep"
+	When go to hooks is requested at line 2 column 2 in "Identity.feature"
+	Then the hook results include a hook identified as "M:ReqnrollBindingsFixture.CalculatorSteps.BeforeScenarioHook"

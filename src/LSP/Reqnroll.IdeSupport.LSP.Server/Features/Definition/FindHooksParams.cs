@@ -21,4 +21,14 @@ public sealed record FindHooksParams : TextDocumentPositionParams
     /// </summary>
     [JsonProperty("ownLevelOnly")]
     public bool OwnLevelOnly { get; set; }
+
+    /// <summary>
+    /// When <see langword="true"/>, hooks with no source file on this machine are included too, as
+    /// entries with an empty <see cref="FindHookLocation.Uri"/>, <see cref="FindHookLocation.IsResolved"/>
+    /// <see langword="false"/> and, when known, a <see cref="FindHookLocation.MethodIdentity"/> to
+    /// navigate by. Only a client that can navigate by identity sets it; by default such hooks are
+    /// left out, since a client expecting a URI on every entry cannot open them.
+    /// </summary>
+    [JsonProperty("includeUnresolved")]
+    public bool IncludeUnresolved { get; set; }
 }

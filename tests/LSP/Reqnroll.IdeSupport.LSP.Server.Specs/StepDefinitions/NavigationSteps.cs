@@ -98,6 +98,34 @@ public sealed class NavigationSteps
             "at least one location should carry step text extracted from the in-memory snapshot");
     }
 
+    // ── reqnroll/findStepDefinitions ──────────────────────────────────────────
+
+    [When(@"step definitions are requested at line (\d+) column (\d+) in ""(.*)""")]
+    public async Task WhenStepDefinitionsAreRequestedAt(int line, int column, string fileName)
+    {
+        _ctx.LastFindStepDefinitions = await _ctx.Harness.Client
+            .RequestFindStepDefinitionsAsync(_ctx.UriFor(fileName), line, column)
+            .ConfigureAwait(false);
+    }
+
+    [Then(@"the only step definition result is identified as ""(.*)""")]
+    public void ThenTheOnlyStepDefinitionResultIsIdentifiedAs(string documentationCommentId)
+    {
+        _ctx.LastFindStepDefinitions.Should().NotBeNull();
+        var item = _ctx.LastFindStepDefinitions!.Items.Should().ContainSingle().Subject;
+        item.MethodIdentity.Should().NotBeNull("the connector identifies every binding it discovers");
+        item.MethodIdentity!.DocumentationCommentId.Should().Be(documentationCommentId);
+        item.MethodIdentity.AssemblyIdentity.Should().StartWith("ReqnrollBindingsFixture,");
+    }
+
+    [Then(@"the hook results include a hook identified as ""(.*)""")]
+    public void ThenTheHookResultsIncludeAHookIdentifiedAs(string documentationCommentId)
+    {
+        _ctx.LastFindHooks.Should().NotBeNull();
+        _ctx.LastFindHooks!.Hooks.Should().Contain(
+            h => h.MethodIdentity != null && h.MethodIdentity.DocumentationCommentId == documentationCommentId);
+    }
+
     // ── reqnroll/findHooks (F17 — Hook Navigation) ────────────────────────────
 
     [When(@"go to hooks is requested at line (\d+) column (\d+) in ""(.*)""")]

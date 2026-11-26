@@ -70,7 +70,7 @@ public sealed class FindStepDefinitionsHandler
         if (step is null)
             return Task.FromResult(new FindStepDefinitionsResponse());
 
-        var items = _resolver.GetBindingsWithSource(step).Select(ToItem).ToList();
+        var items = _resolver.GetBindingsForNavigation(step).Select(ToItem).ToList();
         var resolvedCount = items.Count(i => i.IsResolved);
 
         // Same shape as DefinitionHandler's/FindHooksHandler's result line, so the server log alone
@@ -97,9 +97,11 @@ public sealed class FindStepDefinitionsHandler
     {
         var impl = binding.Implementation;
         var (className, methodName) = FindUnusedStepDefinitionsService.ParseMethod(impl.Method);
-        var loc = impl.SourceLocation!.IsResolved
+        // Null for a binding known only by its method identity (no source recorded at all).
+        var loc = impl.SourceLocation is { IsResolved: true }
             ? impl.SourceLocation.WithIdentifierLocation(impl.Method, _fileSystem)
             : impl.SourceLocation;
+        var isResolved = loc?.IsResolved == true;
 
         return new StepDefinitionItem
         {
@@ -110,13 +112,14 @@ public sealed class FindStepDefinitionsHandler
             MethodName         = methodName,
             BindingExpression  = binding.DisplayExpression,
             StepDefinitionType = StepDefinitionItem.ToWireType(binding.StepDefinitionType),
-            SourceFile         = loc.IsResolved ? loc.SourceFile : null,
-            SourceLine         = loc.SourceFileLine - 1,     // 1-based → 0-based
-            SourceChar         = loc.SourceFileColumn - 1,   // 1-based → 0-based
-            IsResolved         = loc.IsResolved,
-            RecordedSourceFile = loc.IsResolved && PathUtils.IsSamePath(loc.SourceFile, loc.RecordedSourceFile)
+            SourceFile         = isResolved ? loc!.SourceFile : null,
+            SourceLine         = loc is null ? 0 : loc.SourceFileLine - 1,     // 1-based → 0-based
+            SourceChar         = loc is null ? 0 : loc.SourceFileColumn - 1,   // 1-based → 0-based
+            IsResolved         = isResolved,
+            RecordedSourceFile = loc is null || (isResolved && PathUtils.IsSamePath(loc.SourceFile, loc.RecordedSourceFile))
                 ? null
                 : loc.RecordedSourceFile,
+            MethodIdentity     = MethodIdentityItem.From(impl.Identity),
         };
     }
 }

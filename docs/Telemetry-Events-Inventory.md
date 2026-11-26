@@ -282,7 +282,7 @@ as *lookups*, not *runs*.
 |---|---|
 | **Emitters** | Client only: Visual Studio's `GoToStepDefinitionPresenter`; VS Code's `doGoToStepDefinition` (the "Reqnroll: Go to Step Definition" picker command); Rider's `GoToStepDefinitionTelemetry` (armed by `GoToStepDefinitionActionListener`), which re-emits the server's `textDocument/definition` lookup |
 | **When** | Visual Studio: each time the user runs Go To Definition (F12 or Ctrl+Click) in a `.feature` file, wherever the caret is. VS Code: each run of the picker command. Rider: each Go To Declaration action run in a `.feature` file; the listener arms a 5-second gate and the next `textDocument/definition` lookup event is reported with the server's `LocationCount`, so hover lookups are not counted. VS Code's F12/Peek/Ctrl+click use `textDocument/definition`, which those IDEs also send on hover and which a client cannot tell apart from a navigation, so they are **not** reported as navigations (known gap) |
-| **Properties** | `LocationCount` (int): navigable rows offered (0 when there was nowhere to go) |
+| **Properties** | `LocationCount` (int): navigable rows offered (0 when there was nowhere to go). In Visual Studio this includes a binding with no local source that it can open by its method identity; the server's `Lookup.FindStepDefinitions` counts only rows with a local source |
 
 **Analytics use.** Go to Step Definition navigation count for Visual Studio, Rider and VS Code's picker command;
 the honest counterpart to `Lookup.FindStepDefinitions`. The status mix (ambiguous, undefined,

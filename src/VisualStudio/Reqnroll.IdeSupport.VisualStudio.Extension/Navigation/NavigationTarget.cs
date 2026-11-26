@@ -12,9 +12,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 internal sealed record NavigationTarget(
     /// <summary>Label shown in the picker dialog (e.g. "[BeforeScenario] SetUpDatabase (Hooks.cs:10)").</summary>
     string DisplayText,
-    /// <summary>Absolute file-system path of the target source file.</summary>
+    /// <summary>Absolute file-system path of the target source file; empty when the target is opened by its identity.</summary>
     string FilePath,
     /// <summary>0-based line in the target file.</summary>
     int StartLine,
     /// <summary>0-based character in the target file.</summary>
-    int StartChar);
+    int StartChar,
+    /// <summary>
+    /// The exact identity of the target method, used to open it through Visual Studio's symbol
+    /// navigation when it has no source file on this machine.
+    /// </summary>
+    BindingMethodIdentity? Identity = null);

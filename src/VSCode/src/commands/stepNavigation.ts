@@ -93,7 +93,14 @@ export async function doGoToStepDefinition(client: LanguageClient): Promise<void
 export function distinctByPosition(items: readonly StepDefinitionItem[]): StepDefinitionItem[] {
   const seen = new Set<string>();
   return items.filter((item) => {
-    const key = `${item.sourceFile ?? item.recordedSourceFile}|${item.sourceLine}|${item.sourceChar}`;
+    // A binding that records no source at all has no position to compare; its method identity
+    // (or, failing that, its name) is what tells two such bindings apart.
+    const place =
+      item.sourceFile ??
+      item.recordedSourceFile ??
+      item.methodIdentity?.documentationCommentId ??
+      formatMethodName(item);
+    const key = `${place}|${item.sourceLine}|${item.sourceChar}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

@@ -1,5 +1,6 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,7 +42,7 @@ internal sealed class FindHooksService
         int               line0,
         int               char0,
         CancellationToken cancellationToken) =>
-        FindHooksAsync(fileUri, line0, char0, ownLevelOnly: false, cancellationToken);
+        FindHooksAsync(fileUri, line0, char0, ownLevelOnly: false, cancellationToken, includeUnresolved: true);
 
     /// <summary>
     /// Queries the LSP server for applicable hooks at <paramref name="line0"/> /
@@ -50,6 +51,11 @@ internal sealed class FindHooksService
     /// (classic-CodeLens bridge) so its Details popup shows exactly the hooks the lens
     /// counted, matching what <c>reqnroll.goToHooks</c>-invoking clients already do.
     /// </summary>
+    /// <param name="includeUnresolved">
+    /// Also return hooks with no source file on this machine, which carry a method identity to
+    /// navigate by instead (see <c>ExternalBindingNavigator</c>). Set only by Go to Hooks itself; the
+    /// CodeLens path keeps showing the hooks it can open from a file.
+    /// </param>
     /// <exception cref="LspRequestFailedException">The request failed (server error, timeout, no server).</exception>
     /// <exception cref="Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException">The server answered ContentModified.</exception>
     public async Task<FindHooksResult> FindHooksAsync(
@@ -57,9 +63,10 @@ internal sealed class FindHooksService
         int               line0,
         int               char0,
         bool              ownLevelOnly,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool              includeUnresolved = false)
     {
-        var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly);
+        var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly, includeUnresolved);
 
         _logger.LogDebug(
             "FindHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollFindHooks, fileUri, line0, char0);
@@ -102,11 +109,12 @@ internal sealed class FindHooksService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly) =>
+    private static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly, bool includeUnresolved) =>
         new LspParamsBuilder()
             .AddTextDocument(fileUri)
             .AddPosition(line0, char0)
             .AddBool("ownLevelOnly", ownLevelOnly)
+            .AddBool("includeUnresolved", includeUnresolved)
             .Build();
 
     private static IReadOnlyList<HookLocation> ParseHooks(JArray array)
@@ -124,8 +132,11 @@ internal sealed class FindHooksService
             var hookType   = obj["hookType"]?.Value<string>() ?? "";
             var hookOrder  = obj["hookOrder"]?.Value<int>()  ?? 10000;
             var methodName = obj["methodName"]?.Value<string>() ?? "";
+            // Absent on an older server, which only ever returned hooks with a local file.
+            var isResolved = obj["isResolved"]?.Value<bool>() ?? true;
+            var identity   = BindingMethodIdentity.FromJson(obj["methodIdentity"]);
 
-            result.Add(new HookLocation(uri, startLine, startChar, hookType, hookOrder, methodName));
+            result.Add(new HookLocation(uri, startLine, startChar, hookType, hookOrder, methodName, isResolved, identity));
         }
         return result;
     }

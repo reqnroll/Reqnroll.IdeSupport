@@ -132,6 +132,64 @@ public class FindHooksHandlerTests
             hookOrder: null,
             error: null);
 
+    private static readonly Reqnroll.IdeSupport.LSP.Connector.Models.MethodIdentity HookIdentity =
+        new("External.Bindings, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "M:External.Hooks.MyHook");
+
+    private static ProjectHookBinding MakeIdentifiedHook(HookType hookType, SourceLocation? location)
+        => new(
+            new ProjectBindingImplementation("Hooks.MyHook()", parameterTypes: null, location!, HookIdentity),
+            scope: null, hookType, hookOrder: null, error: null);
+
+    private static FindHooksParams IncludingUnresolved(FindHooksParams request) =>
+        request with { IncludeUnresolved = true };
+
+    // ── Hooks with no local source, navigable by method identity ──────────
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_includes_identified_hooks_without_local_source_only_when_asked_Async(bool hasRecordedLocation)
+    {
+        var location = hasRecordedLocation ? SourceLocation.Unresolved("/workspaces/host/Hooks.cs", 10, 5) : null;
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(RegistryWith(MakeIdentifiedHook(HookType.BeforeFeature, location)));
+
+        var byDefault = await CreateSut().HandleAsync(RequestAt(FeatureUri, 0, 0), CancellationToken.None);
+        var asked = await CreateSut().HandleAsync(IncludingUnresolved(RequestAt(FeatureUri, 0, 0)), CancellationToken.None);
+
+        byDefault.Hooks.Should().BeEmpty("a client that did not ask expects a URI on every entry");
+        var hook = asked.Hooks.Should().ContainSingle().Subject;
+        hook.Uri.Should().BeEmpty();
+        hook.IsResolved.Should().BeFalse();
+        hook.HookType.Should().Be("BeforeFeature");
+        hook.MethodIdentity!.DocumentationCommentId.Should().Be(HookIdentity.DocumentationCommentId);
+    }
+
+    [Fact]
+    public async Task Handle_still_leaves_out_unresolved_hooks_without_an_identity_when_asked_Async()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(RegistryWith(MakeUnresolvedHook(HookType.BeforeFeature)));
+
+        var result = await CreateSut().HandleAsync(IncludingUnresolved(RequestAt(FeatureUri, 0, 0)), CancellationToken.None);
+
+        result.Hooks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_reports_a_resolved_hook_with_its_identity_and_as_resolved_Async()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(RegistryWith(MakeIdentifiedHook(HookType.BeforeFeature, new SourceLocation("/workspace/Hooks.cs", 10, 5))));
+
+        var hook = (await CreateSut().HandleAsync(IncludingUnresolved(RequestAt(FeatureUri, 0, 0)), CancellationToken.None))
+            .Hooks.Should().ContainSingle().Subject;
+
+        hook.IsResolved.Should().BeTrue();
+        hook.Uri.Should().NotBeEmpty();
+        hook.MethodIdentity!.DocumentationCommentId.Should().Be(HookIdentity.DocumentationCommentId);
+    }
+
     // ── Unresolved hook source path ──────────────────────────────
 
     [Fact]

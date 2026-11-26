@@ -152,6 +152,17 @@ public static class LspClientExtensions
                 })
             .Returning<FindStepUsagesResponse?>(ct);
 
+    /// <summary>Sends a <c>reqnroll/findStepDefinitions</c> request: the bindings of the step at the position.</summary>
+    public static Task<FindStepDefinitionsResponse?> RequestFindStepDefinitionsAsync(
+        this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)
+        => client.SendRequest("reqnroll/findStepDefinitions",
+                new TextDocumentPositionParams
+                {
+                    TextDocument = new TextDocumentIdentifier { Uri = uri },
+                    Position     = new Position(line, character),
+                })
+            .Returning<FindStepDefinitionsResponse?>(ct);
+
     /// <summary>Sends a <c>reqnroll/findHooks</c> request (F17 — Hook Navigation).</summary>
     public static Task<FindHooksResponse?> RequestFindHooksAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)

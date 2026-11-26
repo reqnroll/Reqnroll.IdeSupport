@@ -126,6 +126,66 @@ public class FindStepDefinitionsHandlerTests
         item.RecordedSourceFile.Should().Be("/workspaces/host/Steps.cs");
     }
 
+    private static readonly Reqnroll.IdeSupport.LSP.Connector.Models.MethodIdentity ExternalIdentity =
+        new("External.Bindings, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "M:External.Steps.AStep");
+
+    private static MatchResultItem IdentifiedBinding(SourceLocation? location) =>
+        MatchResultItem.CreateMatch(
+            new ProjectStepDefinitionBinding(
+                ScenarioBlock.Given, new Regex("^a step$"), null,
+                new ProjectBindingImplementation("Steps.AStep()", null, location!, ExternalIdentity),
+                specifiedExpression: "a step"),
+            ParameterMatch.NotMatch);
+
+    [Fact]
+    public async Task A_binding_with_no_recorded_source_but_a_method_identity_is_reported_Async()
+    {
+        // A binding from a package built without a PDB: no source location at all. It used to be
+        // dropped, so the step read as having no step definition.
+        StoreStep(IdentifiedBinding(location: null));
+
+        var item = (await CreateSut().HandleAsync(RequestAt(2, 10), CancellationToken.None)).Items.Should().ContainSingle().Subject;
+
+        item.IsResolved.Should().BeFalse();
+        item.SourceFile.Should().BeNull();
+        item.RecordedSourceFile.Should().BeNull();
+        item.MethodIdentity.Should().BeEquivalentTo(new
+        {
+            AssemblyIdentity = ExternalIdentity.AssemblyIdentity,
+            DocumentationCommentId = ExternalIdentity.DocumentationCommentId,
+        });
+    }
+
+    [Fact]
+    public async Task An_unresolved_binding_carries_its_method_identity_Async()
+    {
+        StoreStep(IdentifiedBinding(SourceLocation.Unresolved("/workspaces/host/Steps.cs", 10, 5)));
+
+        var item = (await CreateSut().HandleAsync(RequestAt(2, 10), CancellationToken.None)).Items.Should().ContainSingle().Subject;
+
+        item.IsResolved.Should().BeFalse();
+        item.RecordedSourceFile.Should().Be("/workspaces/host/Steps.cs");
+        item.MethodIdentity!.DocumentationCommentId.Should().Be(ExternalIdentity.DocumentationCommentId);
+    }
+
+    [Fact]
+    public async Task A_binding_with_no_source_and_no_identity_is_still_left_out_Async()
+    {
+        StoreStep(Binding("Steps.AStep()", null!, "a step"));
+
+        (await CreateSut().HandleAsync(RequestAt(2, 10), CancellationToken.None)).Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_method_identity_is_omitted_from_the_wire_when_unknown_Async()
+    {
+        StoreStep(Binding("Steps.AStep", new SourceLocation("/workspace/Steps.cs", 10, 5), "a step"));
+
+        var item = (await CreateSut().HandleAsync(RequestAt(2, 10), CancellationToken.None)).Items.Single();
+
+        Newtonsoft.Json.JsonConvert.SerializeObject(item).Should().NotContain("methodIdentity");
+    }
+
     [Fact]
     public async Task Project_name_is_left_unset_Async()
     {

@@ -91,6 +91,7 @@ internal sealed class FindUnusedStepDefinitionsService
                 IsResolved        = item["isResolved"]?.Value<bool>() ?? true,
                 RecordedSourceFile = item["recordedSourceFile"]?.Value<string>(),
                 StepDefinitionType = item["stepDefinitionType"]?.Value<string>(),
+                MethodIdentity     = Navigation.BindingMethodIdentity.FromJson(item["methodIdentity"]),
             });
         }
         return result;
