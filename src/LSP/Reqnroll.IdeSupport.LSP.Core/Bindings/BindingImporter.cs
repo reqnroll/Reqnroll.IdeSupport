@@ -377,7 +377,7 @@ public class BindingImporter
     private static string GetImplementationKey(string method, MethodIdentity identity) =>
         identity == null
             ? method
-            : "" + identity.AssemblyIdentity + "" + identity.DocumentationCommentId;
+            : "\u001F" + identity.AssemblyIdentity + "\u001F" + identity.DocumentationCommentId;
 
     /// <summary>
     /// Returns <paramref name="identity"/> when both its parts are present and the ID names a method,
