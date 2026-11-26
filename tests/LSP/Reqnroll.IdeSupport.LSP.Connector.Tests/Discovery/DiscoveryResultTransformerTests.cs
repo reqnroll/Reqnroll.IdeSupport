@@ -394,4 +394,91 @@ public class DiscoveryResultTransformerTests
         _telemetry.Received(1).AddTelemetryProperty("StepDefinitions", "1");
         _telemetry.Received(1).AddTelemetryProperty("Hooks", "1");
     }
+
+    // ── Method identity ──────────────────────────────────────────────────────────
+
+    private static BindingData OneStepAndOneHook()
+    {
+        var bindingData = EmptyBindingData();
+        bindingData.StepDefinitions = new[]
+        {
+            new StepDefinitionData
+            {
+                Type = "Given", Regex = "^my step$",
+                Source = new BindingSourceData { Method = Method(fullName: "Void MyStep()") },
+                ParamTypes = Array.Empty<string>()
+            }
+        };
+        bindingData.Hooks = new[]
+        {
+            new HookData { Type = "BeforeScenario", Source = new BindingSourceData { Method = Method(fullName: "Void Setup()") } }
+        };
+        return bindingData;
+    }
+
+    [Fact]
+    public void Transform_attaches_the_method_identity_to_step_definitions_and_hooks()
+    {
+        var provider = Substitute.For<IMethodIdentityProvider>();
+        var stepIdentity = new MethodIdentity("MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "M:MyApp.Steps.MyStep");
+        var hookIdentity = new MethodIdentity("MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "M:MyApp.Steps.Setup");
+        provider.GetMethodIdentity(Arg.Is<BindingSourceMethodData>(m => m.FullName == "Void MyStep()")).Returns(stepIdentity);
+        provider.GetMethodIdentity(Arg.Is<BindingSourceMethodData>(m => m.FullName == "Void Setup()")).Returns(hookIdentity);
+
+        var result = _sut.Transform(OneStepAndOneHook(), _sourceLocationProvider, _telemetry, provider);
+
+        result.StepDefinitions[0].MethodIdentity.Should().Be(stepIdentity);
+        result.Hooks[0].MethodIdentity.Should().Be(hookIdentity);
+        _telemetry.Received(1).AddTelemetryProperty("MethodIdentities", "2");
+    }
+
+    [Fact]
+    public void Transform_leaves_the_method_identity_null_without_a_provider()
+    {
+        var result = _sut.Transform(OneStepAndOneHook(), _sourceLocationProvider, _telemetry);
+
+        result.StepDefinitions[0].MethodIdentity.Should().BeNull();
+        result.Hooks[0].MethodIdentity.Should().BeNull();
+    }
+
+    [Fact]
+    public void Transform_still_succeeds_when_the_identity_provider_throws()
+    {
+        var provider = Substitute.For<IMethodIdentityProvider>();
+        provider.GetMethodIdentity(Arg.Any<BindingSourceMethodData>()).Returns(_ => throw new MissingMethodException("boom"));
+
+        var result = _sut.Transform(OneStepAndOneHook(), _sourceLocationProvider, _telemetry, provider);
+
+        result.StepDefinitions.Should().ContainSingle().Which.MethodIdentity.Should().BeNull();
+        result.Hooks.Should().ContainSingle().Which.MethodIdentity.Should().BeNull();
+        _telemetry.Received(1).AddTelemetryProperty("MethodIdentities", "0");
+    }
+
+    [Fact]
+    public void Method_identity_survives_the_wire_round_trip()
+    {
+        var stepDefinition = new StepDefinition
+        {
+            Type = "Given", Method = "Steps.MyStep()",
+            MethodIdentity = new MethodIdentity("MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "M:MyApp.Steps.MyStep")
+        };
+
+        var wire = ConnectorJsonSerialization.SerializeAndMark(new DiscoveryResult { StepDefinitions = new[] { stepDefinition } });
+        var roundTripped = ConnectorJsonSerialization.DeserializeObjectWithMarker<DiscoveryResult>(wire)!;
+
+        wire.Should().Contain("\"methodIdentity\"").And.Contain("\"documentationCommentId\"");
+        roundTripped.StepDefinitions.Should().ContainSingle().Which.Should().Be(stepDefinition);
+    }
+
+    [Fact]
+    public void A_payload_without_a_method_identity_still_deserializes()
+    {
+        var wire = ConnectorJsonSerialization.StartMarker +
+                   "{\"stepDefinitions\":[{\"type\":\"Given\",\"method\":\"Steps.MyStep()\"}]}" +
+                   ConnectorJsonSerialization.EndMarker;
+
+        var result = ConnectorJsonSerialization.DeserializeObjectWithMarker<DiscoveryResult>(wire)!;
+
+        result.StepDefinitions.Should().ContainSingle().Which.MethodIdentity.Should().BeNull();
+    }
 }

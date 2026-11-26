@@ -61,7 +61,7 @@ public class DiscoveryExecutor
         {
             var transformer = new DiscoveryResultTransformer();
             var sourceLocationProvider = new SourceLocationProvider(testAssemblyContext, log);
-            discoveryResult = transformer.Transform(bindingData, sourceLocationProvider, telemetry);
+            discoveryResult = transformer.Transform(bindingData, sourceLocationProvider, telemetry, sourceLocationProvider);
         }
         catch (Exception ex)
         {

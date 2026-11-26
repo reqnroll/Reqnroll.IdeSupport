@@ -21,12 +21,19 @@ public class Hook
     /// <summary>Gets or sets the source location.</summary>
     public string SourceLocation { get; set; }
 
+    /// <summary>
+    /// The exact identity of the bound method, when the connector could determine it; <see langword="null"/>
+    /// from connectors that predate it or for methods it cannot describe (e.g. generic ones).
+    /// </summary>
+    public MethodIdentity MethodIdentity { get; set; }
+
     #region Equality
 
     /// <summary>Gets or sets the equals.</summary>
     protected bool Equals(Hook other)
     {
-        return Type == other.Type && HookOrder == other.HookOrder && Method == other.Method && Equals(Scope, other.Scope) && Error == other.Error && SourceLocation == other.SourceLocation;
+        return Type == other.Type && HookOrder == other.HookOrder && Method == other.Method && Equals(Scope, other.Scope) && Error == other.Error && SourceLocation == other.SourceLocation &&
+               Equals(MethodIdentity, other.MethodIdentity);
     }
 
     /// <summary>Gets or sets the equals.</summary>
@@ -48,6 +55,7 @@ public class Hook
             hashCode = (hashCode * 397) ^ (Method != null ? Method.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (Scope != null ? Scope.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (SourceLocation != null ? SourceLocation.GetHashCode() : 0);
+            hashCode = (hashCode * 397) ^ (MethodIdentity != null ? MethodIdentity.GetHashCode() : 0);
             return hashCode;
         }
     }
