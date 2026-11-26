@@ -55,7 +55,7 @@ internal static class RenameBindingIdentity
 
     private static string MethodKey(ProjectBindingImplementation? implementation) =>
         implementation?.Identity is { } identity
-            ? identity.AssemblyIdentity + "" + identity.DocumentationCommentId
+            ? identity.AssemblyIdentity + "\u001F" + identity.DocumentationCommentId
             : implementation?.Method ?? "";
 
     /// <summary>
