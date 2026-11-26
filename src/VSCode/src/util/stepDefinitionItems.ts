@@ -24,6 +24,11 @@ export interface StepDefinitionItem {
   isResolved?: boolean;
   /** The path the compiled assembly records, when it differs from `sourceFile`. */
   recordedSourceFile?: string;
+  /**
+   * The binding method's exact identity, when the server determined it. A binding from an
+   * assembly built without a PDB has this but neither `sourceFile` nor `recordedSourceFile`.
+   */
+  methodIdentity?: { assemblyIdentity: string; documentationCommentId: string };
 }
 
 /** `ClassName.MethodName`, or whichever part is known. */
@@ -56,6 +61,8 @@ export function warnSourceNotOnThisMachine(item: StepDefinitionItem): void {
   void showWarn(
     recorded
       ? `Reqnroll: this step definition's source isn't on this machine. The compiled assembly records it at "${recorded}". Rebuild the project locally to navigate to it.`
-      : "Reqnroll: this step definition's source isn't on this machine. Rebuild the project locally to navigate to it.",
+      : item.methodIdentity
+        ? "Reqnroll: this step definition is declared in a referenced assembly that records no source, so it can't be opened here."
+        : "Reqnroll: this step definition's source isn't on this machine. Rebuild the project locally to navigate to it.",
   );
 }
