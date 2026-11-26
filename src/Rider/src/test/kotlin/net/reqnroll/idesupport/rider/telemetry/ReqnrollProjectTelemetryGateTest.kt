@@ -61,6 +61,42 @@ class ReqnrollProjectTelemetryGateTest {
     }
 
     @Test
+    fun `reset closes an open gate and the next open sends what was held since`() {
+        sut.open()
+
+        sut.reset()
+        send("Server.Session.Started")
+        assertTrue(sent.isEmpty())
+        assertFalse(sut.isOpen)
+
+        sut.open()
+        assertEquals(listOf("Server.Session.Started"), sent)
+    }
+
+    @Test
+    fun `reset drops what the previous session held but keeps errors flowing`() {
+        send("Project.Opened")
+
+        sut.reset()
+        send("Error.UnhandledException")
+        send("Server.Session.Started")
+        sut.open()
+
+        assertEquals(listOf("Error.UnhandledException", "Server.Session.Started"), sent)
+    }
+
+    @Test
+    fun `a listener waiting before a reset still runs on the next open`() {
+        var calls = 0
+        sut.onOpened { calls++ }
+
+        sut.reset()
+        sut.open()
+
+        assertEquals(1, calls)
+    }
+
+    @Test
     fun `holds at most the cap and drops the rest`() {
         repeat(ReqnrollProjectTelemetryGate.MAX_HELD_EVENTS + 5) { send("Perf.Sample") }
 

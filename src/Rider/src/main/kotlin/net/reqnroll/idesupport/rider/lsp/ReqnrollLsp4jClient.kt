@@ -1,12 +1,12 @@
 package net.reqnroll.idesupport.rider.lsp
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.Lsp4jClient
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollEmptyParams
-import net.reqnroll.idesupport.rider.telemetry.ReqnrollProjectTelemetryGate
 import net.reqnroll.idesupport.rider.telemetry.ReqnrollTelemetryEventInterceptor
 import net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider
 import org.eclipse.lsp4j.MessageParams
@@ -43,6 +43,7 @@ class ReqnrollLsp4jClient(
     handler: LspServerNotificationsHandler,
 ) : Lsp4jClient(
     ReqnrollTelemetryEventInterceptor(
+        project,
         ReqnrollCodeLensRefreshInterceptor(project, ReqnrollInlayHintRefreshInterceptor(project, handler)),
     ),
 ) {
@@ -66,5 +67,5 @@ class ReqnrollLsp4jClient(
      * Reqnroll, so the telemetry held until then may be sent.
      */
     @JsonNotification("reqnroll/reqnrollProjectDetected")
-    fun reqnrollProjectDetected() = ReqnrollProjectTelemetryGate.shared.open()
+    fun reqnrollProjectDetected() = project.service<ReqnrollServerEvents>().telemetryGate.open()
 }

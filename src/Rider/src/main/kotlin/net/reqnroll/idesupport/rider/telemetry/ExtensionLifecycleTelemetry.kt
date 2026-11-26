@@ -1,5 +1,7 @@
 package net.reqnroll.idesupport.rider.telemetry
 
+import net.reqnroll.idesupport.rider.lsp.ReqnrollServerEvents
+import com.intellij.openapi.components.service
 import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.project.Project
@@ -76,18 +78,22 @@ class ExtensionLifecycleTelemetry(
 }
 
 /**
- * Reports the extension lifecycle once per IDE process (the activity runs per opened project, so only
- * the first one counts), persisting state in the application-level [PropertiesComponent]. Install and
- * upgrade are reported at that first project startup; `Loaded` and the daily heartbeat wait until the
- * language server reports a project that uses Reqnroll, so a solution without Reqnroll is not counted
- * as a day of use.
+ * Reports the extension lifecycle once per IDE process, persisting state in the application-level
+ * [PropertiesComponent]. Install and upgrade are reported at the first project startup. `Loaded` and
+ * the daily heartbeat wait until the first solution whose language server reports a project that uses
+ * Reqnroll, whichever window that is, so a solution without Reqnroll is not counted as a day of use.
+ * The activity runs per opened project, so each one arms its own solution's gate.
  */
 class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
-        if (!armed.compareAndSet(false, true)) return
-        val version = ReqnrollPlugin.descriptor()?.version ?: return
-        withLifecycle { it.reportInstallOrUpgrade(LocalDate.now(), version) }
-        ReqnrollProjectTelemetryGate.shared.onOpened { withLifecycle { it.reportUse(LocalDate.now()) } }
+        if (installReported.compareAndSet(false, true)) {
+            ReqnrollPlugin.descriptor()?.version?.let { version ->
+                withLifecycle { it.reportInstallOrUpgrade(LocalDate.now(), version) }
+            }
+        }
+        project.service<ReqnrollServerEvents>().telemetryGate.onOpened {
+            if (useReported.compareAndSet(false, true)) withLifecycle { it.reportUse(LocalDate.now()) }
+        }
     }
 
     // Synchronized: the install/upgrade report and the use report read and rewrite the same keys,
@@ -106,7 +112,8 @@ class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     }
 
     private companion object {
-        val armed = AtomicBoolean(false)
+        val installReported = AtomicBoolean(false)
+        val useReported = AtomicBoolean(false)
         val lock = Any()
     }
 }

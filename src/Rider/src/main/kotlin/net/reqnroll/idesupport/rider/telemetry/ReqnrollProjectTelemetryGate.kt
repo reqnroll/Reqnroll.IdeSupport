@@ -1,15 +1,18 @@
 package net.reqnroll.idesupport.rider.telemetry
 
 /**
- * Holds this host's telemetry until the language server reports that the solution contains a
+ * Holds one solution's telemetry until its language server reports that the solution contains a
  * project that uses Reqnroll (`reqnroll/reqnrollProjectDetected`), so a solution without Reqnroll
- * sends nothing but errors. The counterpart of `ReqnrollProjectTelemetryGate.cs` in VS and
- * `reqnrollProjectGate.ts` in VS Code.
+ * sends nothing but errors, server start failures, install and upgrade. The counterpart of
+ * `ReqnrollProjectTelemetryGate.cs` in VS and `reqnrollProjectGate.ts` in VS Code.
  *
- * Every event goes through [send], the ones the server relays included: the server sends the
- * notification before anything it reports about the Reqnroll project, so the gate is open by the
- * time those arrive. Held events are sent in order on [open]; past [MAX_HELD_EVENTS] they are
- * dropped, and so is whatever is still held when the IDE closes. Once open it stays open.
+ * Unlike those, there is one gate per project (held by `ReqnrollServerEvents`), because one Rider
+ * process can have several solutions open, each with its own server; project-scoped events go
+ * through `RiderTelemetryTransmitter.transmit(project, ...)`. The server sends the notification
+ * before anything it reports about the Reqnroll project, so the gate is open by the time those
+ * arrive. Held events are sent in order on [open]; past [MAX_HELD_EVENTS] they are dropped, and so
+ * is whatever is still held when the session ends or the solution closes. [reset] closes the gate
+ * again whenever a new server process starts.
  */
 class ReqnrollProjectTelemetryGate {
     private val lock = Any()
@@ -40,6 +43,17 @@ class ReqnrollProjectTelemetryGate {
         if (runNow) runSafely(listener)
     }
 
+    /**
+     * Closes the gate for a new server session, dropping whatever the previous session still held.
+     * Listeners waiting for the gate to open keep waiting.
+     */
+    fun reset() {
+        synchronized(lock) {
+            val queue = held
+            if (queue == null) held = mutableListOf() else queue.clear()
+        }
+    }
+
     fun open() {
         val (queue, listeners) = synchronized(lock) {
             val queue = held ?: return
@@ -63,9 +77,6 @@ class ReqnrollProjectTelemetryGate {
     companion object {
         /** Upper bound on events held while no Reqnroll project has been reported. */
         const val MAX_HELD_EVENTS = 200
-
-        /** The gate shared by everything in this IDE process. */
-        val shared = ReqnrollProjectTelemetryGate()
 
         /**
          * Errors, server start failures, and install/upgrade: sent even before a Reqnroll project is

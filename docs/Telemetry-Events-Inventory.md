@@ -149,6 +149,17 @@ subject only to the opt-outs below: `Error.*` (including `Error.UnhandledExcepti
 not just held but computed only once the gate opens, so a day without a Reqnroll project is not
 counted as a day of use (§4).
 
+The gate belongs to a server session, not to the IDE process. Each client resets it (closed again,
+anything still held dropped) whenever it starts a new server process: VS in
+`LspServerConnectionService.StartAsync`, VS Code when the language client enters `Starting`, Rider in
+`ReqnrollServerEvents.serverStarting`. Every server checks its own projects and reports again, so after
+a Reqnroll solution is closed and one without Reqnroll is opened (VS starts a new server on a solution
+swap), the second solution sends nothing but the never-held events. Rider keeps one gate per open
+solution (`ReqnrollServerEvents.telemetryGate`, used by `RiderTelemetryTransmitter.transmit(project, ...)`),
+because one Rider process can have several solutions open in different windows, each with its own
+server. `Lifecycle.Extension.Loaded` and the first daily heartbeat still fire at most once per IDE
+process (VS Code: per extension host), on the first gate that opens.
+
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
 `RiderTelemetryTransmitter.transmit`, VS Code in its transmitter). VS Code *additionally* honors

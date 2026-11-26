@@ -114,7 +114,9 @@ sequenceDiagram
   only party that sees every project and owns `ReqnrollProjectDetector`) and says so once with
   `reqnroll/reqnrollProjectDetected`. Each host holds every other event at its single send point until then, and
   computes `Lifecycle.Extension.Loaded` and the daily-use heartbeat only then. `Error.*`, install, upgrade and the
-  server start-failure events are never held; the consent gates above still apply to them. Details: the inventory's "Reqnroll-project gate".
+  server start-failure events are never held; the consent gates above still apply to them. The gate is per server
+  session: each client closes it again when it starts a new server process (a VS solution swap, a VS Code restart, a
+  Rider server start), and Rider keeps one gate per open solution. Details: the inventory's "Reqnroll-project gate".
 - Every event and its fields is documented in the public inventory.
 
 ## 7. Pitfalls and design decisions

@@ -549,6 +549,9 @@ internal sealed class LspServerConnectionService : IDisposable
         // A fresh id per process, so each generation's exit or failed start joins to its own server events.
         var serverSessionId = ServerSession.NewId();
         _serverSessionId = serverSessionId;
+        // Telemetry is held per server session: this process must report a Reqnroll project itself
+        // (for example after a solution swap) before anything but errors is sent again.
+        ReqnrollProjectTelemetryGate.Shared.Reset();
         // Keeps whatever crash report the runtime prints to this process's stderr as it dies.
         var crashCollector = new CrashReportCollector();
         _crashCollector = crashCollector;

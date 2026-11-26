@@ -30,7 +30,10 @@ export function isAlwaysAllowed(eventName: string): boolean {
  * Every event goes through `send`, the ones the server relays included: the server sends the
  * notification before anything it reports about the Reqnroll project, so the gate is open by the
  * time those arrive. Held events are sent in order on `open`; past `MAX_HELD_EVENTS` they are
- * dropped, and so is whatever is still held when the window closes. Once open it stays open.
+ * dropped, and so is whatever is still held when the session ends or the window closes.
+ *
+ * The gate belongs to a server session: `reset` closes it again whenever a new server process
+ * starts, and that server must report a Reqnroll project itself before anything else is sent.
  */
 export class ReqnrollProjectGate {
   private held: (() => void)[] | undefined = [];
@@ -52,6 +55,14 @@ export class ReqnrollProjectGate {
   onOpened(listener: () => void): void {
     if (this.isOpen) listener();
     else this.openedListeners.push(listener);
+  }
+
+  /**
+   * Closes the gate for a new server session, dropping whatever the previous session still held.
+   * Listeners waiting for the gate to open keep waiting.
+   */
+  reset(): void {
+    this.held = [];
   }
 
   open(): void {

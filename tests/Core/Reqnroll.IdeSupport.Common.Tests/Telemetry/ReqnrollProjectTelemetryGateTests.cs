@@ -104,6 +104,68 @@ public class ReqnrollProjectTelemetryGateTests
     }
 
     [Fact]
+    public void A_reset_closes_an_open_gate_until_the_next_server_reports_a_Reqnroll_project()
+    {
+        _sut.Open();
+
+        _sut.Reset();
+        Send(TelemetryEvents.ServerSessionStarted);
+
+        _sent.Should().BeEmpty();
+        _sut.IsOpen.Should().BeFalse();
+
+        _sut.Open();
+        _sent.Should().Equal(TelemetryEvents.ServerSessionStarted);
+    }
+
+    [Fact]
+    public void A_reset_drops_what_the_previous_session_held()
+    {
+        Send(TelemetryEvents.ProjectOpened);
+
+        _sut.Reset();
+        Send(TelemetryEvents.ServerSessionStarted);
+        _sut.Open();
+
+        _sent.Should().Equal(TelemetryEvents.ServerSessionStarted);
+    }
+
+    [Fact]
+    public void A_reset_still_lets_errors_through()
+    {
+        _sut.Open();
+        _sut.Reset();
+
+        Send(TelemetryEvents.ErrorUnhandledException);
+
+        _sent.Should().Equal(TelemetryEvents.ErrorUnhandledException);
+    }
+
+    [Fact]
+    public async Task A_wait_started_after_a_reset_completes_on_the_next_open()
+    {
+        _sut.Open();
+        _sut.Reset();
+
+        var wait = _sut.WaitUntilOpenAsync(CancellationToken.None);
+        wait.IsCompleted.Should().BeFalse();
+
+        _sut.Open();
+        await wait.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task A_pending_wait_survives_a_reset()
+    {
+        var wait = _sut.WaitUntilOpenAsync(CancellationToken.None);
+
+        _sut.Reset();
+        _sut.Open();
+
+        await wait.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task Waiting_completes_when_the_gate_opens()
     {
         var wait = _sut.WaitUntilOpenAsync(CancellationToken.None);

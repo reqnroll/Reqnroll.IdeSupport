@@ -1,5 +1,6 @@
 package net.reqnroll.idesupport.rider.telemetry
 
+import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.navigation.GoToStepDefinitionTelemetry
@@ -51,6 +52,7 @@ internal fun parseTelemetryEvent(raw: Any): ParsedTelemetryEvent? {
 }
 
 class ReqnrollTelemetryEventInterceptor(
+    private val project: Project,
     private val handler: LspServerNotificationsHandler,
 ) : LspServerNotificationsHandler by handler {
     override fun telemetryEvent(`object`: Any) {
@@ -59,8 +61,11 @@ class ReqnrollTelemetryEventInterceptor(
             if (parsed == null) {
                 ReqnrollDebugLogger.verbose("ReqnrollTelemetryEventInterceptor: telemetry/event without eventName; dropping.")
             } else {
-                RiderTelemetryTransmitter.transmit(parsed.eventName, parsed.properties)
-                GoToStepDefinitionTelemetry.onServerEvent(parsed.eventName, parsed.properties)
+                val transmit = { name: String, props: Map<String, Any?> ->
+                    RiderTelemetryTransmitter.transmit(project, name, props)
+                }
+                transmit(parsed.eventName, parsed.properties)
+                GoToStepDefinitionTelemetry.onServerEvent(parsed.eventName, parsed.properties, transmit = transmit)
             }
         } catch (ex: Exception) {
             ReqnrollDebugLogger.verbose("ReqnrollTelemetryEventInterceptor: error forwarding telemetry/event.", ex)

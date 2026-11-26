@@ -108,6 +108,39 @@ suite('ReqnrollProjectGate', () => {
     assert.deepStrictEqual(sent, ['Server.Session.Started', 'Lifecycle.Extension.Loaded']);
   });
 
+  test('reset closes an open gate and the next open sends what was held since', () => {
+    gate.open();
+
+    gate.reset();
+    send('Server.Session.Started');
+    assert.deepStrictEqual(sent, []);
+    assert.strictEqual(gate.isOpen, false);
+
+    gate.open();
+    assert.deepStrictEqual(sent, ['Server.Session.Started']);
+  });
+
+  test('reset drops what the previous session held but keeps errors flowing', () => {
+    send('Project.Opened');
+
+    gate.reset();
+    send('Error.UnhandledException');
+    send('Server.Session.Started');
+    gate.open();
+
+    assert.deepStrictEqual(sent, ['Error.UnhandledException', 'Server.Session.Started']);
+  });
+
+  test('a listener waiting before a reset still runs on the next open', () => {
+    let calls = 0;
+    gate.onOpened(() => calls++);
+
+    gate.reset();
+    gate.open();
+
+    assert.strictEqual(calls, 1);
+  });
+
   test('registerReqnrollProjectDetected opens the gate on the server notification', () => {
     let method: string | undefined;
     let handler: ((params: unknown) => void) | undefined;

@@ -1,7 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  State,
+} from 'vscode-languageclient/node';
 import {
   createTraceChannel,
   protocolLogLevelToArg,
@@ -510,6 +515,13 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // use. The notification handler is subscribed before start() so every server (re)start is covered.
   void reportExtensionInstallOrUpgrade(context, sendTelemetryEvent);
   context.subscriptions.push(registerReqnrollProjectDetected(client));
+  // Telemetry is held per server session: every (re)start must report a Reqnroll project again.
+  // Subscribed before ServerLifecycleTelemetry, so a restart's own event is held with the rest.
+  context.subscriptions.push(
+    client.onDidChangeState((e) => {
+      if (e.newState === State.Starting) reqnrollProjectGate.reset();
+    }),
+  );
   reqnrollProjectGate.onOpened(() => void reportExtensionUse(context, sendTelemetryEvent));
   serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent, serverProcessTracker);
   context.subscriptions.push(serverLifecycle);
