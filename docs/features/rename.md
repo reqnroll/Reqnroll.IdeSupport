@@ -61,7 +61,7 @@ sequenceDiagram
         IDE->>R: textDocument/rename (uri, position, newName)
         R->>V: ValidateNewName (rules 3 to 6)
         alt invalid
-            R-->>IDE: ResponseError with message
+            R-->>IDE: ResponseError -32803 (edit rejected) with message, shown in a dialog
         else valid
             R->>S: attribute span + literal kind (from buffer or disk)
             R->>W: 1 C# edit + N feature edits
@@ -98,6 +98,54 @@ sequenceDiagram
     Note over R: position plus pending session identify the binding, the attribute span is re-parsed
     R-->>IDE: WorkspaceEdit
 ```
+
+### 3.3 Applying the edit
+
+Both flows above end with the edit built. The server's caches (binding registry, match sets of closed feature files)
+are updated only once the client says it applied the edit, so the server stages the updates before it answers and
+commits or drops them later. Visual Studio applies the edit only from a `workspace/applyEdit` push, which the server
+sends after the response; the other clients apply the edit returned in the response and report back.
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant IDE
+    participant R as RenameHandler
+    participant C as RenamePostApplyCoordinator
+
+    IDE->>R: textDocument/rename (uri, position, newName)
+    R->>C: StagePendingCommit (cache updates the edit implies)
+    alt Visual Studio (AppliesRenameResponseEditNatively)
+        R-->>IDE: empty WorkspaceEdit
+        IDE-->>U: status bar "Step renamed successfully"
+        Note over R,C: response sent first, then the push runs on its own
+        C->>IDE: workspace/applyEdit (the real edit)
+        alt applied
+            IDE-->>C: applied: true
+            C->>C: commit staged cache updates
+        else rejected (read-only or locked file) or push failed
+            IDE-->>C: applied: false (failureReason), or no answer
+            C->>C: drop staged cache updates
+            C->>IDE: reqnroll/renameNotApplied (uri, message)
+            IDE-->>U: dialog "The step was not renamed: ..."
+        end
+    else VS Code, Rider
+        R-->>IDE: WorkspaceEdit
+        IDE->>IDE: apply the edit
+        alt applied
+            IDE->>R: reqnroll/renameApplied (applied: true)
+            R->>C: commit staged cache updates
+        else not applied
+            IDE-->>U: error from the client
+            IDE->>R: reqnroll/renameApplied (applied: false)
+            R->>C: drop staged cache updates
+        end
+    end
+```
+
+The push cannot happen inside the request: applying it makes Visual Studio open closed files, and the resulting
+`didOpen` would cancel the still-running rename request with `ContentModified`. So a failed push has no request left to
+fail, which is why it is reported with its own notification.
 
 ## 4. Glossary
 
