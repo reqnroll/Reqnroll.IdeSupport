@@ -924,4 +924,36 @@ public static class VsUtils
             OLEMSGBUTTON.OLEMSGBUTTON_OK,
             OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
     }
+
+    /// <summary>
+    /// Asks Visual Studio (and through it the source control provider) whether
+    /// <paramref name="filePaths"/> may be edited, as an editor does before its first change to a
+    /// file. This may prompt the user, for example to check a file out or to make a read-only file
+    /// writable. The files are decided together: editing is allowed for all of them or for none.
+    /// </summary>
+    /// <returns>
+    /// Whether editing is allowed, and the <c>tagVSQueryEditResultFlags</c> that say why not. Allowed
+    /// when the service is not available, so the caller falls back to letting the edit go ahead.
+    /// </returns>
+    public static async Task<(bool Allowed, uint MoreInfo)> QueryEditFilesAsync(
+        IReadOnlyList<string> filePaths, CancellationToken cancellationToken)
+    {
+        if (filePaths.Count == 0)
+            return (true, 0);
+
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        if (ServiceProvider.GlobalProvider.GetService(typeof(SVsQueryEditQuerySave)) is not IVsQueryEditQuerySave2 queryEdit)
+            return (true, 0);
+
+        ErrorHandler.ThrowOnFailure(queryEdit.QueryEditFiles(
+            0, // default flags: the user may be prompted
+            filePaths.Count,
+            filePaths.ToArray(),
+            null,
+            null,
+            out var verdict,
+            out var moreInfo));
+
+        return (verdict == (uint)tagVSQueryEditResult.QER_EditOK, moreInfo);
+    }
 }

@@ -82,6 +82,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     private CancellationTokenSource? _linkedCts;
     private CancellationToken        _lifetimeToken;
     private Task?                    _receivePump;
+    private ServerToVsPump?          _serverToVsPump;
 
     private bool _disposed;
 
@@ -153,9 +154,10 @@ internal sealed class LspInterceptingPipe : IDisposable
         // reads that pipe's Reader. The destination is looked up per frame
         // (VsFacingSessionManager.CurrentToVsWriter) rather than captured once, since a new session
         // can swap it out from under this long-running pump at any time.
-        _receivePump = new ServerToVsPump(
+        _serverToVsPump = new ServerToVsPump(
             _serverPipe.Input, _sessions, _correlator, _router, _receiveInterceptors,
-            () => _disposed, _logger).RunAsync(_lifetimeToken);
+            () => _disposed, _logger);
+        _receivePump = _serverToVsPump.RunAsync(_lifetimeToken);
 
         return Task.CompletedTask;
     }
@@ -247,6 +249,49 @@ internal sealed class LspInterceptingPipe : IDisposable
             var synthetic = new LspMessage(LspMessageDirection.Send, bodyObj, DateTimeOffset.Now);
             await _sendInterceptors.RunAsync(synthetic, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    // ── Held-back server requests (Server → VS, answered later) ────────────────
+
+    /// <summary>
+    /// Forwards to VS a server message that a receive interceptor consumed and decided, later, to
+    /// let through after all. Safe to call from any thread.
+    /// </summary>
+    /// <returns><see langword="false"/> when the pipe has not started or is disposed.</returns>
+    public async Task<bool> SendToVsAsync(JObject body, CancellationToken cancellationToken)
+    {
+        var pump = _serverToVsPump;
+        if (_disposed || pump is null) return false;
+
+        await pump.InjectToVsAsync(body, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Answers a request the server sent to VS, in VS's place, for a request a receive interceptor
+    /// consumed instead of forwarding. Safe to call from any thread.
+    /// </summary>
+    /// <param name="id">The request's <c>id</c>, echoed unchanged.</param>
+    /// <param name="result">The <c>result</c> object of the response.</param>
+    /// <returns><see langword="false"/> when the response could not be written.</returns>
+    public async Task<bool> SendResponseToServerAsync(JToken id, JObject result, CancellationToken cancellationToken)
+    {
+        if (_disposed) return false;
+
+        var body = new JObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"]      = id.DeepClone(),
+            ["result"]  = result,
+        };
+
+        if (!await _serverChannel.InjectAsync(LspFrameCodec.EncodeFrame(body), "response", cancellationToken)
+                                 .ConfigureAwait(false))
+            return false;
+
+        var synthetic = new LspMessage(LspMessageDirection.Send, body, DateTimeOffset.Now);
+        await _sendInterceptors.RunAsync(synthetic, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     // ── Request injection and response correlation (VS → Server → back) ──────

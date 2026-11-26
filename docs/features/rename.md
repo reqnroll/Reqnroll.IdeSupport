@@ -110,6 +110,7 @@ sends after the response; the other clients apply the edit returned in the respo
 sequenceDiagram
     actor U as User
     participant IDE
+    participant SC as SourceControlEditCheckInterceptor (VS only)
     participant R as RenameHandler
     participant C as RenamePostApplyCoordinator
 
@@ -119,12 +120,19 @@ sequenceDiagram
         R-->>IDE: empty WorkspaceEdit
         IDE-->>U: status bar "Step renamed successfully"
         Note over R,C: response sent first, then the push runs on its own
-        C->>IDE: workspace/applyEdit (the real edit)
+        C->>SC: workspace/applyEdit (the real edit)
+        opt it changes read-only files
+            SC->>U: source control prompt (QueryEditFiles, all files at once)
+        end
+        alt editing allowed
+            SC->>IDE: workspace/applyEdit
+            IDE-->>C: applied: true, or applied: false (failureReason)
+        else editing refused or cancelled
+            SC-->>C: applied: false ("X is read-only and was not made writable")
+        end
         alt applied
-            IDE-->>C: applied: true
             C->>C: commit staged cache updates
-        else rejected (read-only or locked file) or push failed
-            IDE-->>C: applied: false (failureReason), or no answer
+        else not applied, or push failed
             C->>C: drop staged cache updates
             C->>IDE: reqnroll/renameNotApplied (uri, message)
             IDE-->>U: dialog "The step was not renamed: ..."
@@ -146,6 +154,12 @@ sequenceDiagram
 The push cannot happen inside the request: applying it makes Visual Studio open closed files, and the resulting
 `didOpen` would cancel the still-running rename request with `ContentModified`. So a failed push has no request left to
 fail, which is why it is reported with its own notification.
+
+Source control is asked before Visual Studio sees the push because Visual Studio's own answer cannot be trusted for this
+case. Left to itself, its editor asks while applying the edit, one file at a time; if the user cancels, that file's change
+is dropped but files already changed stay changed, and its LSP client still answers `applied: true` (it does not check
+whether a buffer edit was cancelled). The `.feature` steps would be renamed and the step definition not, with the server
+committing the rename.
 
 ## 4. Glossary
 
@@ -247,7 +261,7 @@ before those usages were back in the cache. The rules are in
 
 | Scenario | Behaviour |
 |---|---|
-| A file the edit changes is read-only or locked | The client cannot apply the edit. VS Code applies the edit as a whole and shows "Rename failed — the edit could not be applied". Rider checks every target is writable before writing and shows an error. Visual Studio answers the pushed `workspace/applyEdit` with `applied: false` and the server sends `reqnroll/renameNotApplied`, which Visual Studio shows in a dialog. Either way the server learns `applied: false` (from `reqnroll/renameApplied`, or from the push's answer) and drops the staged cache updates. |
+| A file the edit changes is read-only or locked | The client cannot apply the edit. VS Code applies the edit as a whole and shows "Rename failed — the edit could not be applied". Rider checks every target is writable before writing and shows an error. In Visual Studio, `SourceControlEditCheckInterceptor` asks source control about the read-only files before the push reaches the editor (the user may be offered to check them out or make them writable); if editing is refused or cancelled, nothing changes, the server is answered `applied: false`, and it sends `reqnroll/renameNotApplied`, which Visual Studio shows in a dialog. Either way the server learns `applied: false` (from `reqnroll/renameApplied`, or from the push's answer) and drops the staged cache updates. |
 | Membership pending (no `projectFiles` baseline) | Rename proceeds for resolvable files, then `window/showMessage` says the project's steps may not have been updated. |
 | Linked project has not sent membership | Same as pending; logged and reported; user advised to reload the project. |
 | Registry becomes `Invalid` between prepare and rename | `ResponseError("The binding registry has been invalidated. Please try again after the project finishes loading.")` |
@@ -272,12 +286,20 @@ before those usages were back in the cache. The rules are in
    regex operators.
 6. **Annotated edits need negotiation.** Sending annotations to a client that does not advertise support is a protocol error;
    always read the capability per rename.
+7. **Ask source control before Visual Studio applies the push, not during.** Visual Studio's LSP client applies the documents
+   of a `workspace/applyEdit` one by one, ignores a buffer edit that was cancelled, and does not roll back the documents it
+   already changed, so its `applied: true` does not prove the edit happened. Prompting from inside the edit also let other
+   editor work fail with "Master edit already in progress". Asking first, for all read-only files together, makes a refusal
+   change nothing.
 
 ## 8. Known limitations
 
 - Whether Visual Studio applies the pushed multi-file edit as one undo transaction or several has not been verified live
   (open question O3 in the [register](../LSP-IDE-Support-Open-Questions.md#1-open-questions)).
 - Visual Studio never sees the confirmation preview, because it never advertises change-annotation support.
+- In Visual Studio, an edit cancelled for any reason other than a refused source control check (for example by another
+  extension handling the buffer's changing event) is still answered `applied: true`, so the server commits a rename that
+  only partly happened. Only files read-only on disk are checked before the push.
 - `NeedsConfirmation` is set for any multi-`.feature`-file rename, not just cross-project ones, with no way to opt out.
 - Document versions are always null; no client has rejected versionless edits so far.
 

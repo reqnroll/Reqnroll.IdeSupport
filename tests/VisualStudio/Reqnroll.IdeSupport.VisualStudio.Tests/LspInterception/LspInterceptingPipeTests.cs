@@ -1011,6 +1011,63 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         condition().Should().BeTrue("the condition should hold within the timeout");
     }
 
+    // ── Answering or forwarding a server request an interceptor held back ─────────────────────
+
+    /// <summary>Consumes every message it sees, as a receive interceptor that holds a request back.</summary>
+    private sealed class ConsumingInterceptor : ILspMessageInterceptor
+    {
+        public List<JObject> Consumed { get; } = new();
+
+        public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken)
+        {
+            if (message.Body is { } body) Consumed.Add(body);
+            return Task.FromResult(LspInterceptorResult.Consume);
+        }
+    }
+
+    [Fact]
+    public async Task SendResponseToServerAsync_answers_the_server_with_its_own_request_id()
+    {
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var sent = await _pipe.SendResponseToServerAsync(
+            new JValue(7), new JObject { ["applied"] = false, ["failureReason"] = "read-only" }, CancellationToken.None);
+
+        sent.Should().BeTrue();
+        var response = JObject.Parse(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+        response["id"]!.Type.Should().Be(JTokenType.Integer, "the server matches the response by the id it sent, number included");
+        response["id"]!.Value<int>().Should().Be(7);
+        response["result"]!["applied"]!.Value<bool>().Should().BeFalse();
+        response["result"]!["failureReason"]!.Value<string>().Should().Be("read-only");
+    }
+
+    [Fact]
+    public async Task SendToVsAsync_delivers_a_held_back_server_request_to_the_current_session()
+    {
+        var serverSide = new FakeServerPipe();
+        var holder = new ConsumingInterceptor();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), new ILspMessageInterceptor[] { holder },
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        await WriteFrameAsync(serverSide.ServerSideStdout,
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"workspace/applyEdit\",\"params\":{}}");
+        await WaitForAsync(() => holder.Consumed.Count == 1, ShortTimeout);
+        (await TryReadFrameAsync(session.Input, TimeSpan.FromMilliseconds(200))).Should().BeNull("the interceptor held it back");
+
+        (await _pipe.SendToVsAsync(holder.Consumed[0], CancellationToken.None)).Should().BeTrue();
+
+        var delivered = JObject.Parse(await ReadFrameAsync(session.Input, ShortTimeout));
+        delivered["method"]!.Value<string>().Should().Be("workspace/applyEdit");
+        delivered["id"]!.Value<int>().Should().Be(3);
+    }
+
     // ── Minimal LSP frame read/write helpers (Content-Length: N\r\n\r\nBODY) ──────────────────
 
     /// <summary>Pulls the <c>"id":"..."</c> value out of a raw JSON-RPC frame body.</summary>
