@@ -92,10 +92,20 @@ export function isInProjectBuildOutput(filePath: string, projectFile: string): b
   return BUILD_OUTPUT_FOLDER_NAMES.has(firstSegment.toLowerCase());
 }
 
-/** Workspace scanning and MSBuild evaluation, injectable so tests needn't run `dotnet msbuild`. */
+/**
+ * Workspace scanning, file watching and MSBuild evaluation, injectable so tests needn't run
+ * `dotnet msbuild` or touch the real file system. Tests pass stand-ins here rather than
+ * overwriting the shared `vscode.workspace` members: the extension's own ProjectManager is
+ * constructed whenever its language client finishes starting, which can fall inside a test, and
+ * a manager built while `vscode.workspace` is stubbed keeps the stub watchers for good.
+ */
 export interface ProjectManagerDeps {
   findProjectFiles(): Promise<vscode.Uri[]>;
   evaluateProject(projectFile: string): Promise<ProjectProperties | null>;
+  createFileSystemWatcher(globPattern: string): vscode.FileSystemWatcher;
+  onDidChangeWorkspaceFolders(
+    listener: (event: vscode.WorkspaceFoldersChangeEvent) => unknown,
+  ): vscode.Disposable;
 }
 
 async function findWorkspaceProjectFiles(): Promise<vscode.Uri[]> {
@@ -115,6 +125,8 @@ async function findWorkspaceProjectFiles(): Promise<vscode.Uri[]> {
 const defaultDeps: ProjectManagerDeps = {
   findProjectFiles: findWorkspaceProjectFiles,
   evaluateProject,
+  createFileSystemWatcher: (globPattern) => vscode.workspace.createFileSystemWatcher(globPattern),
+  onDidChangeWorkspaceFolders: (listener) => vscode.workspace.onDidChangeWorkspaceFolders(listener),
 };
 
 /**
@@ -169,15 +181,16 @@ export class ProjectManager {
    */
   private readonly _registering = new Map<string, number>();
 
-  constructor(
-    client: LanguageClient,
-    private readonly _deps: ProjectManagerDeps = defaultDeps,
-  ) {
+  private readonly _deps: ProjectManagerDeps;
+
+  /** `deps` replaces any subset of the real workspace/MSBuild dependencies (tests only). */
+  constructor(client: LanguageClient, deps: Partial<ProjectManagerDeps> = {}) {
     this._client = client;
+    this._deps = { ...defaultDeps, ...deps };
 
     // Watch for project/solution file changes across all workspace folders. Their FileSystemWatcher.dispose()
     // (below) already tears down these listeners, so their per-listener Disposables aren't tracked separately.
-    this._watcher = vscode.workspace.createFileSystemWatcher('**/*.{csproj,slnx,sln}');
+    this._watcher = this._deps.createFileSystemWatcher('**/*.{csproj,slnx,sln}');
     this._watcher.onDidCreate((uri) => void this.onProjectCreated(uri));
     // Editing a .csproj (TFM, package references, Include/Remove globs, linked files) changes
     // what belongs to the project, so re-evaluate it through the same debounced resend path the
@@ -190,16 +203,14 @@ export class ProjectManager {
     // (e.g. a new step-definition file, or a deleted/renamed .feature file). Files a build writes
     // under the project's bin/ or obj/ are ignored: the SDK's default excludes keep them out of
     // the membership set, so re-evaluating for them would only repeat the last result.
-    this._fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{cs,feature}');
+    this._fileWatcher = this._deps.createFileSystemWatcher('**/*.{cs,feature}');
     this._fileWatcher.onDidCreate((uri) => this.scheduleResendUnlessBuildOutput(uri));
     this._fileWatcher.onDidDelete((uri) => this.scheduleResendUnlessBuildOutput(uri));
 
     // Re-run discovery when a workspace folder is added (e.g. a multi-root workspace gains a
     // folder with its own .csproj/.feature files), and drop projects under a removed folder.
     this._disposables.push(
-      vscode.workspace.onDidChangeWorkspaceFolders(
-        (event) => void this.onWorkspaceFoldersChanged(event),
-      ),
+      this._deps.onDidChangeWorkspaceFolders((event) => void this.onWorkspaceFoldersChanged(event)),
     );
 
     // A restarted server knows nothing the old one was told; re-prime it.
