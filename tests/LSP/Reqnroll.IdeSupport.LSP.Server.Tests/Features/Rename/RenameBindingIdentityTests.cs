@@ -28,6 +28,28 @@ public class RenameBindingIdentityTests
             type, new Regex($"^{Regex.Escape(expression)}$"), scope!, implementation, expression);
     }
 
+    private static ProjectStepDefinitionBinding MakeIdentifiedBinding(string method, string documentationCommentId)
+    {
+        var implementation = new ProjectBindingImplementation(
+            method, null, new SourceLocation("/workspace/Steps.cs", 8, 9),
+            new Reqnroll.IdeSupport.LSP.Connector.Models.MethodIdentity(
+                "Bindings, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", documentationCommentId));
+        return new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex("^x$"), null!, implementation, "x");
+    }
+
+    [Fact]
+    public void Same_named_methods_in_different_namespaces_get_different_keys_when_identified()
+    {
+        // The wire method has only the short type name, so it is equal for both.
+        var first = MakeIdentifiedBinding("Steps.GivenX()", "M:First.Steps.GivenX");
+        var second = MakeIdentifiedBinding("Steps.GivenX()", "M:Second.Steps.GivenX");
+
+        RenameBindingIdentity.For(first).Should().NotBe(RenameBindingIdentity.For(second));
+        RenameBindingIdentity.FindIn(new[] { first, second }, RenameBindingIdentity.For(second))
+            .Should().BeSameAs(second);
+    }
+
     // ── The key discriminates on what actually differs in each flow ──────────
 
     [Fact]

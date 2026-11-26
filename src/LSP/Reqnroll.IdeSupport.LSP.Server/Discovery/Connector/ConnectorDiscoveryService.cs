@@ -251,8 +251,8 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 var root = TryGetParsedRoot(importer, sd.SourceLocation, sd.Method, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
                 var bareMethodName = BindingImporter.ExtractBareMethodName(sd.Method);
-                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock, sd.Expression);
-                var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
+                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock, sd.Expression, sd.MethodIdentity);
+                var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName, sd.MethodIdentity);
 
                 // The one case worth a warning even when a root parsed successfully: no method
                 // declaration by this name was found in it, so the precise identifier location the
@@ -291,7 +291,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 var bareMethodName = BindingImporter.ExtractBareMethodName(h.Method);
                 var methodLocation = root == null
                     ? null
-                    : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
+                    : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName, h.MethodIdentity);
 
                 return importer.ImportHook(h, methodLocation, group.Scopes);
             })

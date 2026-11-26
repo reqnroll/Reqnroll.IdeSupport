@@ -120,14 +120,17 @@ public class BindingImporter
     /// one out, returns null rather than a line that may belong to a sibling attribute — consumers then
     /// fall back to matching by text. With no <paramref name="expression"/>, or with only one candidate
     /// attribute, the first match is returned as before.</summary>
+    /// <remarks>
+    /// When <paramref name="identity"/> is supplied, the methods considered are first narrowed to the
+    /// one it describes (see <see cref="MethodIdentityMatcher"/>), so an overload or a same-named
+    /// method of another class in the file cannot contribute its attributes.
+    /// </remarks>
     public static int? TryGetAttributeSourceLine(SyntaxNode root, string methodName, ScenarioBlock scenarioBlock,
-        string expression)
+        string expression, MethodIdentity identity = null)
     {
         var candidates = new List<(AttributeSyntax Attribute, string Literal)>();
 
-        var candidateMethods = root.DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .Where(m => m.Identifier.Text == methodName);
+        var candidateMethods = FindMethods(root, methodName, identity);
 
         foreach (var method in candidateMethods)
         {
@@ -215,17 +218,28 @@ public class BindingImporter
     /// must already be a bare method name — see <see cref="ExtractBareMethodName"/> for callers
     /// starting from a connector wire-format method reference.
     /// </summary>
-    public static (int Line, int Column)? TryGetMethodIdentifierLocation(SyntaxNode root, string methodName)
+    /// <remarks>
+    /// With only a name, the first declaration by that name wins, which is the wrong one for every
+    /// overload but the first and for a same-named method of another class in the file. When
+    /// <paramref name="identity"/> is supplied, it selects the declaration first (see
+    /// <see cref="MethodIdentityMatcher"/>).
+    /// </remarks>
+    public static (int Line, int Column)? TryGetMethodIdentifierLocation(SyntaxNode root, string methodName,
+        MethodIdentity identity = null)
     {
-        var method = root.DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .FirstOrDefault(m => m.Identifier.Text == methodName);
+        var method = FindMethods(root, methodName, identity).FirstOrDefault();
         if (method == null)
             return null;
 
         var pos = method.Identifier.GetLocation().GetLineSpan().StartLinePosition;
         return (pos.Line + 1, pos.Character + 1);
     }
+
+    private static IReadOnlyList<MethodDeclarationSyntax> FindMethods(SyntaxNode root, string methodName,
+        MethodIdentity identity) =>
+        MethodIdentityMatcher.Narrow(
+            root.DescendantNodes().OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.Text == methodName).ToList(),
+            identity);
 
     /// <summary>Returns the source path the connector recorded for a binding -- the "#index" table
     /// entry or the literal path in its raw wire-format source location -- exactly as recorded,

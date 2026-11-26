@@ -29,8 +29,11 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// <b>What makes a binding identifiable</b> differs by where the rename was invoked, so the key
 /// carries enough for both. From a <c>.feature</c> step, the competing candidates are typically
 /// <i>the same step text bound to different methods</i> — that is what made them ambiguous — so
-/// <see cref="StepDefinitionImplementation.Method"/> is the discriminator and the expression is
-/// not. From a <c>.cs</c> attribute, every candidate is an attribute on one method, so the method
+/// the method is the discriminator and the expression is not. The method is named by its exact
+/// identity when discovery supplied one: <see cref="ProjectBindingImplementation.Method"/> carries
+/// only the short declaring-type name, so two same-named classes in different namespaces bound to
+/// one ambiguous step would otherwise produce the same key, and the rename would be refused as
+/// stale. From a <c>.cs</c> attribute, every candidate is an attribute on one method, so the method
 /// is identical and the step type, expression and scope discriminate instead.
 /// </para>
 /// <para>
@@ -46,9 +49,14 @@ internal static class RenameBindingIdentity
     public static string For(ProjectStepDefinitionBinding binding) =>
         string.Join("|",
             binding.StepDefinitionType,
-            binding.Implementation?.Method ?? "",
+            MethodKey(binding.Implementation),
             binding.DisplayExpression ?? "",
             binding.Scope?.Tag?.ToString() ?? "");
+
+    private static string MethodKey(ProjectBindingImplementation? implementation) =>
+        implementation?.Identity is { } identity
+            ? identity.AssemblyIdentity + "\u001F" + identity.DocumentationCommentId
+            : implementation?.Method ?? "";
 
     /// <summary>
     /// The single binding in <paramref name="candidates"/> matching <paramref name="identity"/>,
