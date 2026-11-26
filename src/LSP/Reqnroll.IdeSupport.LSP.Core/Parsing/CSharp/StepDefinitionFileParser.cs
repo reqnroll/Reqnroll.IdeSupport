@@ -536,7 +536,8 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         return null;
     }
 
-    private static string FullMethodName(MethodDeclarationSyntax method)
+    /// <summary>The namespace-qualified name of <paramref name="method"/>: namespaces and enclosing types, dot-separated.</summary>
+    internal static string FullMethodName(MethodDeclarationSyntax method)
     {
         var segments = new List<string>();
         for (var parent = method.Parent; parent != null; parent = parent.Parent)

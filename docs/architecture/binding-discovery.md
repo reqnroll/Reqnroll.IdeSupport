@@ -219,6 +219,13 @@ in different namespaces apart; the identity can.
 - **Consumers.** `BindingImporter` shares a `ProjectBindingImplementation` between the bindings of one method by
   identity when present (by the wire `Method` otherwise), and `GroupByAttribute` keeps identified methods apart. The
   implementation exposes it as `ProjectBindingImplementation.Identity`.
+- **Source backfill.** `ConnectorDiscoveryService` re-parses each binding's source file to anchor it on its method
+  declaration and attribute. `MethodIdentityMatcher` narrows the methods with the binding's name to the one the
+  identity describes (namespace-qualified declaring type, then parameter count, then parameter types by normalized
+  simple name), so overloads and same-named methods of other classes in the file are no longer anchored on the first
+  declaration. A narrowing step that would leave nothing is skipped, since the source may have changed since the build.
+- **Rename.** `RenameBindingIdentity` names the method by its identity, so a disambiguation between same-named methods
+  in different namespaces finds the picked binding again.
 
 ## 7. Pitfalls and design decisions
 

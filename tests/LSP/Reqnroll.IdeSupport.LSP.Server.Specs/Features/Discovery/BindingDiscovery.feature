@@ -39,3 +39,11 @@ Scenario: Discovered bindings carry their exact method identity
 	And the step "a step on the first same-named class" is bound to "M:ReqnrollBindingsFixture.Identity.First.SharedNameSteps.GivenAStep"
 	And the step "a step on the second same-named class" is bound to "M:ReqnrollBindingsFixture.Identity.Second.SharedNameSteps.GivenAStep"
 	And the step "these books" is bound to "M:ReqnrollBindingsFixture.Identity.First.SharedNameSteps.GivenTheseBooks(System.Collections.Generic.List{ReqnrollBindingsFixture.Identity.Book})"
+
+Scenario: Bindings on same-named methods in one file are located at their own declarations
+	Given there is a simple Reqnroll project for the latest version
+	And the project is built
+	When the binding discovery performed
+	Then the step "a step on the first same-named class" is located at its own method declaration
+	And the step "a step on the first same-named class with number 5" is located at its own method declaration
+	And the step "a step on the second same-named class" is located at its own method declaration

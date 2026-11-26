@@ -167,6 +167,24 @@ public sealed class DiscoverySteps
         }
     }
 
+    [Then(@"the step ""(.*)"" is located at its own method declaration")]
+    public void ThenTheStepIsLocatedAtItsOwnMethodDeclaration(string stepText)
+    {
+        var binding = _ctx.Registry!.StepDefinitions
+            .Where(sd => sd.Regex != null && sd.Regex.IsMatch(stepText))
+            .Should().ContainSingle($"exactly one step definition should match '{stepText}'").Subject;
+        var location = binding.Implementation.SourceLocation;
+        location.Should().NotBeNull();
+
+        // The declaration is the first "public" line after the binding's own attribute.
+        var lines = File.ReadAllLines(location!.SourceFile);
+        var attributeIndex = Array.FindIndex(lines, l => l.Contains($"(\"{binding.Expression}\")"));
+        attributeIndex.Should().BeGreaterThanOrEqualTo(0, $"the attribute for '{binding.Expression}' should be in the source");
+        var declarationIndex = Array.FindIndex(lines, attributeIndex + 1, l => l.TrimStart().StartsWith("public "));
+
+        location.SourceFileLine.Should().Be(declarationIndex + 1);
+    }
+
     [Then(@"the step ""(.*)"" is bound to ""(.*)""")]
     public void ThenTheStepIsBoundTo(string stepText, string documentationCommentId)
         => _ctx.Registry!.StepDefinitions

@@ -2,7 +2,9 @@ using Reqnroll;
 
 // Bindings whose exact method identity the discovery specs check: two binding classes that share
 // a short name in different namespaces (the wire method reference alone cannot tell them apart),
-// and a step whose parameter is a closed generic type produced by a step argument transformation.
+// overloads of one method, and a step whose parameter is a closed generic type produced by a
+// step argument transformation. They share one file, so locating each method in the source by
+// its name alone would anchor all of them on the first declaration.
 namespace ReqnrollBindingsFixture.Identity
 {
     public class Book
@@ -26,6 +28,9 @@ namespace ReqnrollBindingsFixture.Identity.First
     {
         [Given("a step on the first same-named class")]
         public void GivenAStep() { }
+
+        [Given("a step on the first same-named class with number {int}")]
+        public void GivenAStep(int number) { _ = number; }
 
         [Given("these books")]
         public void GivenTheseBooks(List<Book> books) { _ = books; }
