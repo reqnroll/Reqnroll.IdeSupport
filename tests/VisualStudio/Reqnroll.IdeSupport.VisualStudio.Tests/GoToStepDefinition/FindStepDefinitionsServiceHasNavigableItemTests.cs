@@ -7,8 +7,9 @@ namespace Reqnroll.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
 /// The client-side navigability test behind the Ctrl+hover underline
-/// (<see cref="FindStepDefinitionsService.HasNavigableItem"/>): only a binding whose source
-/// file is on this machine is somewhere Go To Definition can take the user.
+/// (<see cref="FindStepDefinitionsService.HasNavigableItem"/>): a binding whose source file is on
+/// this machine, or one with no local source that carries a method identity Visual Studio can
+/// navigate to, is somewhere Go To Definition can take the user.
 /// </summary>
 public class FindStepDefinitionsServiceHasNavigableItemTests
 {
@@ -26,6 +27,16 @@ public class FindStepDefinitionsServiceHasNavigableItemTests
     [Fact]
     public void An_item_whose_source_is_not_on_this_machine_is_not_navigable() =>
         FindStepDefinitionsService.HasNavigableItem(new[] { Item(null, false) }).Should().BeFalse();
+
+    [Fact]
+    public void An_unresolved_item_with_a_method_identity_is_navigable()
+    {
+        var item = Item(null, false);
+        item.MethodIdentity = new Reqnroll.IdeSupport.VisualStudio.Extension.Navigation.BindingMethodIdentity(
+            "External, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "M:External.Steps.AStep");
+
+        FindStepDefinitionsService.HasNavigableItem(new[] { item }).Should().BeTrue();
+    }
 
     [Fact]
     public void One_navigable_item_among_unresolved_ones_is_enough() =>

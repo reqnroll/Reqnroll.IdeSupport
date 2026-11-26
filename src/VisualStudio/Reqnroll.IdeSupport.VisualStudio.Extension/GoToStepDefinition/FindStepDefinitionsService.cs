@@ -93,7 +93,7 @@ internal sealed class FindStepDefinitionsService
 
     /// <summary>The same test <c>GoToStepDefinitionPresenter</c> applies before navigating to a row.</summary>
     internal static bool HasNavigableItem(IReadOnlyList<StepDefinitionListItem> items) =>
-        items.Any(item => item.IsResolved && item.SourceFile is { Length: > 0 });
+        items.Any(GoToStepDefinitionPresenter.IsNavigable);
 
     /// <summary>
     /// Pure mapping from a raw <c>reqnroll/findStepDefinitions</c> JSON result to step-definition

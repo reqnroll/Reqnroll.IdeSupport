@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 
@@ -37,12 +38,23 @@ internal sealed class HookLocation
     public int    HookOrder  { get; }
     /// <summary>Name of the hook method.</summary>
     public string MethodName { get; }
+    /// <summary>
+    /// Whether <see cref="Uri"/> names a file on this machine. <see langword="false"/> for a hook
+    /// returned only because the request asked for unresolved hooks; it is opened by
+    /// <see cref="MethodIdentity"/> instead.
+    /// </summary>
+    public bool IsResolved { get; }
+    /// <summary>The exact identity of the hook method, when the server reports one.</summary>
+    public BindingMethodIdentity? MethodIdentity { get; }
 
     /// <summary>Creates a hook location from server-supplied coordinates and metadata.</summary>
     public HookLocation(
         string uri, int startLine, int startChar,
-        string hookType, int hookOrder, string methodName)
+        string hookType, int hookOrder, string methodName,
+        bool isResolved = true, BindingMethodIdentity? methodIdentity = null)
     {
+        IsResolved     = isResolved;
+        MethodIdentity = methodIdentity;
         Uri        = uri;
         StartLine  = startLine;
         StartChar  = startChar;

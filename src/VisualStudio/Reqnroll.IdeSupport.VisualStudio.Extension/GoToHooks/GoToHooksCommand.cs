@@ -108,14 +108,17 @@ internal sealed class GoToHooksCommand : Command
 
             _logger.LogInformation("GoToHooksCommand: {HookCount} hook(s) found.", result.Hooks.Count);
 
-            if (result.Hooks.Count == 1)
+            // One hook, or several of which some have no local source: the Find All References window
+            // below lists files, so a hook opened by its method identity goes through the picker instead.
+            if (result.Hooks.Count == 1 || result.Hooks.Any(h => !h.IsResolved))
             {
-                var targets = BuildTargets(result.Hooks);
+                var targets = HookLocationsMapper.BuildTargets(result.Hooks);
                 await NavigationPickerHelper.PickAndNavigateAsync(
                         targets,
                         _fileLogger,
                         promptTitle: "Find Hooks",
-                        cancellationToken)
+                        cancellationToken,
+                        originatingFilePath: textView.Uri.LocalPath)
                     .ConfigureAwait(false);
                 return;
             }
@@ -150,24 +153,6 @@ internal sealed class GoToHooksCommand : Command
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static IReadOnlyList<NavigationTarget> BuildTargets(IReadOnlyList<HookLocation> hooks)
-    {
-        var targets = new List<NavigationTarget>(hooks.Count);
-        foreach (var h in hooks)
-        {
-            if (!Uri.TryCreate(h.Uri, UriKind.Absolute, out var uri) || !uri.IsFile)
-                continue;
-
-            var filePath    = uri.LocalPath;
-            var fileName    = Path.GetFileName(filePath);
-            // Display: "[BeforeScenario] SetUpDatabase (Hooks.cs:10)"  (1-based line for readability)
-            var displayText = $"[{h.HookType}] {h.MethodName} ({fileName}:{h.StartLine + 1})";
-            targets.Add(new NavigationTarget(displayText, filePath, h.StartLine, h.StartChar));
-        }
-        return targets;
-    }
 }
 
 /// <summary>
@@ -201,6 +186,36 @@ internal static class GoToHookTelemetry
 /// </remarks>
 internal static class HookLocationsMapper
 {
+    /// <summary>
+    /// The picker targets for <paramref name="hooks"/>: a file target for each hook with a local
+    /// source, an identity target for each hook without one that the server could identify, and
+    /// nothing for a hook that has neither.
+    /// </summary>
+    public static IReadOnlyList<NavigationTarget> BuildTargets(IReadOnlyList<HookLocation> hooks)
+    {
+        var targets = new List<NavigationTarget>(hooks.Count);
+        foreach (var h in hooks)
+        {
+            if (!h.IsResolved)
+            {
+                if (h.MethodIdentity is not null)
+                    targets.Add(new NavigationTarget(
+                        $"[{h.HookType}] {h.MethodName} (referenced assembly)", "", 0, 0, h.MethodIdentity));
+                continue;
+            }
+
+            if (!Uri.TryCreate(h.Uri, UriKind.Absolute, out var uri) || !uri.IsFile)
+                continue;
+
+            var filePath    = uri.LocalPath;
+            var fileName    = Path.GetFileName(filePath);
+            // Display: "[BeforeScenario] SetUpDatabase (Hooks.cs:10)"  (1-based line for readability)
+            var displayText = $"[{h.HookType}] {h.MethodName} ({fileName}:{h.StartLine + 1})";
+            targets.Add(new NavigationTarget(displayText, filePath, h.StartLine, h.StartChar));
+        }
+        return targets;
+    }
+
     public static IReadOnlyList<StepUsageLocation> BuildLocations(IReadOnlyList<HookLocation> hooks)
     {
         var locations = new List<StepUsageLocation>(hooks.Count);

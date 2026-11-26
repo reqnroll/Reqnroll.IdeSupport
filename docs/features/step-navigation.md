@@ -121,6 +121,18 @@ unresolved-source rows):
 - **Rider.** The generic Go To Definition works with no custom code (`lspGoToDefinitionSupport = true`), plus the Rider
   2026.2+ shortcut fix described in [../architecture/client-rider.md](../architecture/client-rider.md).
 
+**Bindings with no local source.** A binding from a referenced assembly whose source is not on this machine (a NuGet
+package, an assembly built elsewhere) is reported with `isResolved: false` and, when the connector identified it, a
+`methodIdentity` (declaring assembly display name and documentation-comment ID; see
+[../architecture/binding-discovery.md](../architecture/binding-discovery.md) §6.8). A binding that records no source at
+all, such as one from a package built without a PDB, is reported too when it has an identity; it used to be left out,
+which made the step read as having no step definition. Visual Studio opens such a binding through Roslyn:
+`ExternalBindingNavigator` resolves the identity in the compilation of the project owning the `.feature` file (each
+target framework's project in turn), accepting only a single method from the exact assembly, and calls
+`VisualStudioWorkspace.TryGoToDefinitionAsync`, so Visual Studio picks Source Link, embedded source or decompilation per
+its settings. Go to Hooks asks for such hooks with `includeUnresolved` and opens them the same way, through the picker
+when there are several. VS Code and Rider still show these rows as not on this machine.
+
 Because Visual Studio's own navigation goes through `findStepDefinitions`, a `textDocument/definition` request there is
 almost always the editor's provider falling through on hover; the response is still needed (Peek, the hover underline, F12
 before initialization), so the behaviour flag `NavigatesStepsViaFindStepDefinitions` gates only telemetry.
@@ -186,6 +198,9 @@ linked feature files count and excluded ones do not. A Roslyn edit (`IsFullRepla
 ## 8. Known limitations
 
 - Shift+F12 in Visual Studio still reaches the C# server's Find All References.
+- A binding with no local source is navigable only in Visual Studio, and only from a single result (Go to Step
+  Definition) or the Go to Hooks picker; a row for it in the Find All References window, or in VS Code and Rider, cannot
+  be opened.
 - A step whose binding uses a custom-derived attribute is not navigable until the next build (see
   [../architecture/binding-discovery.md](../architecture/binding-discovery.md)).
 

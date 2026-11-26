@@ -92,6 +92,24 @@ internal sealed class StepAtPositionResolver
         : TelemetryProperties.StepStatus.Unresolved;
 
     /// <summary>
+    /// The bindings <paramref name="step"/> matched that a client can be told about: those that record
+    /// a source file (as <see cref="GetBindingsWithSource"/>) and, in addition, those that record none
+    /// but carry an exact method identity, such as a binding from a referenced package built without
+    /// a PDB. Without this, a step bound only to such a binding read as having no step definition.
+    /// </summary>
+    public IReadOnlyList<ProjectStepDefinitionBinding> GetBindingsForNavigation(StepBindingMatch step)
+    {
+        var withSource = GetBindingsWithSource(step);
+        var identifiedOnly = step.Result.Items
+            .Select(item => item.MatchedStepDefinition)
+            .Where(sd => sd?.Implementation is { Identity: not null } impl &&
+                         impl.SourceLocation?.SourceFile is null or "")
+            .Select(sd => sd!)
+            .ToList();
+        return identifiedOnly.Count == 0 ? withSource : withSource.Concat(identifiedOnly).ToList();
+    }
+
+    /// <summary>
     /// The bindings <paramref name="step"/> matched that record a source file, in match order.
     /// Bindings whose recorded file does not exist on this machine are included (callers decide
     /// how to present them) but each is logged once, since they have no navigation target here.

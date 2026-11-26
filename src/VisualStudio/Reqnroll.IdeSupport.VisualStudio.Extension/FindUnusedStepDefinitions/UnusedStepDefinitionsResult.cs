@@ -36,6 +36,12 @@ internal sealed class StepDefinitionListItem
     /// attribute name; null when unknown or from an older server.
     /// </summary>
     public string? StepDefinitionType { get; set; }
+    /// <summary>
+    /// The exact identity of the binding method, when the server reports one; lets an unresolved
+    /// row be opened through Visual Studio's own symbol navigation (Source Link, embedded source or
+    /// decompilation) instead of from a file.
+    /// </summary>
+    public Navigation.BindingMethodIdentity? MethodIdentity { get; set; }
 }
 
 /// <summary>Parsed result from a <c>reqnroll/findUnusedStepDefinitions</c> response.</summary>

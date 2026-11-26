@@ -47,6 +47,9 @@ public sealed class LspScenarioContext
     public LocationOrLocationLinks? LastReferences { get; set; }
     public FindStepUsagesResponse? LastFindStepUsages { get; set; }
     public FindHooksResponse? LastFindHooks { get; set; }
+
+    /// <summary>The last <c>reqnroll/findStepDefinitions</c> response.</summary>
+    public FindStepDefinitionsResponse? LastFindStepDefinitions { get; set; }
     public CodeLens[]? LastCodeLens { get; set; }
     public CompletionList? LastCompletions { get; set; }
     public TextEdit[]? LastFormattingEdits { get; set; }

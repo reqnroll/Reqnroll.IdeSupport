@@ -104,6 +104,14 @@ public sealed class FindHooksHandler
             // Same rule as DefinitionHandler: no local file, no navigation target. Hooks are the
             // visible case: bindings from an assembly built in a devcontainer point into a container path.
             var src = hook.Implementation?.SourceLocation;
+            if (request.IncludeUnresolved && hook.Implementation?.Identity is not null &&
+                (src is null || !src.IsResolved || string.IsNullOrEmpty(src.SourceFile)))
+            {
+                // The client navigates by identity instead (see FindHooksParams.IncludeUnresolved).
+                locations.Add(ToUnresolvedLocation(hook));
+                continue;
+            }
+
             if (src is not null && !src.IsResolved)
             {
                 _logger.LogInfo(
@@ -146,8 +154,19 @@ public sealed class FindHooksHandler
             HookType   = hook.HookType.ToString(),
             HookOrder  = hook.HookOrder,
             MethodName = hook.Implementation?.Method ?? string.Empty,
+            MethodIdentity = MethodIdentityItem.From(hook.Implementation?.Identity),
         };
     }
+
+    private static FindHookLocation ToUnresolvedLocation(ProjectHookBinding hook) => new()
+    {
+        Uri            = "",
+        HookType       = hook.HookType.ToString(),
+        HookOrder      = hook.HookOrder,
+        MethodName     = hook.Implementation?.Method ?? string.Empty,
+        IsResolved     = false,
+        MethodIdentity = MethodIdentityItem.From(hook.Implementation?.Identity),
+    };
 
     private static bool IsFeatureFile(DocumentUri uri) =>
         uri.Path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase);

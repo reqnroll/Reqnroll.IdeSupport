@@ -20,7 +20,10 @@ public sealed class FindHooksResponse
 /// <summary>One applicable hook binding at the queried position.</summary>
 public sealed class FindHookLocation
 {
-    /// <summary>C# source file URI (e.g. <c>file:///C:/project/Hooks.cs</c>).</summary>
+    /// <summary>
+    /// C# source file URI (e.g. <c>file:///C:/project/Hooks.cs</c>); empty for a hook with no source
+    /// on this machine, which is only returned when <see cref="FindHooksParams.IncludeUnresolved"/> was set.
+    /// </summary>
     [JsonProperty("uri")]
     public string Uri { get; set; } = "";
 
@@ -43,4 +46,15 @@ public sealed class FindHookLocation
     /// <summary>Short C# method name of the hook (e.g. <c>"SetUpDatabase"</c>).</summary>
     [JsonProperty("methodName")]
     public string MethodName { get; set; } = "";
+
+    /// <summary>
+    /// Whether <see cref="Uri"/> names a file on this machine. <see langword="false"/> only for entries
+    /// returned because <see cref="FindHooksParams.IncludeUnresolved"/> was set.
+    /// </summary>
+    [JsonProperty("isResolved")]
+    public bool IsResolved { get; set; } = true;
+
+    /// <summary>The exact identity of the hook method, when discovery determined it; otherwise <see langword="null"/>.</summary>
+    [JsonProperty("methodIdentity", NullValueHandling = NullValueHandling.Ignore)]
+    public MethodIdentityItem? MethodIdentity { get; set; }
 }

@@ -21,11 +21,16 @@ internal static class NavigationPickerHelper
     /// Navigates directly for a single target; shows a picker dialog and navigates to the
     /// selection for multiple targets; no-ops for zero targets.
     /// </summary>
+    /// <param name="originatingFilePath">
+    /// The file the navigation started from (the <c>.feature</c> file). Required to open a target by
+    /// its <see cref="NavigationTarget.Identity"/>, which is resolved in the project that owns this file.
+    /// </param>
     public static async Task PickAndNavigateAsync(
         IReadOnlyList<NavigationTarget> targets,
         IIdeSupportLogger                 logger,
         string                          promptTitle,
-        CancellationToken               cancellationToken)
+        CancellationToken               cancellationToken,
+        string?                         originatingFilePath = null)
     {
         if (targets.Count == 0)
             return;
@@ -49,6 +54,18 @@ internal static class NavigationPickerHelper
             }
 
             chosen = targets[dialog.SelectedIndex];
+        }
+
+        if (chosen.FilePath is not { Length: > 0 } && chosen.Identity is not null && originatingFilePath is not null)
+        {
+            if (!await ExternalBindingNavigator
+                    .NavigateAsync(chosen.Identity, originatingFilePath, logger, cancellationToken)
+                    .ConfigureAwait(false))
+                await Reqnroll.IdeSupport.VisualStudio.Utilities.VsUtils.ShowStatusBarMessageAsync(
+                    $"Reqnroll: could not open {chosen.DisplayText} - its source is not on this machine and Visual Studio " +
+                    "could not navigate to it (rebuild the project, or enable navigation to decompiled sources).",
+                    cancellationToken);
+            return;
         }
 
         await NavigateToAsync(chosen, logger, cancellationToken).ConfigureAwait(false);
