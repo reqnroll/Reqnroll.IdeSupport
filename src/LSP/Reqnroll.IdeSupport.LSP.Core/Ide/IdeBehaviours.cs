@@ -85,4 +85,12 @@ public sealed record IdeBehaviours
     /// pause immediately, the last change always delivered). Opt-in: only measured in Visual Studio.
     /// </summary>
     public bool ThrottlesOutputWhileEditing { get; init; }
+
+    /// <summary>
+    /// The client ignores the order of the code actions in a <c>textDocument/codeAction</c> response
+    /// and sorts them by its own <c>_vs_priority</c> field first, then alphabetically by title
+    /// (ignoring case). The server sets that field so the action it prefers comes first and the
+    /// "Copy … to clipboard" actions come last, instead of leaving the order to the titles.
+    /// </summary>
+    public bool SortsCodeActionsByPriorityThenTitle { get; init; }
 }

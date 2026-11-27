@@ -93,6 +93,11 @@ sequenceDiagram
   `using`s. LSP has no clipboard API and the server may not run where the clipboard is, so the server relays the text
   back in a `reqnroll/copyToClipboard` notification and each client writes its own clipboard. The argument comes back
   from the client, so only a non-empty string is relayed. The copy action is never `IsPreferred`.
+- **Order in Visual Studio.** The server lists the actions in the order it wants: preferred first, copy last. VS Code
+  keeps that order. Visual Studio's LSP client ignores both the order and `IsPreferred`, sorting by its own
+  `_vs_priority` field and then by title, so for Visual Studio (`IdeBehaviours.SortsCodeActionsByPriorityThenTitle`)
+  `CodeActionHandler` sends each preferred action as a `VsPrioritizedCodeAction` with `Normal` and each copy action
+  with `Low`. Other actions carry no priority and are sorted by title between them.
 - **Reveal the file.** For clients with `HonorsShowDocumentRequests` the server uses `window/showDocument`. Clients that do
   not run `vscode.open` locally would forward it to the server, where it has no handler, so a code action must not carry
   only that command.

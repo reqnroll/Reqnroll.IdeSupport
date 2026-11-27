@@ -22,6 +22,10 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Core.Ide;
+using Newtonsoft.Json.Linq;
+using OmniSharp.Extensions.LanguageServer.Protocol.Serialization;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -61,10 +65,17 @@ public class CodeActionHandlerTests
                        .Returns(new IdeSupportConfiguration());
     }
 
-    private CodeActionHandler CreateSut() =>
+    private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null) =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem,
             _csharpFileTextCache, _completionService, _errorTelemetryService,
-            _telemetryService);
+            _telemetryService, clientIde: clientIde);
+
+    private static ClientIdeContext TitleSortingClient() =>
+        new("visualstudio", new IdeBehaviours { SortsCodeActionsByPriorityThenTitle = true });
+
+    /// <summary>Each action as the client receives it on the wire.</summary>
+    private static List<JObject> ToWire(CommandOrCodeActionContainer? result) =>
+        result!.Select(a => JObject.FromObject(a, LspSerializer.Instance.JsonSerializer)).ToList();
 
     private static CodeActionParams RequestAt(
         DocumentUri uri, int line = 0, int character = 0, CodeActionContext? context = null) =>
@@ -249,6 +260,65 @@ public class CodeActionHandlerTests
             .And.Contain("throw new PendingStepException();");
         text.Should().NotContain("[Binding]").And.NotContain("namespace").And.NotContain("using ",
             "only the method is copied, not a class or file");
+    }
+
+    [Fact]
+    public async Task Title_sorting_client_gets_preferred_actions_first_and_copy_actions_last()
+    {
+        SeedMatchService(
+            UndefinedMatch("I press add",     ScenarioBlock.When),
+            UndefinedMatch("the result is 4", ScenarioBlock.Then));
+
+        var wire = ToWire(await CreateSut(TitleSortingClient()).Handle(RequestAt(FeatureUri), CancellationToken.None));
+
+        wire.Select(a => ((string)a["title"]!, a["_vs_priority"]?.Type, (int?)a["_vs_priority"])).Should().Equal(
+            ("Define step: I press add", JTokenType.Integer, (int)VsCodeActionPriority.Normal),
+            ("Copy step definition to clipboard: I press add", JTokenType.Integer, (int)VsCodeActionPriority.Low),
+            ("Define all missing steps in file", JTokenType.Integer, (int)VsCodeActionPriority.Normal),
+            ("Copy all missing step definitions to clipboard", JTokenType.Integer, (int)VsCodeActionPriority.Low));
+        wire[1]["command"]!["command"]!.Value<string>().Should().Be(CopyStepDefinitionsHandler.CommandName,
+            "the prioritized copy keeps its command");
+        wire[0]["edit"].Should().NotBeNull("the prioritized define action keeps its edit");
+    }
+
+    [Fact]
+    public async Task Title_sorting_client_leaves_actions_that_are_neither_preferred_nor_copy_unprioritized()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var featureUri    = DocumentUri.FromFileSystemPath(Path.Combine(tempDir, "calculator.feature"));
+            var candidatePath = Path.Combine(tempDir, "CandidateSteps.cs");
+            File.WriteAllText(candidatePath, ValidBindingClass);
+
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            SeedMatchServiceFor(featureUri,
+                DefinedMatch("a step", ScenarioBlock.Given, featureUri, candidatePath, lineOffset: 23),
+                UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41));
+
+            var wire = ToWire(await CreateSut(TitleSortingClient()).Handle(RequestAt(featureUri, line: 3), CancellationToken.None));
+
+            wire.Select(a => ((string)a["title"]!, (int?)a["_vs_priority"])).Should().Equal(
+                ("Define missing step → CandidateSteps.cs", (int)VsCodeActionPriority.Normal),
+                ("Define missing step → new file", (int?)null),
+                ("Copy missing step definition to clipboard", (int)VsCodeActionPriority.Low));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Other_clients_get_no_vs_priority()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        var wire = ToWire(await CreateSut(new ClientIdeContext("vscode")).Handle(RequestAt(FeatureUri), CancellationToken.None));
+
+        wire.Should().HaveCount(2);
+        wire.Should().OnlyContain(a => a["_vs_priority"] == null);
     }
 
     [Fact]
@@ -460,8 +530,7 @@ public class CodeActionHandlerTests
             newFileChanges.Should().Contain(c => c.IsCreateFile);
 
             // The append action is the intended default choice, so it — not the new-file
-            // fallback — must carry IsPreferred: some clients (VS in particular) don't preserve
-            // the server's array order in the lightbulb menu and lean on this signal instead.
+            // fallback — carries IsPreferred.
             appendAction.IsPreferred.Should().BeTrue();
             newFileAction.IsPreferred.Should().BeFalse();
         }

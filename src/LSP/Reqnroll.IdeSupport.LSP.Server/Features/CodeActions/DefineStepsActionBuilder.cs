@@ -97,11 +97,9 @@ internal sealed class DefineStepsActionBuilder
         bool multiTarget = successfulAppends.Count > 0; // +1 for the always-present new-file target
 
         // Exactly one action per group is marked IsPreferred — the top-ranked append candidate
-        // when one exists, otherwise the new-file fallback. Some clients (VS in particular)
-        // don't preserve the server's array order in the lightbulb menu and instead lean on
-        // this signal (or fall back to their own sort, e.g. alphabetical by title) to decide
-        // what to show first, so relying on ordering alone isn't enough to keep "append to the
-        // existing file" as the default choice.
+        // when one exists, otherwise the new-file fallback. Visual Studio ignores both this flag
+        // and the response order, sorting by its own priority field and then by title, so
+        // CodeActionHandler also gives the preferred action that priority for Visual Studio.
         var actionsForTitle = new List<CodeAction>(successfulAppends.Count + 1);
         bool isFirst = true;
         foreach (var (path, existingContent, appendedContent) in successfulAppends)

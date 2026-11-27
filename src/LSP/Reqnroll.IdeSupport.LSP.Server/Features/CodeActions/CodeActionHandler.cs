@@ -11,6 +11,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -54,6 +55,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     private readonly StepDefinitionTargetResolver  _targetResolver;
     private readonly DefineStepsActionBuilder      _actionBuilder;
     private readonly ParserErrorActionBuilder      _parserErrorActionBuilder;
+    private readonly ClientIdeContext?             _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="CodeActionHandler"/> class.</summary>
     public CodeActionHandler(
@@ -67,7 +69,8 @@ public sealed class CodeActionHandler : ICodeActionHandler
         ICompletionService        completionService,
         IErrorTelemetryService    errorTelemetryService,
         ILspTelemetryService?     telemetryService = null,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        ClientIdeContext?         clientIde = null)
     {
         _matchService    = matchService;
         _scopeManager    = scopeManager;
@@ -78,6 +81,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
         _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache, logger);
         _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
+        _clientIde       = clientIde;
     }
 
     /// <summary>Builds the LSP registration options advertising code-action support (quick-fix kind) for <c>.feature</c> files.</summary>
@@ -198,6 +202,9 @@ public sealed class CodeActionHandler : ICodeActionHandler
             });
         }
 
+        if (_clientIde?.Behaviours.SortsCodeActionsByPriorityThenTitle == true)
+            actions = actions.Select(PrioritizeForTitleSortingClient).ToList();
+
         return Task.FromResult<CommandOrCodeActionContainer?>(
             new CommandOrCodeActionContainer(actions));
     }
@@ -233,6 +240,25 @@ public sealed class CodeActionHandler : ICodeActionHandler
             copyTitle: "Copy all missing step definitions to clipboard"));
 
         return actions;
+    }
+
+    /// <summary>
+    /// For a client that sorts code actions by priority and then by title instead of keeping the
+    /// response order: puts each preferred action first and each "Copy … to clipboard" action last.
+    /// Every other action keeps no priority and is sorted by its title.
+    /// </summary>
+    private static CommandOrCodeAction PrioritizeForTitleSortingClient(CommandOrCodeAction action)
+    {
+        if (action.CodeAction is not { } codeAction)
+            return action;
+
+        if (codeAction.IsPreferred)
+            return new VsPrioritizedCodeAction(codeAction, VsCodeActionPriority.Normal);
+
+        if (codeAction.Command?.Name == CopyStepDefinitionsHandler.CommandName)
+            return new VsPrioritizedCodeAction(codeAction, VsCodeActionPriority.Low);
+
+        return action;
     }
 
     private static bool IsFeatureFile(DocumentUri uri) =>

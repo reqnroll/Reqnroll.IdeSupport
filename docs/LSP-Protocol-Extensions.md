@@ -77,15 +77,16 @@ plumbing, never serialized over LSP.
 
 ## 2. Standard LSP messages carrying custom content
 
-No standard request/response DTO has extra top-level properties bolted on — the server uses
-OmniSharp's stock models unmodified everywhere. The customization instead lives entirely inside
-the protocol's own designated extensible slots:
+Apart from one Visual Studio field (below), no standard request/response DTO has extra top-level
+properties bolted on — the server uses OmniSharp's stock models unmodified. The customization
+instead lives inside the protocol's own designated extensible slots:
 
 | Standard message | Extension point | Custom content |
 |---|---|---|
 | `textDocument/codeLens` → `codeLens/resolve` | `CodeLens.data` | `{kind: "stepUsage" \| "hookMatchCount", uri, bindingId, sourceFile, sourceLine, sourceColumn}` — see [`StepCodeLensHandler.cs:146`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/StepCodeLensHandler.cs), [`HookMatchCountCodeLensHandler.cs:166`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookMatchCountCodeLensHandler.cs) |
 | `textDocument/codeLens` | `Command.command` + `arguments` | Custom command ids `reqnroll.findStepUsages`, `reqnroll.noStepUsages`, `reqnroll.goToHooks`, `reqnroll.goToMatchingScenarios`, `reqnroll.noMatchingScenarios`, with positional `[uri, line, col, ...]` args. Client-executed directly, not routed through `workspace/executeCommand` |
 | `textDocument/codeAction` | `CodeAction.command` | Acceptance-signal commands the client runs after applying the action's edit and forwards to the server via `workspace/executeCommand`: `reqnroll.defineStepsTriggered` (args `[targetFileUri]`) and `reqnroll.insertKeywordTriggered` (no args). The "Copy step definition(s) to clipboard" action has no edit, only `reqnroll.copyStepDefinitions` (args `[text]`), which the server answers with `reqnroll/copyToClipboard` — see [`DefineStepsActionBuilder.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/DefineStepsActionBuilder.cs), [`ParserErrorActionBuilder.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/ParserErrorActionBuilder.cs) |
+| `textDocument/codeAction` (Visual Studio only) | `CodeAction._vs_priority` | Visual Studio's own field, read by its LSP client. Visual Studio ignores the response order and `isPreferred`, and sorts the lightbulb by this number (higher first; a missing value sorts after 2 and before 1) and then by title, ignoring case. The server sends `2` on each preferred Define action and `1` on each "Copy … to clipboard" action, so the default comes first and the copies last. Sent only when the client's behaviours include `SortsCodeActionsByPriorityThenTitle` — see [`VsPrioritizedCodeAction.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/VsPrioritizedCodeAction.cs) |
 | `workspace/executeCommand` | registered command id | `reqnroll.toggleComment`, args `[uri, startLine, endLine, mode?]` with optional `mode` `"toggle"` (default) / `"comment"` / `"uncomment"` — see [`CommentToggleHandler.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Commenting/CommentToggleHandler.cs) |
 | `initialize` (result) | `semanticTokensProvider.legend.tokenTypes` | 11 custom token type names (`reqnroll.keyword`, `reqnroll.tag`, `reqnroll.description`, `reqnroll.comment`, `reqnroll.docString`, `reqnroll.dataTable`, `reqnroll.dataTableHeader`, `reqnroll.stepParameter`, `reqnroll.scenarioOutlinePlaceholder`, `reqnroll.undefinedStep`, `reqnroll.ambiguousStep`), no modifiers — see [`ReqnrollSemanticTokens.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/SemanticTokens/ReqnrollSemanticTokens.cs) |
 | `textDocument/rename` (result) | `WorkspaceEdit.changeAnnotations` | Annotation ids `reqnroll.rename.feature` / `reqnroll.rename.binding` — standard LSP 3.16 mechanism, custom ids; only populated when the client advertises `changeAnnotationSupport` |
