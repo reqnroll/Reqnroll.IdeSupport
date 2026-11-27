@@ -26,5 +26,23 @@
   <ItemGroup>
     <ProjectReference Include="../../../src/LSP/Reqnroll.IdeSupport.LSP.Connector/Connector/Connector.csproj" />
     <ProjectReference Include="../../../src/LSP/Reqnroll.IdeSupport.LSP.Connector/Reqnroll.IdeSupport.LSP.Connector.Models/Reqnroll.IdeSupport.LSP.Connector.Models.csproj" />
+    <!-- Built first but not loaded: ConnectorRollForwardTests runs the real connector process
+         against it, as a test assembly targeting a newer .NET than the connector's net6.0. -->
+    <ProjectReference Include="../Reqnroll.IdeSupport.LSP.Server.Specs.BindingsFixture/Reqnroll.IdeSupport.LSP.Server.Specs.BindingsFixture.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false" />
+  </ItemGroup>
+
+  <!-- Output folders the out-of-process roll-forward tests launch from. The connector's own
+       output (not this test's bin folder) has its runtimeconfig.json and deps.json. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ConnectorNetOutputFolder</_Parameter1>
+      <_Parameter2>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../../src/LSP/Reqnroll.IdeSupport.LSP.Connector/Connector/bin/$(Configuration)/net6.0/'))</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>BindingsFixtureOutputFolder</_Parameter1>
+      <_Parameter2>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../Reqnroll.IdeSupport.LSP.Server.Specs.BindingsFixture/bin/$(Configuration)/net10.0/'))</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
 </Project>

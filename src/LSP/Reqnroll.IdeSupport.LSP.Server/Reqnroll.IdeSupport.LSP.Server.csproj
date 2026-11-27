@@ -57,7 +57,7 @@
   </Target>
 
   <!-- Copy Connector binaries into the publish output so reflection-based binding
-       discovery can find the correct TFM-specific connector at runtime.  The
+       discovery can find the connectors (one .NET build, one per .NET Framework version) at runtime.  The
        BuildConnector target (above) stages them to $(OutputPath)Connectors\, but
        dotnet publish does not treat that as a standard publish item. -->
   <Target Name="CopyConnectorsToPublish" AfterTargets="CopyFilesToPublishDirectory">

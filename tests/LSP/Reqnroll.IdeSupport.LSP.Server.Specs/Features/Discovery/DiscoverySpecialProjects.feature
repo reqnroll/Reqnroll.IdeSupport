@@ -25,7 +25,7 @@ Scenario Outline: Discover bindings with custom connector
 	Given there is a simple Reqnroll project for the latest version
 	And the target framework is net9.0
 	And the project is built
-	And the project is configured to use custom connector "Reqnroll-Generic-net9.0\<connector file>"
+	And the project is configured to use custom connector "Reqnroll-Generic-net6.0\<connector file>"
 	When the binding discovery performed
 	Then the discovery succeeds with several step definitions
 Examples:

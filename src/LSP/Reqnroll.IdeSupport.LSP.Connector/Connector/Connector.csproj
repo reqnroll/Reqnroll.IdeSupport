@@ -3,7 +3,13 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>reqnroll-ide-connector</AssemblyName>
-    <TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0;net481;net462;net472</TargetFrameworks>
+    <!-- One .NET build (net6.0) serves every .NET project: RollForward=LatestMajor (set below
+         for net6.0) makes the host run it on the newest installed .NET runtime, which is at
+         least the test assembly's own target framework whenever its tests can run on this
+         machine. net6.0 is the oldest runtime a
+         machine needs to start the connector at all. The .NET Framework builds stay per
+         version because they are launched directly, not through the dotnet host. -->
+    <TargetFrameworks>net6.0;net481;net462;net472</TargetFrameworks>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <LangVersion>latest</LangVersion>
     <Nullable>annotations</Nullable>
@@ -31,7 +37,7 @@
     NETSDK1233: Targeting .NET 10.0 or higher in Visual Studio 2022 17.14 is not supported.
     MSB3277: Expected assembly version conflicts when building multi-TFM (net10.0, net481, etc.)
     SuppressTfmSupportBuildWarnings: NuGet packages (System.Text.Json, System.IO.Pipelines, etc.) at v9.x
-      emit codeless MSBuild warnings for EOL TFMs (net6.0, net7.0); intentional for legacy support.
+      emit codeless MSBuild warnings for the EOL net6.0 TFM; intentional, net6.0 is the declared runtime floor.
     -->
   </PropertyGroup>
 
@@ -40,6 +46,15 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(IsNetFramework)' == ''">
     <IsNetFramework>false</IsNetFramework>
+  </PropertyGroup>
+
+  <!-- Written to reqnroll-ide-connector.runtimeconfig.json as "rollForward": "LatestMajor", so
+       both "dotnet exec reqnroll-ide-connector.dll" and the reqnroll-ide-connector.exe apphost
+       pick the newest installed Microsoft.NETCore.App (release versions only). A test assembly
+       built for a newer .NET than the connector references that version's System.Runtime,
+       which only a runtime of at least that version can load. -->
+  <PropertyGroup Condition="'$(IsNetFramework)' == 'false'">
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup Condition=" '$(IsNetFramework)' == 'false' ">

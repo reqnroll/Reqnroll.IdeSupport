@@ -54,16 +54,22 @@ public class GenericOutProcReqnrollConnectorTests
         args.Should().BeEmpty("netfx connectors are launched directly, not via 'dotnet exec'");
     }
 
-    // ── Modern .NET: launched via "dotnet exec <dir>/<tfm>/...dll" ─────────────
+    // ── Modern .NET: one net6.0 connector, launched via "dotnet exec" ──────────
+    // Its runtimeconfig.json rolls forward to the newest installed runtime (covered by
+    // ConnectorRollForwardTests in LSP.Connector.Tests), so every .NET version - including
+    // ones newer than any connector build - is sent to the same dll.
+
+    private const string NetConnector = "Reqnroll-Generic-net6.0/reqnroll-ide-connector.dll";
 
     [Theory]
-    [InlineData(".NETCoreApp,Version=v6.0", "Reqnroll-Generic-net6.0/reqnroll-ide-connector.dll")]
-    [InlineData(".NETCoreApp,Version=v7.0", "Reqnroll-Generic-net7.0/reqnroll-ide-connector.dll")]
-    [InlineData(".NETCoreApp,Version=v8.0", "Reqnroll-Generic-net8.0/reqnroll-ide-connector.dll")]
-    [InlineData(".NETCoreApp,Version=v9.0", "Reqnroll-Generic-net9.0/reqnroll-ide-connector.dll")]
-    [InlineData(".NETCoreApp,Version=v10.0", "Reqnroll-Generic-net10.0/reqnroll-ide-connector.dll")]
-    public void GetConnectorPath_for_netcore_uses_dotnet_exec_with_the_matching_dll(
-        string tfm, string expectedRelative)
+    [InlineData(".NETCoreApp,Version=v6.0")]
+    [InlineData(".NETCoreApp,Version=v7.0")]
+    [InlineData(".NETCoreApp,Version=v8.0")]
+    [InlineData(".NETCoreApp,Version=v9.0")]
+    [InlineData(".NETCoreApp,Version=v10.0")]
+    [InlineData(".NETCoreApp,Version=v11.0")]
+    [InlineData(".NETCoreApp,Version=v12.0")]
+    public void GetConnectorPath_for_netcore_uses_dotnet_exec_with_the_single_net_connector(string tfm)
     {
         var (path, args) = Resolve(tfm);
 
@@ -71,19 +77,17 @@ public class GenericOutProcReqnrollConnectorTests
         // The host binary name is OS-dependent ("dotnet.exe" on Windows, "dotnet" elsewhere) -
         // see OutProcReqnrollConnector.GetDotNetCommand / ResolveNonWindowsDotNetCommand.
         path.Should().EndWith(OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
-        args.Should().HaveCount(2);
-        args[0].Should().Be("exec");
-        args[1].Should().Be(Path.Combine(_extensionFolder, expectedRelative));
+        args.Should().Equal("exec", Path.Combine(_extensionFolder, NetConnector));
     }
 
     [Fact]
-    public void GetConnectorPath_defaults_to_net8_when_target_framework_has_no_version()
+    public void GetConnectorPath_uses_the_net_connector_when_target_framework_has_no_version()
     {
-        // ".NETCoreApp" with no Version=v… part → HasVersion is false → falls through to the
-        // net8.0 default seeded at the top of GetConnectorPath.
+        // ".NETCoreApp" with no Version=v... part: HasVersion is false, so it is not routed to a
+        // .NET Framework connector and gets the .NET one.
         var (path, args) = Resolve(".NETCoreApp");
 
         path.Should().EndWith(OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
-        args[1].Should().Be(Path.Combine(_extensionFolder, "Reqnroll-Generic-net8.0/reqnroll-ide-connector.dll"));
+        args.Should().Equal("exec", Path.Combine(_extensionFolder, NetConnector));
     }
 }
