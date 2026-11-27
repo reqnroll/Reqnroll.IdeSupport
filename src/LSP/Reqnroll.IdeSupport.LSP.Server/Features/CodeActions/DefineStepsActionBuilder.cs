@@ -43,11 +43,15 @@ internal sealed class DefineStepsActionBuilder
     /// Titles only gain a "→ &lt;target&gt;" suffix when more than one target actually resolved —
     /// the common case (no existing candidate) keeps the original unadorned title so most users
     /// never see a change.
+    /// When <paramref name="copyTitle"/> is given, the group ends with one more action, titled
+    /// <paramref name="copyTitle"/>, that copies the same method(s) to the clipboard instead of
+    /// editing a file (see <see cref="BuildCopyCodeAction"/>).
     /// </summary>
     public List<CommandOrCodeAction> Build(
         StepDefinitionTarget target,
         string baseTitle,
-        IReadOnlyList<LSP.Core.Matching.StepBindingMatch> steps)
+        IReadOnlyList<LSP.Core.Matching.StepBindingMatch> steps,
+        string? copyTitle = null)
     {
         var snippets = RenderSnippets(steps, target.Style, target.Indent, target.NewLine);
         if (snippets is null) return new List<CommandOrCodeAction>();
@@ -109,6 +113,9 @@ internal sealed class DefineStepsActionBuilder
 
         var newFileTitle = multiTarget ? $"{baseTitle} → new file" : baseTitle;
         actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, target.TargetPath, diagnostics, isPreferred: isFirst));
+
+        if (copyTitle is not null)
+            actionsForTitle.Add(BuildCopyCodeAction(copyTitle, snippets, target.NewLine, diagnostics));
 
         return actionsForTitle.Select(a => new CommandOrCodeAction(a)).ToList();
     }
@@ -233,6 +240,27 @@ internal sealed class DefineStepsActionBuilder
                 Arguments = new JArray(targetUri.ToString())
             },
             IsPreferred = isPreferred
+        };
+
+    /// <summary>
+    /// Builds the "Copy step definition(s) to clipboard" action: no <see cref="CodeAction.Edit"/>,
+    /// only a <see cref="CopyStepDefinitionsHandler.CommandName"/> command whose argument is the
+    /// rendered method(s), separated by a blank line. The methods keep the class-member indent they
+    /// would get in a file, so they paste straight into a class body; no class or <c>using</c>s are
+    /// included. Never <see cref="CodeAction.IsPreferred"/>: editing a file stays the default.
+    /// </summary>
+    private static CodeAction BuildCopyCodeAction(string title, IReadOnlyList<string> snippets, string newLine, Container<Diagnostic> diagnostics) =>
+        new()
+        {
+            Title       = title,
+            Kind        = CodeActionKind.QuickFix,
+            Diagnostics = diagnostics,
+            Command     = new Command
+            {
+                Title     = title,
+                Name      = CopyStepDefinitionsHandler.CommandName,
+                Arguments = new JArray(string.Join(newLine, snippets))
+            }
         };
 
     /// <summary>The end position (last line, last character) of <paramref name="content"/>, for a full-document replace range.</summary>

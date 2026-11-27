@@ -110,10 +110,11 @@ public class CodeActionHandlerTests
 
         result.Should().NotBeNull();
         var actions = result!.ToList();
-        actions.Should().HaveCount(1);
+        actions.Should().HaveCount(2, "the define action plus its copy-to-clipboard companion");
         var action = actions[0].CodeAction!;
         action.Title.Should().Be("Define missing step");
         action.Kind.Should().Be(CodeActionKind.QuickFix);
+        actions[1].CodeAction!.Title.Should().Be("Copy missing step definition to clipboard");
     }
 
     [Fact]
@@ -125,7 +126,7 @@ public class CodeActionHandlerTests
 
         var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
 
-        var command = result!.Single().CodeAction!.Command;
+        var command = result!.Single(a => a.CodeAction!.Edit is not null).CodeAction!.Command;
         command.Should().NotBeNull();
         command!.Name.Should().Be(DefineStepsTriggeredHandler.CommandName);
         command.Arguments.Should().HaveCount(1, "the single argument is the file the edit lands in");
@@ -225,6 +226,68 @@ public class CodeActionHandlerTests
         var titles = result!.Select(a => a.CodeAction!.Title).ToList();
         titles.Should().Contain(t => t.Contains("Define all missing steps"));
         titles.Should().Contain(t => t.StartsWith("Define step:"));
+    }
+
+    // ── Copy to clipboard ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Copy_action_carries_no_edit_only_the_copy_command_with_the_rendered_method()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        var copy = result!.Select(a => a.CodeAction!).Single(a => a.Title.StartsWith("Copy"));
+        copy.Edit.Should().BeNull("copying must not touch any file");
+        copy.Kind.Should().Be(CodeActionKind.QuickFix);
+        copy.IsPreferred.Should().NotBe(true, "editing a file stays the default choice");
+        copy.Diagnostics.Should().ContainSingle("it fixes the same squiggle as the define action");
+        copy.Command!.Name.Should().Be(CopyStepDefinitionsHandler.CommandName);
+
+        var text = copy.Command.Arguments!.Single().ToObject<string>();
+        text.Should().Contain("[When(").And.Contain("public void WhenIPressAdd()")
+            .And.Contain("throw new PendingStepException();");
+        text.Should().NotContain("[Binding]").And.NotContain("namespace").And.NotContain("using ",
+            "only the method is copied, not a class or file");
+    }
+
+    [Fact]
+    public async Task Each_title_group_ends_with_its_own_copy_action()
+    {
+        SeedMatchService(
+            UndefinedMatch("I press add",     ScenarioBlock.When),
+            UndefinedMatch("the result is 4", ScenarioBlock.Then));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        var actions = result!.Select(a => a.CodeAction!).ToList();
+        actions.Select(a => a.Title).Should().Equal(
+            "Define step: I press add",
+            "Copy step definition to clipboard: I press add",
+            "Define all missing steps in file",
+            "Copy all missing step definitions to clipboard");
+
+        var stepText = actions[1].Command!.Arguments!.Single().ToObject<string>()!;
+        stepText.Should().Contain("WhenIPressAdd").And.NotContain("ThenTheResultIs");
+
+        var allText = actions[3].Command!.Arguments!.Single().ToObject<string>()!;
+        allText.Should().Contain("WhenIPressAdd").And.Contain("ThenTheResultIs");
+        allText.Should().Contain("}" + Environment.NewLine + Environment.NewLine + "    [Then(",
+            "the copied methods are separated by a blank line");
+    }
+
+    [Fact]
+    public async Task Copy_actions_are_not_counted_as_define_steps_offers()
+    {
+        SeedMatchService(
+            UndefinedMatch("I press add",     ScenarioBlock.When),
+            UndefinedMatch("the result is 4", ScenarioBlock.Then));
+
+        await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "CodeAction.DefineSteps.Offered",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["ActionsOffered"]! == 2));
     }
 
     [Fact]
@@ -379,7 +442,7 @@ public class CodeActionHandlerTests
 
             var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
 
-            var actions = result!.Select(a => a.CodeAction!).ToList();
+            var actions = result!.Select(a => a.CodeAction!).Where(a => a.Edit is not null).ToList();
             actions.Should().HaveCount(2);
 
             var appendAction = actions.Should().ContainSingle(a => a.Title.EndsWith("CandidateSteps.cs")).Subject;
@@ -429,7 +492,7 @@ public class CodeActionHandlerTests
 
             var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
 
-            var actions = result!.Select(a => a.CodeAction!).ToList();
+            var actions = result!.Select(a => a.CodeAction!).Where(a => a.Edit is not null).ToList();
             actions.Should().HaveCount(1);
             actions[0].Title.Should().Be("Define missing step"); // plain title: only one target ever resolved
             actions[0].Edit!.DocumentChanges!.Should().Contain(c => c.IsCreateFile);
@@ -442,7 +505,7 @@ public class CodeActionHandlerTests
     }
 
     [Fact]
-    public async Task Caps_total_actions_at_six_when_many_candidates_exist()
+    public async Task Limits_append_targets_to_five_when_many_candidates_exist()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
@@ -471,13 +534,55 @@ public class CodeActionHandlerTests
 
             var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
 
-            result!.Should().HaveCount(6); // 5 append candidates (MaxAppendCandidates) + 1 new-file fallback
+            // 5 append candidates (MaxAppendCandidates) + 1 new-file fallback + 1 copy-to-clipboard.
+            result!.Should().HaveCount(7);
 
-            // Telemetry must reflect what was actually returned (post-cap), not the uncapped
-            // count the builder produced internally.
+            // Telemetry counts only the actions that edit a file, and only those actually returned
+            // (post-cap), not the uncapped count the builder produced internally.
             _telemetryService.Received(1).SendEvent(
                 "CodeAction.DefineSteps.Offered",
                 Arg.Is<Dictionary<string, object?>>(p => (int)p["ActionsOffered"]! == 6));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Caps_total_actions_at_eight_when_both_groups_have_many_candidates()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var featurePath = Path.Combine(tempDir, "calculator.feature");
+            var featureUri  = DocumentUri.FromFileSystemPath(featurePath);
+
+            var matches = new List<StepBindingMatch>();
+            for (int i = 0; i < 5; i++)
+            {
+                var candidatePath = Path.Combine(tempDir, $"CandidateSteps{i}.cs");
+                File.WriteAllText(candidatePath, ValidBindingClass);
+                for (int j = 0; j <= i; j++)
+                    matches.Add(DefinedMatch($"defined step {i}-{j}", ScenarioBlock.Given, featureUri, candidatePath, lineOffset: 0));
+            }
+
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            _scopeManager.ResolvePrimaryOwner(featureUri).Returns((LspReqnrollProject?)null);
+
+            matches.Add(UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41));
+            matches.Add(UndefinedMatch("the result is 4", ScenarioBlock.Then, featureUri, lineOffset: 0));
+            SeedMatchServiceFor(featureUri, matches.ToArray());
+
+            var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
+
+            // Per-step group: 5 appends + new file + copy (7); the "all" group is cut after its
+            // first append, so the per-step group, copy included, always survives the cap.
+            var titles = result!.Select(a => a.CodeAction!.Title).ToList();
+            titles.Should().HaveCount(8);
+            titles[6].Should().Be("Copy step definition to clipboard: I press add");
+            titles[7].Should().StartWith("Define all missing steps in file");
         }
         finally
         {

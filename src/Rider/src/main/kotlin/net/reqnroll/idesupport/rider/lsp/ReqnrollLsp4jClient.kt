@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.Lsp4jClient
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
+import net.reqnroll.idesupport.rider.lsp.protocol.CopyToClipboardParams
 import net.reqnroll.idesupport.rider.lsp.protocol.ReqnrollEmptyParams
 import net.reqnroll.idesupport.rider.telemetry.ReqnrollTelemetryEventInterceptor
 import net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider
@@ -18,8 +19,9 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
  * of this Lsp4jClient... annotated functions... called via reflection by the lsp4j library" —
  * confirmed against the actual platform source, `platform/lsp/src/api/Lsp4jClient.kt` in
  * intellij-community, not assumed): adds the reqnroll-custom server-to-client pushes this plugin
- * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline) and `reqnroll/logMessage`
- * (messages for the Reqnroll tool window).
+ * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline), `reqnroll/logMessage`
+ * (messages for the Reqnroll tool window) and `reqnroll/copyToClipboard` (a picked "Copy step
+ * definition(s) to clipboard" quick fix).
  *
  * A decorator of [LspServerNotificationsHandler] — the approach [ReqnrollCodeLensRefreshInterceptor]
  * and [ReqnrollInlayHintRefreshInterceptor] use for the *standard* LSP pushes — cannot add this: every
@@ -59,4 +61,8 @@ class ReqnrollLsp4jClient(
      */
     @JsonNotification("reqnroll/logMessage")
     fun reqnrollLogMessage(params: MessageParams) = ServerLogMessages.write(params)
+
+    /** `reqnroll/copyToClipboard`: text for the IDE clipboard, which LSP itself has no API for. */
+    @JsonNotification("reqnroll/copyToClipboard")
+    fun copyToClipboard(params: CopyToClipboardParams?) = ServerClipboard.copy(params)
 }

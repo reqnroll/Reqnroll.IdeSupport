@@ -7,7 +7,9 @@
 
 When one or more steps have no matching binding, a quick fix (lightbulb / Alt+Enter) offers to generate stub binding
 methods in a new or existing step-definition file, with signatures and parameter types inferred from the step text.
-Actions offered: "Define missing step", "Define step: …" and "Define all missing steps in file". The same handler also
+Actions offered: "Define missing step", "Define step: …" and "Define all missing steps in file". Each of those groups
+ends with a "Copy … to clipboard" action that puts the same method(s) on the IDE clipboard instead of editing a file
+(`CopyStepDefinitionsHandler`). The same handler also
 offers quick fixes for some parser errors (`ParserErrorActionBuilder`, with an `InsertKeywordTriggeredHandler`).
 
 The edit is applied entirely client side. Telemetry distinguishes *offered* from *executed*.
@@ -74,6 +76,8 @@ sequenceDiagram
 | `StepDefinitionTargetResolver`, `CandidateStepDefinitionFileRanker` | `…LSP.Server/Features/CodeActions`, `…LSP.Core/Scaffolding` | Chooses which file receives the methods. |
 | `IStepScaffoldService`, `StepScaffoldService`, `StepSkeletonDescriptor`, `StepSkeletonRenderer`, `StepDefinitionFileBuilder` | `…LSP.Core/Scaffolding` | Infers parameters and renders skeletons and files. |
 | `DefineStepsTriggeredHandler` | `…LSP.Server/Features/CodeActions` | Handles `reqnroll.defineStepsTriggered`; emits the exact "executed" signal; reveals the file in VS Code. |
+| `CopyStepDefinitionsHandler` | `…LSP.Server/Features/CodeActions` | Handles `reqnroll.copyStepDefinitions`; emits `CodeAction.CopyStepDefinitions.Executed`; sends `reqnroll/copyToClipboard` back to the client. |
+| `CopyToClipboardInterceptor` / `serverClipboard.ts` / `ServerClipboard` | VS / VS Code / Rider client | Writes the text of `reqnroll/copyToClipboard` to the IDE clipboard. |
 | `ScaffoldTrackingInterceptor` | `src/VisualStudio/…Extension/LspInterception` | Visual Studio only: registers a newly created `.cs` with the membership index before binding discovery runs. |
 
 ## 6. Behaviour and contracts
@@ -84,11 +88,17 @@ sequenceDiagram
 - **Executed signal.** Each action carries `reqnroll.defineStepsTriggered` with the file URI; the client sends it after
   applying the edit. It is the server's only exact signal that the fix was chosen, and is not sent for a hand-written
   definition.
+- **Copy to clipboard.** The copy action carries no edit, only `reqnroll.copyStepDefinitions` with the rendered
+  method(s) as its argument: the methods only, separated by a blank line and indented as class members, with no class or
+  `using`s. LSP has no clipboard API and the server may not run where the clipboard is, so the server relays the text
+  back in a `reqnroll/copyToClipboard` notification and each client writes its own clipboard. The argument comes back
+  from the client, so only a non-empty string is relayed. The copy action is never `IsPreferred`.
 - **Reveal the file.** For clients with `HonorsShowDocumentRequests` the server uses `window/showDocument`. Clients that do
   not run `vscode.open` locally would forward it to the server, where it has no handler, so a code action must not carry
   only that command.
 - **Telemetry.** `CodeAction.DefineSteps.Offered` (each time the action is offered, not a count of lightbulb opens, since
-  Visual Studio and Rider may request code actions on every caret move) and `CodeAction.DefineSteps.Executed` (no properties).
+  Visual Studio and Rider may request code actions on every caret move; copy actions are not counted),
+  `CodeAction.DefineSteps.Executed` and `CodeAction.CopyStepDefinitions.Executed` (no properties).
   See [../Telemetry-Events-Inventory.md](../Telemetry-Events-Inventory.md).
 - **Expression escaping.** Generated bindings escape special characters for the chosen style and for the C# string
   literal; async style files import `System.Threading.Tasks` when the project has implicit usings disabled.
