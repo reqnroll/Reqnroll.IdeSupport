@@ -63,7 +63,16 @@ public class Runner
             Debugger.Launch();
     }
 
-    public void DumpOptions(ConnectorOptions options) => _log.Info(options.ToString());
+    /// <summary>Prefix of the log line that reports the runtime version the connector runs on.</summary>
+    public const string RuntimeVersionLogPrefix = "Connector runtime version: ";
+
+    public void DumpOptions(ConnectorOptions options)
+    {
+        _log.Info(options.ToString());
+        // The .NET connector is built for net6.0 and rolls forward to the newest installed
+        // runtime, so the version it actually runs on is only known here.
+        _log.Info($"{RuntimeVersionLogPrefix}{Environment.Version}");
+    }
 
     private void PrintResult(string result)
     {

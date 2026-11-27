@@ -33,8 +33,9 @@ src/LSP/
   Where a new type goes (Core vs Server): see "Where code goes" in
   docs/LSP-IDE-Support-Architecture.md ("Where code goes") — Core takes whatever implements Reqnroll LSP
   functionality regardless of plumbing; Server takes the plumbing and the timing/scheduling semantics.
-  Reqnroll.IdeSupport.LSP.Connector ← out-of-process reflection-based binding discovery, one variant per TFM
-                                      (Reqnroll-Generic-net8.0, -net481, …); invoked as a short-lived child
+  Reqnroll.IdeSupport.LSP.Connector ← out-of-process reflection-based binding discovery: one .NET build
+                                      (Reqnroll-Generic-net6.0, rolls forward to the newest installed runtime)
+                                      and one per .NET Framework version (-net462, -net472, -net481); invoked as a short-lived child
                                       process by the server, never referenced in-proc
 
 src/Core/Reqnroll.IdeSupport.Common ← shared config/logging/analytics contracts, referenced by everything

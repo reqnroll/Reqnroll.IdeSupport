@@ -29,7 +29,7 @@ public static class FixtureDiscovery
 
     /// <summary>True when the connector binaries and the fixture assembly were both deployed.</summary>
     public static bool IsAvailable =>
-        Directory.Exists(Path.Combine(ConnectorsFolder, "Reqnroll-Generic-net10.0")) &&
+        Directory.Exists(Path.Combine(ConnectorsFolder, "Reqnroll-Generic-net6.0")) &&
         File.Exists(FixtureAssemblyPath);
 
     public static ProjectBindingRegistry Discover()
