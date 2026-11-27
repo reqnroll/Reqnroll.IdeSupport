@@ -62,6 +62,7 @@ env:
   LSP_SERVER_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Server/Reqnroll.IdeSupport.LSP.Server.csproj
   LSP_CORE_TESTS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Core.Tests/Reqnroll.IdeSupport.LSP.Core.Tests.csproj
   LSP_SERVER_TESTS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Reqnroll.IdeSupport.LSP.Server.Tests.csproj
+  LSP_CONNECTOR_TESTS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Connector.Tests/Reqnroll.IdeSupport.LSP.Connector.Tests.csproj
   LSP_SERVER_SPECS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs/Reqnroll.IdeSupport.LSP.Server.Specs.csproj
   COMMON_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.Common.Tests/Reqnroll.IdeSupport.Common.Tests.csproj
   TESTLOGGER_PROJECT: src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj
@@ -116,8 +117,9 @@ jobs:
         run: dotnet build ${{ env.LSP_SERVER_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} ${{ env.BUILD_NUMBER_ARG }}
 
   # ---------------------------------------------------------------------------
-  # Job 2: Unit test LSP — Reqnroll.IdeSupport.LSP.Core.Tests and
-  # Reqnroll.IdeSupport.LSP.Server.Tests. Runs in parallel with spec-test-lsp.
+  # Job 2: Unit test LSP — Reqnroll.IdeSupport.LSP.Core.Tests,
+  # Reqnroll.IdeSupport.LSP.Server.Tests, Reqnroll.IdeSupport.LSP.Connector.Tests and the
+  # shared Core test projects. Runs in parallel with spec-test-lsp.
   # ---------------------------------------------------------------------------
   unit-test-lsp:
     name: Test (Unit)
@@ -160,6 +162,14 @@ jobs:
 
       - name: Test LSP.Server
         run: dotnet test ${{ env.LSP_SERVER_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --logger "GitHubActions;summary-include-passed=false" --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
+
+      - name: Restore LSP.Connector.Tests
+        # Covers the out-of-process binding-discovery connector (assembly loading, discovery,
+        # command-line options, logging) that every IDE consumer relies on.
+        run: dotnet restore ${{ env.LSP_CONNECTOR_TESTS_PROJECT }}
+
+      - name: Test LSP.Connector
+        run: dotnet test ${{ env.LSP_CONNECTOR_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Restore Common.Tests
         # Reqnroll.IdeSupport.Common.Tests covers src/Core/Reqnroll.IdeSupport.Common, the library
