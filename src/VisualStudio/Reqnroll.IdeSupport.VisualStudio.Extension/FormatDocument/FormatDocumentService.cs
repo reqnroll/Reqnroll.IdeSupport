@@ -37,7 +37,7 @@ internal sealed class FormatDocumentService
     /// <summary>
     /// Sends <c>textDocument/formatting</c> (when <paramref name="isSelection"/> is false) or
     /// <c>textDocument/rangeFormatting</c> for lines [<paramref name="startLine"/>..<paramref name="endLine"/>]
-    /// (0-based, inclusive) with the editor's tab settings as the formatting options, and maps the
+    /// (0-based, inclusive) with the editor's indent settings as the formatting options, and maps the
     /// response to line-range edits.
     /// </summary>
     public async Task<IReadOnlyList<GherkinLineRangeEdit>?> FormatDocumentAsync(
@@ -111,7 +111,7 @@ internal sealed class FormatDocumentService
             .AddTextDocument(fileUri)
             .AddRaw(
                 "options",
-                $"{{\"tabSize\":{options.TabSize},\"insertSpaces\":{(options.InsertSpaces ? "true" : "false")}}}");
+                $"{{\"tabSize\":{options.IndentSize},\"insertSpaces\":{(options.InsertSpaces ? "true" : "false")}}}");
 
         if (isSelection)
         {

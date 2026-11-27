@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.FormatDocument;
 
 /// <summary>
 /// Pins the <c>textDocument/formatting</c>/<c>rangeFormatting</c> payload
-/// <see cref="FormatDocumentService"/> sends: the <c>options</c> carry the editor's tab settings
+/// <see cref="FormatDocumentService"/> sends: the <c>options</c> carry the editor's indent settings
 /// (the server builds the indent from them alone), and a selection adds a whole-line range.
 /// </summary>
 public class FormatDocumentServiceBuildParamsTests
@@ -17,13 +17,13 @@ public class FormatDocumentServiceBuildParamsTests
     [InlineData(2, true)]
     [InlineData(4, false)]
     [InlineData(8, true)]
-    public void Sends_the_editor_tab_settings_as_the_formatting_options(int tabSize, bool insertSpaces)
+    public void Sends_the_editor_indent_settings_as_the_formatting_options(int indentSize, bool insertSpaces)
     {
         var json = JObject.Parse(FormatDocumentService.BuildParams(
-            Uri, isSelection: false, 0, 0, new GherkinFormattingOptions(tabSize, insertSpaces)));
+            Uri, isSelection: false, 0, 0, new GherkinFormattingOptions(indentSize, insertSpaces)));
 
         json["textDocument"]!["uri"]!.Value<string>().Should().Be(Uri);
-        json["options"]!["tabSize"]!.Value<int>().Should().Be(tabSize);
+        json["options"]!["tabSize"]!.Value<int>().Should().Be(indentSize);
         json["options"]!["insertSpaces"]!.Value<bool>().Should().Be(insertSpaces);
         json["range"].Should().BeNull();
     }
