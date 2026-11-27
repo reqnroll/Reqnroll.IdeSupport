@@ -113,6 +113,42 @@ public sealed class LspServerHarness : IAsyncDisposable
         previous.TrySetResult(0);
     }
 
+    private readonly object _clipboardLock = new();
+    private readonly List<string> _clipboardTexts = new();
+    private TaskCompletionSource<int> _clipboardSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>The texts of the <c>reqnroll/copyToClipboard</c> notifications received so far.</summary>
+    public IReadOnlyList<string> ClipboardTexts
+    {
+        get { lock (_clipboardLock) return _clipboardTexts.ToArray(); }
+    }
+
+    /// <summary>Waits until a <c>reqnroll/copyToClipboard</c> notification has arrived.</summary>
+    public async Task<bool> WaitForClipboardTextAsync(int timeoutMs = 5000)
+    {
+        Task signal;
+        lock (_clipboardLock)
+        {
+            if (_clipboardTexts.Count > 0)
+                return true;
+            signal = _clipboardSignal.Task;
+        }
+        await Task.WhenAny(signal, Task.Delay(timeoutMs)).ConfigureAwait(false);
+        lock (_clipboardLock) return _clipboardTexts.Count > 0;
+    }
+
+    private void RecordClipboardText(string text)
+    {
+        TaskCompletionSource<int> previous;
+        lock (_clipboardLock)
+        {
+            _clipboardTexts.Add(text);
+            previous = _clipboardSignal;
+            _clipboardSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        previous.TrySetResult(0);
+    }
+
     private readonly object _applyEditLock = new();
     private ApplyWorkspaceEditParams? _lastApplyEdit;
     private TaskCompletionSource<int> _applyEditSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -238,6 +274,13 @@ public sealed class LspServerHarness : IAsyncDisposable
                 RecordReqnrollLogMessage(
                     p["type"]?.Value<int>() ?? 0,
                     p["message"]?.Value<string>() ?? string.Empty);
+                return Task.CompletedTask;
+            });
+
+            // Sink for the server's request to put text on the IDE clipboard.
+            options.OnNotification("reqnroll/copyToClipboard", (JToken p) =>
+            {
+                RecordClipboardText(p["text"]?.Value<string>() ?? string.Empty);
                 return Task.CompletedTask;
             });
 

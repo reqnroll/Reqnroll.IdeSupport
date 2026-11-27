@@ -84,6 +84,9 @@ data class DocumentActivatedParams(
 /** Params for `reqnroll/findUnusedStepDefinitions` — the request takes no data, but LSP4J's `@JsonRequest` needs a params argument; matches the server's empty `FindUnusedStepDefinitionsParams` class. */
 class ReqnrollEmptyParams
 
+/** Params of the `reqnroll/copyToClipboard` notification: the text to put on the clipboard. */
+data class CopyToClipboardParams(val text: String? = null)
+
 /** Response for `reqnroll/findUnusedStepDefinitions` — mirrors FindUnusedStepDefinitionsResponse.cs field-for-field. */
 data class FindUnusedStepDefinitionsResponse(
     val items: List<UnusedStepDefinitionItem> = emptyList(),

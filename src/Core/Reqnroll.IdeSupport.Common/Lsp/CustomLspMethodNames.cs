@@ -67,6 +67,12 @@ public static class CustomLspMethodNames
     /// standard <c>window/logMessage</c>, which clients route to a generic language-server channel.
     /// </summary>
     public const string ReqnrollLogMessage = "reqnroll/logMessage";
+    /// <summary>
+    /// Method name for the <c>reqnroll/copyToClipboard</c> notification: <c>{ text }</c> for the client to
+    /// place on the IDE clipboard. LSP has no clipboard API, and the server cannot write the clipboard
+    /// itself (it may run remotely or under another host), so the client does the copy.
+    /// </summary>
+    public const string ReqnrollCopyToClipboard = "reqnroll/copyToClipboard";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
     public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>

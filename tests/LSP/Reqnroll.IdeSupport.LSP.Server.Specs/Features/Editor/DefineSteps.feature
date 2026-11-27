@@ -66,6 +66,27 @@ Scenario: The code action includes a defineStepsTriggered command for the new fi
     Then a code action titled "Define missing step" is available
     And the code action has a "reqnroll.defineStepsTriggered" command to open the new file
 
+# ── Copy to clipboard ─────────────────────────────────────────────────────────
+
+Scenario: The copy action sends the step definition to the client clipboard without editing a file
+    When the project is announced with output assembly "Sample.dll" for "Copy.feature"
+    And the C# step definition file "EmptySteps.cs" is opened with
+        """
+        using Reqnroll;
+        namespace Sample { [Binding] public class EmptySteps { } }
+        """
+    And the feature file "Copy.feature" is opened with
+        """
+        Feature: Copy
+        Scenario: S
+            When this step is copied
+        """
+    And code actions are requested for "Copy.feature" at line 2
+    Then a code action titled "Copy missing step definition to clipboard" is available
+    When the command of the code action titled "Copy missing step definition to clipboard" is executed
+    Then the client is asked to copy step definition C# code containing "public void WhenThisStepIsCopied()"
+    And no applyEdit request is sent
+
 # ── Multiple undefined steps ─────────────────────────────────────────────────
 
 Scenario: A bulk action is offered when there are multiple undefined steps

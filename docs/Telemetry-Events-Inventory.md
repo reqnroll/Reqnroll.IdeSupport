@@ -31,6 +31,7 @@ Every event, ordered by name. "From" says where the event originates: the LSP se
 
 | Event | From | Meaning | Section |
 |---|---|---|---|
+| `CodeAction.CopyStepDefinitions.Executed` | Server | The user picked the "Copy step definition(s) to clipboard" quick fix. | 3 |
 | `CodeAction.DefineSteps.Executed` | Server | The user picked the "Define step(s)" quick fix. | 3 |
 | `CodeAction.DefineSteps.Offered` | Server | The "Define step(s)" quick fix was offered for undefined steps. | 3 |
 | `CodeAction.InsertKeyword.Executed` | Server | The user picked an "Insert keyword" quick fix. | 3 |
@@ -335,6 +336,17 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 | **Properties** | none |
 
 **Analytics use.** Acceptance rate = `CodeAction.DefineSteps.Executed` / `CodeAction.DefineSteps.Offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, because a code action has one command slot.
+
+### `CodeAction.CopyStepDefinitions.Executed`
+
+*Constant: `TelemetryEvents.CodeActionCopyStepDefinitionsExecuted`*
+| | |
+|---|---|
+| **Emitter** | `CopyStepDefinitionsHandler` |
+| **When** | A client runs the `reqnroll.copyStepDefinitions` command of a "Copy step definition(s) to clipboard" code action, i.e. the user picked it. Each "Define step(s)" group offers one such action next to its file-editing ones. It is not counted in `CodeAction.DefineSteps.Offered`'s `ActionsOffered` |
+| **Properties** | none |
+
+**Analytics use.** How often users copy a skeleton rather than let the quick fix edit a file: compare with `CodeAction.DefineSteps.Executed`.
 
 ### `CodeAction.InsertKeyword.Offered`
 

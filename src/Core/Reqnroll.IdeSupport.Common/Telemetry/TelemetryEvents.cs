@@ -101,6 +101,9 @@ public static class TelemetryEvents
     /// <summary>Sent by <c>Features.CodeActions.DefineStepsTriggeredHandler</c> when the client runs the command of a "Define step(s)" quick fix, i.e. the user picked it.</summary>
     public const string CodeActionDefineStepsExecuted = "CodeAction.DefineSteps.Executed";
 
+    /// <summary>Sent by <c>Features.CodeActions.CopyStepDefinitionsHandler</c> when the client runs the command of a "Copy step definition(s) to clipboard" quick fix, i.e. the user picked it.</summary>
+    public const string CodeActionCopyStepDefinitionsExecuted = "CodeAction.CopyStepDefinitions.Executed";
+
     /// <summary>Sent by <c>Features.CodeActions.CodeActionHandler</c> when "Insert '&lt;keyword&gt;'" quick fixes are offered for a parser error.</summary>
     public const string CodeActionInsertKeywordOffered = "CodeAction.InsertKeyword.Offered";
 
