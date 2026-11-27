@@ -44,4 +44,4 @@ jobs:
       - name: Test the reporter against the latest published versions
         env:
           REQNROLL_MTP_TEST_LATEST: 'true'
-        run: dotnet test ${{ env.MTP_REPORTER_TESTS_PROJECT }} --configuration Release --filter "FullyQualifiedName~LatestPublished" --logger "console;verbosity=normal"
+        run: dotnet test ${{ env.MTP_REPORTER_TESTS_PROJECT }} --configuration Release --filter "FullyQualifiedName~LatestPublished" --logger "console;verbosity=normal" --logger "GitHubActions;summary-include-passed=false"
