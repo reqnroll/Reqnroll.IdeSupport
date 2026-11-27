@@ -25,4 +25,5 @@ export const ReqnrollMethods = {
   getTestOutcome: 'reqnroll/testOutcomes/getOutcome',
   testOutcomesChanged: 'reqnroll/testOutcomes/changed',
   logMessage: 'reqnroll/logMessage',
+  copyToClipboard: 'reqnroll/copyToClipboard',
 } as const;

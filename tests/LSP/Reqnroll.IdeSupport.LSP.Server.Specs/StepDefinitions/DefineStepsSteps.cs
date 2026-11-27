@@ -115,6 +115,28 @@ public sealed class DefineStepsSteps
             "the command should pass the new file's URI as an argument");
     }
 
+    [When(@"the command of the code action titled ""(.*)"" is executed")]
+    public async Task WhenTheCommandOfTheCodeActionTitledIsExecuted(string title)
+    {
+        var action = _ctx.LastCodeActions!.Single(ca => ca.IsCodeAction && ca.CodeAction!.Title == title).CodeAction!;
+        action.Edit.Should().BeNull("a copy action changes no file, so a client has no edit to apply first");
+        await _ctx.Harness.Client.RequestCommandAsync(new ExecuteCommandParams
+        {
+            Command   = action.Command!.Name,
+            Arguments = action.Command.Arguments
+        }).ConfigureAwait(false);
+    }
+
+    [Then(@"the client is asked to copy step definition C# code containing ""(.*)""")]
+    public async Task ThenTheClientIsAskedToCopy(string expected)
+    {
+        (await _ctx.Harness.WaitForClipboardTextAsync().ConfigureAwait(false))
+            .Should().BeTrue("the server relays the picked copy action to the client as reqnroll/copyToClipboard");
+        var text = _ctx.Harness.ClipboardTexts.Should().ContainSingle().Subject;
+        text.Should().Contain(expected).And.Contain("throw new PendingStepException();");
+        text.Should().NotContain("[Binding]", "only the method is copied, not a class");
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private CodeAction FirstCodeAction()

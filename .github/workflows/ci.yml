@@ -371,7 +371,7 @@ jobs:
         run: dotnet restore ${{ env.TESTS_PROJECT }} -p:UseExternalLspServerBuild=true "-p:LspServerBuildDir=${{ github.workspace }}\lsp-server-win-x64\"
 
       - name: Test
-        run: dotnet test ${{ env.TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults -p:UseExternalLspServerBuild=true "-p:LspServerBuildDir=${{ github.workspace }}\lsp-server-win-x64\" ${{ env.BUILD_NUMBER_ARG }}
+        run: dotnet test ${{ env.TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --logger "GitHubActions;summary-include-passed=false" --results-directory TestResults -p:UseExternalLspServerBuild=true "-p:LspServerBuildDir=${{ github.workspace }}\lsp-server-win-x64\" ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Upload Test Result TRX Files
         uses: actions/upload-artifact@v7
@@ -415,7 +415,7 @@ jobs:
         run: dotnet restore ${{ env.WIZARDS_TESTS_PROJECT }}
 
       - name: Test Wizards
-        run: dotnet test ${{ env.WIZARDS_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults
+        run: dotnet test ${{ env.WIZARDS_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --logger "GitHubActions;summary-include-passed=false" --results-directory TestResults
 
       - name: Upload Test Result TRX Files
         uses: actions/upload-artifact@v7

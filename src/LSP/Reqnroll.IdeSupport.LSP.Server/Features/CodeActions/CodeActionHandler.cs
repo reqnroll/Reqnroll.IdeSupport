@@ -11,6 +11,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -40,9 +41,10 @@ public sealed class CodeActionHandler : ICodeActionHandler
     /// <summary>
     /// Caps the total number of code actions returned for one request (append candidates + the
     /// new-file fallback, across both the per-step and "all"/"scenario" title groups, plus any
-    /// parser-error/ambiguous-step fixes).
+    /// parser-error/ambiguous-step fixes). Includes room for the one "copy to clipboard" action
+    /// each of the two title groups ends with.
     /// </summary>
-    private const int MaxTargetedActions = 6;
+    private const int MaxTargetedActions = 8;
 
     private readonly IBindingMatchService          _matchService;
     private readonly ILspWorkspaceScopeManager     _scopeManager;
@@ -53,6 +55,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     private readonly StepDefinitionTargetResolver  _targetResolver;
     private readonly DefineStepsActionBuilder      _actionBuilder;
     private readonly ParserErrorActionBuilder      _parserErrorActionBuilder;
+    private readonly ClientIdeContext?             _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="CodeActionHandler"/> class.</summary>
     public CodeActionHandler(
@@ -66,7 +69,8 @@ public sealed class CodeActionHandler : ICodeActionHandler
         ICompletionService        completionService,
         IErrorTelemetryService    errorTelemetryService,
         ILspTelemetryService?     telemetryService = null,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        ClientIdeContext?         clientIde = null)
     {
         _matchService    = matchService;
         _scopeManager    = scopeManager;
@@ -77,6 +81,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
         _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache, logger);
         _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
+        _clientIde       = clientIde;
     }
 
     /// <summary>Builds the LSP registration options advertising code-action support (quick-fix kind) for <c>.feature</c> files.</summary>
@@ -142,7 +147,9 @@ public sealed class CodeActionHandler : ICodeActionHandler
         if (stepAtCursor is { IsUndefined: true } && !string.IsNullOrWhiteSpace(GetStepText(stepAtCursor)))
         {
             var defineActions = BuildDefineStepActions(uri, primaryOwner, matchSet, stepAtCursor);
-            isDefineAction.UnionWith(defineActions);
+            // Only the actions that edit a file count as "Define step(s)" offers; the copy action
+            // carries no edit.
+            isDefineAction.UnionWith(defineActions.Where(a => a.CodeAction?.Edit is not null));
             actions.AddRange(defineActions);
         }
 
@@ -195,6 +202,9 @@ public sealed class CodeActionHandler : ICodeActionHandler
             });
         }
 
+        if (_clientIde?.Behaviours.SortsCodeActionsByPriorityThenTitle == true)
+            actions = actions.Select(PrioritizeForTitleSortingClient).ToList();
+
         return Task.FromResult<CommandOrCodeActionContainer?>(
             new CommandOrCodeActionContainer(actions));
     }
@@ -216,17 +226,39 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // action - show it once, with the generic singular title.
         if (allUndefined.Count == 1)
         {
-            return _actionBuilder.Build(target, "Define missing step", allUndefined);
+            return _actionBuilder.Build(target, "Define missing step", allUndefined,
+                copyTitle: "Copy missing step definition to clipboard");
         }
 
         // Per-step action first, so it survives the MaxTargetedActions cap in Handle when
         // both this and the "all" group are present.
         var stepText = GetStepText(stepAtCursor);
-        var actions  = _actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor });
+        var actions  = _actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor },
+            copyTitle: $"Copy step definition to clipboard: {stepText}");
 
-        actions.AddRange(_actionBuilder.Build(target, "Define all missing steps in file", allUndefined));
+        actions.AddRange(_actionBuilder.Build(target, "Define all missing steps in file", allUndefined,
+            copyTitle: "Copy all missing step definitions to clipboard"));
 
         return actions;
+    }
+
+    /// <summary>
+    /// For a client that sorts code actions by priority and then by title instead of keeping the
+    /// response order: puts each preferred action first and each "Copy … to clipboard" action last.
+    /// Every other action keeps no priority and is sorted by its title.
+    /// </summary>
+    private static CommandOrCodeAction PrioritizeForTitleSortingClient(CommandOrCodeAction action)
+    {
+        if (action.CodeAction is not { } codeAction)
+            return action;
+
+        if (codeAction.IsPreferred)
+            return new VsPrioritizedCodeAction(codeAction, VsCodeActionPriority.Normal);
+
+        if (codeAction.Command?.Name == CopyStepDefinitionsHandler.CommandName)
+            return new VsPrioritizedCodeAction(codeAction, VsCodeActionPriority.Low);
+
+        return action;
     }
 
     private static bool IsFeatureFile(DocumentUri uri) =>

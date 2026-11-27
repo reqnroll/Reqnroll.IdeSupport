@@ -70,6 +70,7 @@ import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_ARGUMENT } from './clientSession';
 import { TableHighlightService } from './tableHighlightService';
 import { registerTestOutcomes } from './testOutcomes/testOutcomesService';
 import { registerServerLogMessages } from './lsp/serverLogMessages';
+import { registerServerClipboard } from './lsp/serverClipboard';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
 import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
 import { showWalkthroughOnFirstActivation } from './walkthrough';
@@ -524,6 +525,10 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // "Reqnroll" channel, not "Reqnroll LSP". Subscribed before start() so every server (re)start is
   // covered.
   context.subscriptions.push(registerServerLogMessages(client, appLogChannel));
+
+  // "Copy step definition(s) to clipboard" quick fixes: the server relays the text back for the
+  // client to copy, since LSP has no clipboard API.
+  context.subscriptions.push(registerServerClipboard(client, vscode.env.clipboard, appLogChannel));
 
   client
     .start()

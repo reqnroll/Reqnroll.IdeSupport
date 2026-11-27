@@ -671,6 +671,10 @@ internal sealed class LspServerConnectionService : IDisposable
             // failed binding discovery) to the "Reqnroll" Output Window pane.
             var serverLogMessageInterceptor = new ServerLogMessageInterceptor();
 
+            // Puts the text of the server's reqnroll/copyToClipboard (a picked "Copy step
+            // definition(s) to clipboard" quick fix) on the clipboard.
+            var copyToClipboardInterceptor = new CopyToClipboardInterceptor();
+
             // Shows the server's reqnroll/renameNotApplied: the rename edit it pushed after
             // answering the rename request was rejected, so the step was not renamed.
             var renameNotAppliedInterceptor = new RenameNotAppliedInterceptor(
@@ -700,7 +704,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
             // Send pipeline:   VS → [(logger, when enabled), activity, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
-            // Receive pipeline: Server → [(logger, when enabled), activity, semanticTokens, scaffold, codeLensRefresh, testOutcomesChanged, serverLogMessage, renameNotApplied, sourceControlEditCheck, shutdownHandshake, telemetry] → VS
+            // Receive pipeline: Server → [(logger, when enabled), activity, semanticTokens, scaffold, codeLensRefresh, testOutcomesChanged, serverLogMessage, copyToClipboard, renameNotApplied, sourceControlEditCheck, shutdownHandshake, telemetry] → VS
             // activity is on both pipelines: send records each request, receive removes it on its response.
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
             // push. It is not on the send pipeline: invalidating per .cs didChange would have VS
@@ -719,7 +723,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             _telemetryInterceptor = telemetryInterceptor;
             var receiveInterceptors = WithInspectorLogger(_inspectorLogger,
-                activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, serverLogMessageInterceptor, renameNotAppliedInterceptor, sourceControlEditCheckInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor);
+                activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, serverLogMessageInterceptor, copyToClipboardInterceptor, renameNotAppliedInterceptor, sourceControlEditCheckInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor);
 
             _interceptingPipe = _createInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());
