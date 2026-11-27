@@ -135,4 +135,33 @@ public class FormatDocumentCommandFilterTests
         startLine.Should().Be(5);
         endLine.Should().Be(5);
     }
+
+    private static IEditorOptions EditorOptions(int tabSize, bool convertTabsToSpaces)
+    {
+        var options = Substitute.For<IEditorOptions>();
+        options.GetOptionValue(DefaultOptions.TabSizeOptionId).Returns(tabSize);
+        options.GetOptionValue(DefaultOptions.ConvertTabsToSpacesOptionId).Returns(convertTabsToSpaces);
+        return options;
+    }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(4, false)]
+    [InlineData(8, true)]
+    public void GetFormattingOptions_reads_the_view_tab_size_and_insert_spaces(int tabSize, bool insertSpaces)
+    {
+        var options = FormatDocumentCommandFilter.GetFormattingOptions(EditorOptions(tabSize, insertSpaces));
+
+        options.Should().Be(new GherkinFormattingOptions(tabSize, insertSpaces));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void GetFormattingOptions_falls_back_to_the_default_when_the_tab_size_is_not_positive(int tabSize)
+    {
+        var options = FormatDocumentCommandFilter.GetFormattingOptions(EditorOptions(tabSize, false));
+
+        options.Should().Be(GherkinFormattingOptions.Default);
+    }
 }

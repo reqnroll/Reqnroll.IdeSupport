@@ -15,9 +15,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.FormatDocument;
 public static class FormatDocumentRedirect
 {
     /// <summary>
-    /// Delegate set by the Extension project: <c>(fileUri, isSelection, startLine, endLine, ct) → edits</c>.
-    /// <c>startLine</c>/<c>endLine</c> (0-based) are only meaningful when <c>isSelection</c> is true.
+    /// Delegate set by the Extension project: <c>(fileUri, isSelection, startLine, endLine, options, ct) → edits</c>.
+    /// <c>startLine</c>/<c>endLine</c> (0-based) are only meaningful when <c>isSelection</c> is true;
+    /// <c>options</c> are the text view's tab settings.
     /// Null when the server has not yet initialized or has been disposed.
     /// </summary>
-    public static Func<string, bool, int, int, CancellationToken, Task<IReadOnlyList<GherkinLineRangeEdit>?>>? FormatDocumentAsync { get; set; }
+    public static Func<string, bool, int, int, GherkinFormattingOptions, CancellationToken, Task<IReadOnlyList<GherkinLineRangeEdit>?>>? FormatDocumentAsync { get; set; }
 }
