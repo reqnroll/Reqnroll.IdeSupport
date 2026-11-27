@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -674,6 +675,22 @@ internal sealed class LspServerConnectionService : IDisposable
             // definition(s) to clipboard" quick fix) on the clipboard.
             var copyToClipboardInterceptor = new CopyToClipboardInterceptor();
 
+            // Shows the server's reqnroll/renameNotApplied: the rename edit it pushed after
+            // answering the rename request was rejected, so the step was not renamed.
+            var renameNotAppliedInterceptor = new RenameNotAppliedInterceptor(
+                _loggerFactory.CreateLogger<RenameNotAppliedInterceptor>());
+
+            // Holds back a server-pushed workspace/applyEdit that changes read-only files until
+            // source control has been asked; refused, the server is answered applied: false instead.
+            // Bound to this generation's pipe, set just below once it exists, so a held-back edit is
+            // never forwarded to, or answered on, a later server's connection.
+            LspInterceptingPipe? generationPipe = null;
+            var sourceControlEditCheckInterceptor = new SourceControlEditCheckInterceptor(
+                _loggerFactory.CreateLogger<SourceControlEditCheckInterceptor>(),
+                VsUtils.QueryEditFilesAsync,
+                (body, ct) => generationPipe?.SendToVsAsync(body, ct) ?? Task.FromResult(false),
+                (id, result, ct) => generationPipe?.SendResponseToServerAsync(id, result, ct) ?? Task.FromResult(false));
+
             // Drives DocumentActivationState's didOpen/didClose transitions and, in
             // the activation-before-open case, sends reqnroll/documentActivated itself right
             // after re-forwarding didOpen. Uses a lazy reference for the same reason as above:
@@ -687,7 +704,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
             // Send pipeline:   VS → [(logger, when enabled), activity, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
-            // Receive pipeline: Server → [(logger, when enabled), activity, semanticTokens, scaffold, codeLensRefresh, testOutcomesChanged, serverLogMessage, copyToClipboard, shutdownHandshake, telemetry] → VS
+            // Receive pipeline: Server → [(logger, when enabled), activity, semanticTokens, scaffold, codeLensRefresh, testOutcomesChanged, serverLogMessage, copyToClipboard, renameNotApplied, sourceControlEditCheck, shutdownHandshake, telemetry] → VS
             // activity is on both pipelines: send records each request, receive removes it on its response.
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
             // push. It is not on the send pipeline: invalidating per .cs didChange would have VS
@@ -706,10 +723,11 @@ internal sealed class LspServerConnectionService : IDisposable
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             _telemetryInterceptor = telemetryInterceptor;
             var receiveInterceptors = WithInspectorLogger(_inspectorLogger,
-                activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, serverLogMessageInterceptor, copyToClipboardInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor);
+                activityTracker, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, serverLogMessageInterceptor, copyToClipboardInterceptor, renameNotAppliedInterceptor, sourceControlEditCheckInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor);
 
             _interceptingPipe = _createInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());
+            generationPipe = _interceptingPipe;
             // Pass CancellationToken.None: the pumps must live for the entire connection
             // lifetime, not just for the duration of this async creation call. The pipe's
             // own internal CTS (cancelled in Dispose) provides the shutdown signal.

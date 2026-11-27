@@ -3,6 +3,7 @@ using System.IO.Pipelines;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -36,6 +37,7 @@ internal sealed class ServerToVsPump
     private readonly InterceptorPipeline    _receiveInterceptors;
     private readonly Func<bool>             _connectionDisposed;
     private readonly ILogger                _logger;
+    private readonly SemaphoreSlim          _vsWriteLock = new(1, 1);
 
     /// <summary>Creates the pump over the server's stdout and the collaborators it routes through.</summary>
     /// <param name="connectionDisposed">
@@ -181,6 +183,9 @@ internal sealed class ServerToVsPump
     /// </summary>
     private async Task ForwardToCurrentVsWriterAsync(byte[] rawFrame, CancellationToken cancellationToken)
     {
+        // Serialised against InjectToVsAsync: a PipeWriter takes one writer at a time, and two
+        // frames written concurrently would interleave on the wire.
+        await _vsWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await LspFrameCodec.WriteFrameAsync(_sessions.CurrentToVsWriter, rawFrame, cancellationToken)
@@ -194,5 +199,17 @@ internal sealed class ServerToVsPump
                 "ServerToVsPump: forwarding a frame to the current VS-facing pipe failed (tolerated -- " +
                 "likely raced a session swap; the next frame goes to whatever pipe is current then).");
         }
+        finally
+        {
+            _vsWriteLock.Release();
+        }
     }
+
+    /// <summary>
+    /// Writes a server message that a receive interceptor held back to whichever VS-facing pipe is
+    /// current, from outside this pump's loop. Messages the pump read after it have usually gone
+    /// ahead of it by then.
+    /// </summary>
+    public Task InjectToVsAsync(JObject body, CancellationToken cancellationToken) =>
+        ForwardToCurrentVsWriterAsync(LspFrameCodec.EncodeFrame(body), cancellationToken);
 }
