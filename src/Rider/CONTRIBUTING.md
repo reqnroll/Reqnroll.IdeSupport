@@ -47,9 +47,10 @@ There are two tracks, depending on what's already on your machine — pick one:
   - JDK 21 on `PATH` (or `JAVA_HOME` pointing at one) — matches `kotlin { jvmToolchain(21) }`.
   - `dotnet` SDK on `PATH`, for `publishServer` (see "Bundling the LSP server" below).
   - **No local Rider install needed even here** — the IntelliJ Platform Gradle plugin
-    downloads the pinned Rider SDK version (`platformVersion` in `gradle.properties`)
-    into `~/.gradle/caches` automatically on first `runIde`/build. Large (several GB),
-    one-time, needs network access.
+    downloads the one Rider release the build targets (`riderSdkVersion` in `gradle.properties`)
+    into `~/.gradle/caches` automatically on first `runIde`/build. Compile, tests, `runIde` and
+    `verifyPlugin` all use that same download. Large (a few GB), one-time per release, needs
+    network access.
   - `./gradlew runIde` then launches a sandboxed Rider window directly on your desktop —
     no container, no X11 forwarding, no bind-mount indirection.
 - **Devcontainer** — for a constrained workstation without permission or disk space to
@@ -187,6 +188,29 @@ ReSharper-backend plugin part subscribing to unit-test results, or the frontend
 `RdUnitTestHost` protocol — and is out of scope for #700/#702. To confirm which path a run
 took, look in the sandbox's `log/UnitTestLogs/Sessions/*.log` (UTF-16; `iconv -f UTF-16`)
 for the `Starting process:` line, and in the LSP server log for `registerRun`.
+
+## Rider backend module (`.feature` breakpoints)
+
+Rider only lets you set a breakpoint on a file its .NET backend knows. `dotnet/Reqnroll.IdeSupport.Rider.Backend`
+is a small `net472` module, loaded by Rider's backend process, that gives `.feature` files a stub language and
+a line-breakpoint provider. It parses no Gherkin; the language server does all of that. The design and the
+reasoning behind it are in [docs/Rider-Feature-Breakpoints-Plan.md](../../docs/Rider-Feature-Breakpoints-Plan.md).
+
+- `./gradlew buildPlugin -PwithBackend=true` builds it (`compileBackend`) and copies the DLLs into the plugin's
+  `dotnet/` folder; `./gradlew runIdeWithBackend` does the same for the sandbox. It needs the .NET SDK and the
+  `JetBrains.Rider.SDK` NuGet package.
+- The whole plugin targets one Rider release, `riderSdkVersion` in `gradle.properties` (override with
+  `-PriderSdkVersion=<version>`): the Kotlin code compiles and tests against it, `verifyPlugin` checks only it, the
+  module is compiled against its SDK, and the plugin's range is that release alone (2026.2.3.1 -> 262 .. 262.*).
+  Keep the default in `dotnet/Directory.Build.props` the same.
+- Without `-PwithBackend=true` the plugin is built without the module: same single-release range, no `.feature`
+  breakpoints or test gutter marks.
+- `-PbackendBuildDir=<dir>` bundles an already-built module from `<dir>` instead of running `dotnet build`, the
+  same way `-PlspServerBuildDir` does for the server.
+- Unit tests for the SDK-free logic: `dotnet test dotnet/Reqnroll.IdeSupport.Rider.Backend.Tests`.
+- The `rider.debuggerSupportPolicy` registration in `plugin.xml` is for the `Gherkin` language, which is the PSI
+  language of `.feature` files now that the file type has a `ParserDefinition`. Rider's breakpoint check keys on
+  that language.
 
 ## Local install of a dev build
 

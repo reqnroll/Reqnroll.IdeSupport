@@ -125,7 +125,11 @@ resolved before the first token request for the project.
 
 ## 8. Known limitations
 
-- A TextMate fallback exists only in VS Code; other clients show no semantic colour until the first response.
+- A grammar-based fallback exists in VS Code (TextMate) and in Rider (a lexer built on the Cucumber Gherkin
+  parser, using the same colours as the semantic tokens); Visual Studio shows no semantic colour until the first
+  response.
+- Rider's fallback colours everything the grammar knows. Step parameters and undefined or ambiguous steps need
+  binding data, so they appear only when the server's tokens arrive.
 
 ## 9. Testing
 

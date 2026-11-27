@@ -1,0 +1,14 @@
+<Project>
+  <!-- Deliberately does not import the repository-level Directory.Build.props: the Rider backend module
+       is compiled against the JetBrains Rider SDK (net472), independent of the rest of the solution. -->
+  <PropertyGroup>
+    <!-- Rider SDK package version this build targets; overridden per supported Rider version with
+         -p:RiderSdkVersion=... (see src/Rider/CONTRIBUTING.md). -->
+    <RiderSdkVersion Condition="'$(RiderSdkVersion)' == ''">2026.2.3.1</RiderSdkVersion>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+  </PropertyGroup>
+</Project>
