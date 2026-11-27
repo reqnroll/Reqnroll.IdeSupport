@@ -19,6 +19,23 @@ action title (e.g. *"Define missing step → CalculatorSteps.cs"*), plus a
 alongside the best-matching existing file (or next to the feature file
 itself, if nothing else in the project has any bindings for it yet).
 
+## Copying the step definition to the clipboard
+
+If you'd rather paste the generated code yourself, each group of options
+ends with a copy action that puts the generated method on the clipboard
+instead of changing any file:
+
+* **"Copy missing step definition to clipboard"**, when one step is undefined
+* **"Copy step definition to clipboard: \<step text\>"**, for the step under
+  the cursor
+* **"Copy all missing step definitions to clipboard"**, for every undefined
+  step in the file
+
+Only the method is copied: its attribute, signature and body, indented to sit
+inside a class, with a blank line between methods when there is more than one.
+No class, namespace or `using` lines are included, and no file is created or
+changed. Paste it into whichever step definition class you choose.
+
 ## Sync vs. async skeleton style
 
 The generated method's sync/async style — and whether it uses a regular
@@ -32,14 +49,13 @@ for what each value produces). The LSP does not infer style from the
 sync/async convention already used by sibling bindings in the target
 class or file — it always follows this one project-wide setting.
 
-```{admonition} Order of the offered options can vary by IDE
+```{admonition} Order of the offered options
 :class: note
 
-VS Code and Rider list the append option before the new-file option, as
-intended. Visual Studio's built-in quick-fix menu sorts same-priority
-options alphabetically by their title text, so the two may appear in
-either order there — both still work identically regardless of which one
-is listed first.
+In every IDE the default option (appending to an existing step definition
+file, when there is one) is listed first and the copy-to-clipboard options
+last. In Visual Studio any other options between them are listed
+alphabetically by title.
 ```
 
 :::{tab-set}
