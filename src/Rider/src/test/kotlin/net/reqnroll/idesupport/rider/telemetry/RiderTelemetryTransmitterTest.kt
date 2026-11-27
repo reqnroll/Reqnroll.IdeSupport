@@ -67,7 +67,7 @@ class RiderTelemetryTransmitterTest {
         val timestamp = Instant.parse("2026-07-20T12:00:00Z")
         val json = RiderTelemetryTransmitter.buildEnvelope(
             eventName = "Command.GoToStepDefinition",
-            userId = "user-123",
+            installationId = "installation-123",
             properties = mapOf("Ide" to "JetBrains Rider", "IdeVersion" to "2024.3.5"),
             timestamp = timestamp,
             instrumentationKey = "test-ikey",
@@ -75,7 +75,7 @@ class RiderTelemetryTransmitterTest {
 
         assertTrue(json.contains("\"name\":\"Microsoft.ApplicationInsights.Event\""))
         assertTrue(json.contains("\"iKey\":\"test-ikey\""))
-        assertTrue(json.contains("\"ai.user.id\":\"user-123\""))
+        assertTrue(json.contains("\"ai.user.id\":\"installation-123\""))
         assertTrue(json.contains("\"name\":\"Command.GoToStepDefinition\""))
         assertTrue(json.contains("\"Ide\":\"JetBrains Rider\""))
         assertTrue(json.contains("\"IdeVersion\":\"2024.3.5\""))
@@ -88,7 +88,7 @@ class RiderTelemetryTransmitterTest {
         // value.toString() would render a nested Gson map as {key=1.0}.
         val json = RiderTelemetryTransmitter.buildEnvelope(
             eventName = "Lifecycle.Usage.SummaryReported",
-            userId = "user-123",
+            installationId = "installation-123",
             properties = mapOf("LookupCounts" to """{"CodeAction":1,"Completion.Step":14}"""),
             timestamp = Instant.parse("2026-07-20T12:00:00Z"),
         )
@@ -134,7 +134,7 @@ class RiderTelemetryTransmitterTest {
     fun `buildEnvelope escapes special characters in property values`() {
         val json = RiderTelemetryTransmitter.buildEnvelope(
             eventName = "Test\nEvent \"quoted\"",
-            userId = "user-123",
+            installationId = "installation-123",
             properties = mapOf("Message" to "line1\nline2\t\"quoted\"\\backslash"),
             timestamp = Instant.parse("2026-07-20T12:00:00Z"),
         )

@@ -348,7 +348,10 @@ prioritizing it.
 The extension sends anonymous usage and diagnostic telemetry to help the
 maintainers locate bugs and performance problems. It consists of event names,
 counts, flags, durations and coarse duration buckets, plus the IDE kind and
-extension/server versions. It never includes file paths, step text, test
+extension/server versions. Events carry an anonymous installation id, a random
+value generated for each installation of the extension on a machine (in VS Code,
+VS Code's own machine id); it does not identify you and is not created while
+telemetry is turned off. It never includes file paths, step text, test
 names or source content. Exception messages are scrubbed of paths, URLs and quoted text, and
 the stack trace sent with an error keeps only frames from Reqnroll IDE Support itself: any other
 type, including your own, is replaced by `[external]`. The exception's own type name is sent as it is.

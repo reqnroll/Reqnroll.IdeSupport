@@ -191,7 +191,7 @@ public static class TelemetryEvents
     /// <c>StartupMs</c> (process start to ready). IDE-agnostic replacement for the VS-only
     /// <see cref="LifecycleExtensionLoaded"/> for analytics: per-IDE active-session counts come from
     /// <c>IdeClient</c> and <c>SessionId</c>, and install/upgrade/daily-use are derived from it in
-    /// Application Insights (distinct <c>ai.user.id</c> by first/last seen <c>ExtensionVersion</c>).
+    /// Application Insights (distinct installation id, <c>ai.user.id</c>, by first/last seen <c>ExtensionVersion</c>).
     /// </summary>
     public const string ServerSessionStarted = "Server.Session.Started";
 
