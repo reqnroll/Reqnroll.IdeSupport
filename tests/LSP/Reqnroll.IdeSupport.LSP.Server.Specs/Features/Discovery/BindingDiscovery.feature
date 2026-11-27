@@ -30,3 +30,12 @@ Scenario: Discover hooks from a Reqnroll project
 	And the project is built
 	When the binding discovery performed
 	Then the discovery succeeds with hooks
+
+Scenario: Discovered bindings carry their exact method identity
+	Given there is a simple Reqnroll project for the latest version
+	And the project is built
+	When the binding discovery performed
+	Then every step definition and hook carries a method identity from the "ReqnrollBindingsFixture" assembly
+	And the step "a step on the first same-named class" is bound to "M:ReqnrollBindingsFixture.Identity.First.SharedNameSteps.GivenAStep"
+	And the step "a step on the second same-named class" is bound to "M:ReqnrollBindingsFixture.Identity.Second.SharedNameSteps.GivenAStep"
+	And the step "these books" is bound to "M:ReqnrollBindingsFixture.Identity.First.SharedNameSteps.GivenTheseBooks(System.Collections.Generic.List{ReqnrollBindingsFixture.Identity.Book})"

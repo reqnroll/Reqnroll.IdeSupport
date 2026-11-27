@@ -200,6 +200,26 @@ Examples:
 | `[Scope] [Scope(Tag="@web")]` | one unrestricted, `@web` | `null` |
 | `[Scope(Tag="@web", Feature="Checkout")]` | one entry | one scope, both required |
 
+### 6.8 Method identity
+
+The Connector attaches a `MethodIdentity` to every step definition and hook it can describe: the declaring assembly's
+display name and the method's documentation-comment ID (`M:MyApp.Steps.Add(System.Int32,System.Int32)`), in the forms
+Roslyn reads natively (`AssemblyIdentity.TryParseDisplayName`, `DocumentationCommentId.GetSymbolsForDeclarationId`).
+The wire `Method` (`Steps.Add(Int32)`) carries only the short declaring-type name, so it cannot tell same-named classes
+in different namespaces apart; the identity can.
+
+- **Where it comes from.** `DocumentationCommentIdBuilder` builds the ID from dnlib metadata, located by the binding's
+  metadata token. It loads no types, so the .NET and .NET Framework connectors behave the same and a missing parameter
+  type's assembly cannot make it throw. The token is cross-checked against the reported declaring type.
+- **What has none.** Methods Reqnroll never binds: generic methods, methods of generic types, special-name methods, and
+  parameter types with no ID form (function pointers, generic parameters). Closed generic parameter types
+  (`List<Book>`, `int?`) do get one, since step argument transformations produce them.
+- **Never a reason to fail.** Any error computing an identity leaves that binding without one; discovery goes on.
+  Older connectors and the Roslyn path send none, and `BindingImporter` treats a malformed identity as absent.
+- **Consumers.** `BindingImporter` shares a `ProjectBindingImplementation` between the bindings of one method by
+  identity when present (by the wire `Method` otherwise), and `GroupByAttribute` keeps identified methods apart. The
+  implementation exposes it as `ProjectBindingImplementation.Identity`.
+
 ## 7. Pitfalls and design decisions
 
 1. **One binding per attribute is a contract.** The CodeLens handlers, `FindMatchingScenariosHandler` and the rename

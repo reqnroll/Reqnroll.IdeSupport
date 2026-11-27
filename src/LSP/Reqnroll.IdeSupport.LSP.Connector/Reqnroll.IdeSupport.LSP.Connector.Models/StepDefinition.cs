@@ -24,13 +24,20 @@ public class StepDefinition
     /// <summary>Gets or sets the source location.</summary>
     public string SourceLocation { get; set; }
 
+    /// <summary>
+    /// The exact identity of the bound method, when the connector could determine it; <see langword="null"/>
+    /// from connectors that predate it or for methods it cannot describe (e.g. generic ones).
+    /// </summary>
+    public MethodIdentity MethodIdentity { get; set; }
+
     #region Equality
 
     /// <summary>Gets or sets the equals.</summary>
     protected bool Equals(StepDefinition other) => Type == other.Type && Regex == other.Regex &&
                                                    Method == other.Method && ParamTypes == other.ParamTypes &&
                                                    Equals(Scope, other.Scope) && Expression == other.Expression &&
-                                                   Error == other.Error && SourceLocation == other.SourceLocation;
+                                                   Error == other.Error && SourceLocation == other.SourceLocation &&
+                                                   Equals(MethodIdentity, other.MethodIdentity);
 
     /// <summary>Gets or sets the equals.</summary>
     public override bool Equals(object obj)
@@ -54,6 +61,7 @@ public class StepDefinition
             hashCode = (hashCode * 397) ^ (Expression != null ? Expression.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (Error != null ? Error.GetHashCode() : 0);
             hashCode = (hashCode * 397) ^ (SourceLocation != null ? SourceLocation.GetHashCode() : 0);
+            hashCode = (hashCode * 397) ^ (MethodIdentity != null ? MethodIdentity.GetHashCode() : 0);
             return hashCode;
         }
     }

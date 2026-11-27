@@ -1,9 +1,9 @@
 
 namespace Reqnroll.IdeSupport.LSP.Core.Bindings; 
-/// <summary>Compares <see cref="ProjectBindingImplementation"/> instances by method, parameter types, and source location rather than reference identity.</summary>
+/// <summary>Compares <see cref="ProjectBindingImplementation"/> instances by method, parameter types, source location, and method identity rather than reference identity.</summary>
 public class ProjectBindingImplementationEqualityComparer : IEqualityComparer<ProjectBindingImplementation>
 {
-    /// <summary>True when both implementations have the same method, parameter types, and source location.</summary>
+    /// <summary>True when both implementations have the same method, parameter types, source location, and method identity.</summary>
     public bool Equals(ProjectBindingImplementation x, ProjectBindingImplementation y)
     {
         if (ReferenceEquals(x, y)) return true;
@@ -11,7 +11,8 @@ public class ProjectBindingImplementationEqualityComparer : IEqualityComparer<Pr
 
         return x.Method == y.Method &&
                x.ParameterTypes.SequenceEqual(y.ParameterTypes) &&
-               Equals(x.SourceLocation, y.SourceLocation);
+               Equals(x.SourceLocation, y.SourceLocation) &&
+               Equals(x.Identity, y.Identity);
     }
 
     /// <summary>Computes a hash code consistent with <see cref="Equals"/>.</summary>
@@ -28,6 +29,7 @@ public class ProjectBindingImplementationEqualityComparer : IEqualityComparer<Pr
                 hash = hash * 23 + (paramType?.GetHashCode() ?? 0);
 
             hash = hash * 23 + (obj.SourceLocation?.GetHashCode() ?? 0);
+            hash = hash * 23 + (obj.Identity?.GetHashCode() ?? 0);
             return hash;
         }
     }

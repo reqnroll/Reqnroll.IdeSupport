@@ -283,7 +283,9 @@ public class BindingImporter
             var scope = ParseScopes(scopes ?? new[] { stepDefinition.Scope });
             var parameterTypes = ParseParameterTypes(stepDefinition.ParamTypes);
 
-            if (!_implementations.TryGetValue(stepDefinition.Method, out var implementation))
+            var identity = ValidIdentityOrNull(stepDefinition.MethodIdentity);
+            var implementationKey = GetImplementationKey(stepDefinition.Method, identity);
+            if (!_implementations.TryGetValue(implementationKey, out var implementation))
             {
                 // Prefer the AST-backfilled method-identifier location over the connector's own
                 // PDB-derived one (see TryGetMethodIdentifierLocation's remarks) when the same
@@ -297,8 +299,8 @@ public class BindingImporter
                         sourceLocation.SourceFileEndLine, sourceLocation.SourceFileEndColumn);
 
                 implementation =
-                    new ProjectBindingImplementation(stepDefinition.Method, parameterTypes, sourceLocation);
-                _implementations.Add(stepDefinition.Method, implementation);
+                    new ProjectBindingImplementation(stepDefinition.Method, parameterTypes, sourceLocation, identity);
+                _implementations.Add(implementationKey, implementation);
             }
 
             return new ProjectStepDefinitionBinding(stepDefinitionType, regex, scope, implementation,
@@ -337,7 +339,9 @@ public class BindingImporter
             var sourceLocation = ParseSourceLocation(hook.SourceLocation);
             var scope = ParseScopes(scopes ?? new[] { hook.Scope });
 
-            if (!_implementations.TryGetValue(hook.Method, out var implementation))
+            var identity = ValidIdentityOrNull(hook.MethodIdentity);
+            var implementationKey = GetImplementationKey(hook.Method, identity);
+            if (!_implementations.TryGetValue(implementationKey, out var implementation))
             {
                 if (methodIdentifierLocation.HasValue && sourceLocation != null)
                     sourceLocation = sourceLocation.WithPosition(
@@ -345,8 +349,8 @@ public class BindingImporter
                         sourceLocation.SourceFileEndLine, sourceLocation.SourceFileEndColumn);
 
                 implementation =
-                    new ProjectBindingImplementation(hook.Method, null, sourceLocation);
-                _implementations.Add(hook.Method, implementation);
+                    new ProjectBindingImplementation(hook.Method, null, sourceLocation, identity);
+                _implementations.Add(implementationKey, implementation);
             }
 
             return new ProjectHookBinding(implementation, scope, hookType, hook.HookOrder, GetBindingError(hook.Error, scope, "hook"));
@@ -357,6 +361,36 @@ public class BindingImporter
             return null;
         }
     }
+
+    /// <summary>
+    /// The key under which an imported method's <see cref="ProjectBindingImplementation"/> is shared
+    /// between the bindings declared on it.
+    /// </summary>
+    /// <remarks>
+    /// The wire <c>Method</c> carries only the short declaring-type name (<c>Steps.Add(Int32)</c>),
+    /// so keying by it alone merges same-named classes from different namespaces into one
+    /// implementation, and every binding on the second class inherits the first one's source
+    /// location. When the connector supplied the exact identity, that is the key instead. The two
+    /// key spaces cannot collide: an identity key starts with a control character no method
+    /// reference contains.
+    /// </remarks>
+    private static string GetImplementationKey(string method, MethodIdentity identity) =>
+        identity == null
+            ? method
+            : "\u001F" + identity.AssemblyIdentity + "\u001F" + identity.DocumentationCommentId;
+
+    /// <summary>
+    /// Returns <paramref name="identity"/> when both its parts are present and the ID names a method,
+    /// <see langword="null"/> otherwise: a malformed identity is treated as no identity, never trusted.
+    /// </summary>
+    private static MethodIdentity ValidIdentityOrNull(MethodIdentity identity) =>
+        identity != null &&
+        !string.IsNullOrWhiteSpace(identity.AssemblyIdentity) &&
+        identity.DocumentationCommentId != null &&
+        identity.DocumentationCommentId.StartsWith("M:", StringComparison.Ordinal) &&
+        identity.DocumentationCommentId.Length > 2
+            ? identity
+            : null;
 
     private string GetBindingError(string error, BindingScope scope, string bindingType)
     {
@@ -460,12 +494,12 @@ public class BindingImporter
     /// </summary>
     public static IReadOnlyList<AttributeGroup<StepDefinition>> GroupByAttribute(IEnumerable<StepDefinition> stepDefinitions) =>
         Group(stepDefinitions, sd => sd.Scope,
-            sd => new object[] { sd.Type, sd.Regex, sd.Method, sd.ParamTypes, sd.Expression, sd.Error, sd.SourceLocation });
+            sd => new object[] { sd.Type, sd.Regex, sd.Method, sd.ParamTypes, sd.Expression, sd.Error, sd.SourceLocation, sd.MethodIdentity });
 
     /// <summary>The hook counterpart of <see cref="GroupByAttribute(IEnumerable{StepDefinition})"/>.</summary>
     public static IReadOnlyList<AttributeGroup<Hook>> GroupByAttribute(IEnumerable<Hook> hooks) =>
         Group(hooks, hook => hook.Scope,
-            hook => new object[] { hook.Type, hook.HookOrder, hook.Method, hook.Error, hook.SourceLocation });
+            hook => new object[] { hook.Type, hook.HookOrder, hook.Method, hook.Error, hook.SourceLocation, hook.MethodIdentity });
 
     private static IReadOnlyList<AttributeGroup<T>> Group<T>(IEnumerable<T> items, Func<T, StepScope> scopeOf,
         Func<T, object[]> keyOf)

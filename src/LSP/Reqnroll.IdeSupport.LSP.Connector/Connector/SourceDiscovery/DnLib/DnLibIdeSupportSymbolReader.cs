@@ -51,6 +51,28 @@ public class DnLibIdeSupportSymbolReader : IdeSupportSymbolReader
         }
     }
 
+    public override Reqnroll.IdeSupport.LSP.Connector.Models.MethodIdentity? GetMethodIdentity(int token, string? expectedDeclaringType)
+    {
+        if ((token & 0xFF000000) != MethodDefTable)
+            return null;
+
+        var method = _moduleDefMd.ResolveMethod((uint)(token & 0x00FFFFFF));
+        if (method?.DeclaringType == null)
+            return null;
+
+        if (expectedDeclaringType != null &&
+            !string.Equals(method.DeclaringType.ReflectionFullName, expectedDeclaringType, StringComparison.Ordinal))
+            return null;
+
+        var assemblyIdentity = _moduleDefMd.Assembly?.FullName;
+        var documentationCommentId = DocumentationCommentIdBuilder.Build(method);
+        return string.IsNullOrEmpty(assemblyIdentity) || documentationCommentId == null
+            ? null
+            : new Reqnroll.IdeSupport.LSP.Connector.Models.MethodIdentity(assemblyIdentity!, documentationCommentId);
+    }
+
+    private const int MethodDefTable = 0x06000000;
+
     private static TypeDef? GetStateClassType(MethodDef method)
     {
         var stateMachineDebugInfos = method

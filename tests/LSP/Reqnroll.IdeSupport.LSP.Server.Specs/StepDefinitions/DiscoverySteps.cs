@@ -151,6 +151,29 @@ public sealed class DiscoverySteps
             $"source path fragment '{pathFragment}' requires the project generator (Tier 2)");
     }
 
+    [Then(@"every step definition and hook carries a method identity from the ""(.*)"" assembly")]
+    public void ThenEveryBindingCarriesAMethodIdentity(string assemblyName)
+    {
+        var implementations = _ctx.Registry!.StepDefinitions.Select(sd => sd.Implementation)
+            .Concat(_ctx.Registry.Hooks.Select(h => h.Implementation))
+            .ToList();
+
+        implementations.Should().NotBeEmpty();
+        foreach (var implementation in implementations)
+        {
+            implementation.Identity.Should().NotBeNull($"'{implementation.Method}' should carry a method identity");
+            implementation.Identity!.AssemblyIdentity.Should().StartWith(assemblyName + ",");
+            implementation.Identity.DocumentationCommentId.Should().StartWith("M:");
+        }
+    }
+
+    [Then(@"the step ""(.*)"" is bound to ""(.*)""")]
+    public void ThenTheStepIsBoundTo(string stepText, string documentationCommentId)
+        => _ctx.Registry!.StepDefinitions
+            .Where(sd => sd.Regex != null && sd.Regex.IsMatch(stepText))
+            .Should().ContainSingle($"exactly one step definition should match '{stepText}'")
+            .Which.Implementation.Identity!.DocumentationCommentId.Should().Be(documentationCommentId);
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private void RequireGeneratorIfNotLatest(string version)

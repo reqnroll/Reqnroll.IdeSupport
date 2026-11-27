@@ -1,20 +1,51 @@
 ﻿using System.Reflection;
 using Reqnroll.Bindings.Provider.Data;
+using Reqnroll.IdeSupport.LSP.Connector.Models;
 using ReqnrollConnector.AssemblyLoading;
 using ReqnrollConnector.Discovery;
 using ReqnrollConnector.Logging;
 
 namespace ReqnrollConnector.SourceDiscovery;
 
-internal class SourceLocationProvider : ISourceLocationProvider
+internal class SourceLocationProvider : ISourceLocationProvider, IMethodIdentityProvider
 {
     private readonly SymbolReaderCache _symbolReaders;
     private readonly ITestAssemblyContext _assemblyLoadContext;
+    private readonly ILogger _log;
 
     public SourceLocationProvider(ITestAssemblyContext assemblyLoadContext, ILogger log)
     {
         _symbolReaders = new SymbolReaderCache(log);
         _assemblyLoadContext = assemblyLoadContext;
+        _log = log;
+    }
+
+    public MethodIdentity? GetMethodIdentity(BindingSourceMethodData bindingMethod)
+    {
+        if (bindingMethod.MetadataToken == null)
+            return null;
+
+        try
+        {
+            var reader = GetReader(bindingMethod);
+            var identity = reader?.GetMethodIdentity(bindingMethod.MetadataToken.Value, bindingMethod.Type);
+            if (identity == null)
+                _log.Info($"No method identity for {bindingMethod.Type}::{bindingMethod.FullName}");
+            return identity;
+        }
+        catch (Exception ex)
+        {
+            // Any failure here only costs the binding its identity; discovery itself must go on.
+            _log.Info($"Cannot determine the method identity of {bindingMethod.Type}::{bindingMethod.FullName}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private IdeSupportSymbolReader? GetReader(BindingSourceMethodData bindingMethod)
+    {
+        var assemblyNameStr = bindingMethod.Assembly ?? _assemblyLoadContext.TestAssemblyFullName!;
+        var assemblyLocation = _assemblyLoadContext.AssemblyLocationFromAssemblyName(assemblyNameStr);
+        return _symbolReaders[assemblyLocation];
     }
 
     public SourceLocation? GetSourceLocation(BindingSourceMethodData bindingMethod)
@@ -22,9 +53,7 @@ internal class SourceLocationProvider : ISourceLocationProvider
         if (bindingMethod.MetadataToken == null)
             return null;
 
-        var assemblyNameStr = bindingMethod.Assembly ?? _assemblyLoadContext.TestAssemblyFullName!;
-        var assemblyLocation = _assemblyLoadContext.AssemblyLocationFromAssemblyName(assemblyNameStr);
-        var reader = _symbolReaders[assemblyLocation];
+        var reader = GetReader(bindingMethod);
 
         if (reader == null)
             return null;

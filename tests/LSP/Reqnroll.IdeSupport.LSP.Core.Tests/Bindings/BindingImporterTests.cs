@@ -625,6 +625,82 @@ public class BindingImporterTests
             try { System.IO.Directory.Delete(projectFolder, recursive: true); } catch { /* best effort */ }
         }
     }
+
+    // ── Method identity ──────────────────────────────────────────────────────────
+
+    private static MethodIdentity Identity(string documentationCommentId) =>
+        new("Bindings, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", documentationCommentId);
+
+    [Fact]
+    public void Same_named_methods_in_different_namespaces_stay_distinct_when_identified()
+    {
+        var sut = CreateSut();
+        var first = CreateStepDefinition("first", method: "Steps.Bind(Int32)");
+        first.MethodIdentity = Identity("M:First.Steps.Bind(System.Int32)");
+        var second = CreateStepDefinition("second", method: "Steps.Bind(Int32)");
+        second.MethodIdentity = Identity("M:Second.Steps.Bind(System.Int32)");
+
+        var firstBinding = sut.ImportStepDefinition(first);
+        var secondBinding = sut.ImportStepDefinition(second);
+
+        firstBinding.Implementation.Should().NotBeSameAs(secondBinding.Implementation);
+        firstBinding.Implementation.Identity.Should().Be(first.MethodIdentity);
+        secondBinding.Implementation.Identity.Should().Be(second.MethodIdentity);
+    }
+
+    [Fact]
+    public void Bindings_on_one_identified_method_share_its_implementation()
+    {
+        var sut = CreateSut();
+        var given = CreateStepDefinition("one", type: "Given", method: "Steps.Bind(Int32)");
+        given.MethodIdentity = Identity("M:First.Steps.Bind(System.Int32)");
+        var when = CreateStepDefinition("two", type: "When", method: "Steps.Bind(Int32)");
+        when.MethodIdentity = Identity("M:First.Steps.Bind(System.Int32)");
+
+        sut.ImportStepDefinition(given).Implementation
+            .Should().BeSameAs(sut.ImportStepDefinition(when).Implementation);
+    }
+
+    [Fact]
+    public void Hooks_carry_the_method_identity()
+    {
+        var hook = new Hook { Type = "BeforeScenario", Method = "Hooks.Setup()", MethodIdentity = Identity("M:First.Hooks.Setup") };
+
+        CreateSut().ImportHook(hook).Implementation.Identity.Should().Be(hook.MethodIdentity);
+    }
+
+    [Theory]
+    [InlineData("", "M:First.Steps.Bind")]
+    [InlineData("Bindings", "T:First.Steps")]
+    [InlineData("Bindings", "M:")]
+    [InlineData("Bindings", null)]
+    public void A_malformed_identity_is_ignored(string assemblyIdentity, string? documentationCommentId)
+    {
+        var stepDefinition = CreateStepDefinition(method: "Steps.Bind()");
+        stepDefinition.MethodIdentity = new MethodIdentity(assemblyIdentity, documentationCommentId!);
+
+        CreateSut().ImportStepDefinition(stepDefinition).Implementation.Identity.Should().BeNull();
+    }
+
+    [Fact]
+    public void Without_an_identity_the_wire_method_still_keys_the_implementation()
+    {
+        var sut = CreateSut();
+
+        sut.ImportStepDefinition(CreateStepDefinition("one", method: "Steps.Bind(Int32)")).Implementation
+            .Should().BeSameAs(sut.ImportStepDefinition(CreateStepDefinition("two", method: "Steps.Bind(Int32)")).Implementation);
+    }
+
+    [Fact]
+    public void GroupByAttribute_keeps_identified_methods_with_equal_wire_data_apart()
+    {
+        var first = CreateStepDefinition("same", method: "Steps.Bind()");
+        first.MethodIdentity = Identity("M:First.Steps.Bind");
+        var second = CreateStepDefinition("same", method: "Steps.Bind()");
+        second.MethodIdentity = Identity("M:Second.Steps.Bind");
+
+        BindingImporter.GroupByAttribute(new[] { first, second }).Should().HaveCount(2);
+    }
 }
 
 public class BindingImporterTryGetAttributeSourceLineTests : IDisposable

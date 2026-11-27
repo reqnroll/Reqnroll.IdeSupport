@@ -9,7 +9,8 @@ namespace ReqnrollConnector.Discovery;
 /// </summary>
 internal class DiscoveryResultTransformer
 {
-    public InternalDiscoveryResult Transform(BindingData bindingData, ISourceLocationProvider sourceLocationProvider, ITelemetryContainer telemetry)
+    public InternalDiscoveryResult Transform(BindingData bindingData, ISourceLocationProvider sourceLocationProvider,
+        ITelemetryContainer telemetry, IMethodIdentityProvider? methodIdentityProvider = null)
     {
         var typeNamesToKey = new Dictionary<string, string>();
         var sourceFilesToKey = new Dictionary<string, string>();
@@ -25,14 +26,37 @@ internal class DiscoveryResultTransformer
 
         string GetTypeNameKey(string typeName) => GetKey(typeNamesToKey, typeName);
 
+        var methodIdentities = 0;
+        MethodIdentity? GetMethodIdentity(BindingSourceData? sourceData)
+        {
+            if (sourceData?.Method == null || methodIdentityProvider == null)
+                return null;
+
+            MethodIdentity? identity;
+            try
+            {
+                identity = methodIdentityProvider.GetMethodIdentity(sourceData.Method);
+            }
+            catch
+            {
+                // The provider contract is not to throw; this keeps a misbehaving one from failing
+                // the whole discovery run over what is only extra information.
+                identity = null;
+            }
+
+            if (identity != null)
+                methodIdentities++;
+            return identity;
+        }
+
         var stepDefinitions = bindingData.StepDefinitions
-                                         .Select(sdb => CreateStepDefinition(sdb, GetTypeNameKey, GetSourceLocation))
+                                         .Select(sdb => CreateStepDefinition(sdb, GetTypeNameKey, GetSourceLocation, GetMethodIdentity))
                                          .OrderBy(sd => sd.SourceLocation)
                                          .ToArray();
 
         var hooks = bindingData.
                     Hooks
-                    .Select(sdb => CreateHook(sdb, GetSourceLocation))
+                    .Select(sdb => CreateHook(sdb, GetSourceLocation, GetMethodIdentity))
                     .OrderBy(sd => sd.SourceLocation)
                     .ToArray();
 
@@ -49,6 +73,7 @@ internal class DiscoveryResultTransformer
         telemetry.AddTelemetryProperty("SourcePaths", sourceFilesToKey.Count.ToString());
         telemetry.AddTelemetryProperty("StepDefinitions", stepDefinitions.Length.ToString());
         telemetry.AddTelemetryProperty("Hooks", hooks.Length.ToString());
+        telemetry.AddTelemetryProperty("MethodIdentities", methodIdentities.ToString());
 
         return new InternalDiscoveryResult(
             stepDefinitions,
@@ -68,7 +93,8 @@ internal class DiscoveryResultTransformer
     private StepDefinition CreateStepDefinition(
         StepDefinitionData stepDefinitionData,
         Func<string, string> getTypeNameKey,
-        Func<BindingSourceData?, string?> getSourceLocation)
+        Func<BindingSourceData?, string?> getSourceLocation,
+        Func<BindingSourceData?, MethodIdentity?> getMethodIdentity)
     {
         var stepDefinition = new StepDefinition
         {
@@ -87,13 +113,15 @@ internal class DiscoveryResultTransformer
             // it null.
             Expression = stepDefinitionData.Expression,
             Error = stepDefinitionData.Error,
-            SourceLocation = getSourceLocation(stepDefinitionData.Source)
+            SourceLocation = getSourceLocation(stepDefinitionData.Source),
+            MethodIdentity = getMethodIdentity(stepDefinitionData.Source)
         };
 
         return stepDefinition;
     }
 
-    private Hook CreateHook(HookData sdb, Func<BindingSourceData?, string?> getSourceLocation)
+    private Hook CreateHook(HookData sdb, Func<BindingSourceData?, string?> getSourceLocation,
+        Func<BindingSourceData?, MethodIdentity?> getMethodIdentity)
     {
         var stepDefinition = new Hook
         {
@@ -102,7 +130,8 @@ internal class DiscoveryResultTransformer
             Method = GetMethodReference(sdb.Source?.Method),
             Scope = GetScope(sdb.Scope),
             SourceLocation = getSourceLocation(sdb.Source),
-            Error = sdb.Error
+            Error = sdb.Error,
+            MethodIdentity = getMethodIdentity(sdb.Source)
         };
         return stepDefinition;
     }
