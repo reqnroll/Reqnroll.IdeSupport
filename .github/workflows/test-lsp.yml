@@ -169,7 +169,7 @@ jobs:
         run: dotnet restore ${{ env.LSP_CONNECTOR_TESTS_PROJECT }}
 
       - name: Test LSP.Connector
-        run: dotnet test ${{ env.LSP_CONNECTOR_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
+        run: dotnet test ${{ env.LSP_CONNECTOR_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --logger "GitHubActions;summary-include-passed=false" --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Restore Common.Tests
         # Reqnroll.IdeSupport.Common.Tests covers src/Core/Reqnroll.IdeSupport.Common, the library
