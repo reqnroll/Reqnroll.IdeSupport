@@ -284,6 +284,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<DocumentLinkHandler>()
             .AddSingleton<CommentToggleHandler>()
             .AddSingleton<DefineStepsTriggeredHandler>()
+            .AddSingleton<CopyStepDefinitionsHandler>()
             .AddSingleton<InsertKeywordTriggeredHandler>()
             .AddSingleton<RenameHandler>()
             .AddSingleton<RenameSessionManager>()

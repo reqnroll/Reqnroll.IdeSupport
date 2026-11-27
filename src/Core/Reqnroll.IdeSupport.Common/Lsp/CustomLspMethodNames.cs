@@ -73,6 +73,12 @@ public static class CustomLspMethodNames
     /// their telemetry until it arrives, except errors, server start failures, install and upgrade.
     /// </summary>
     public const string ReqnrollProjectDetected = "reqnroll/reqnrollProjectDetected";
+    /// <summary>
+    /// Method name for the <c>reqnroll/copyToClipboard</c> notification: <c>{ text }</c> for the client to
+    /// place on the IDE clipboard. LSP has no clipboard API, and the server cannot write the clipboard
+    /// itself (it may run remotely or under another host), so the client does the copy.
+    /// </summary>
+    public const string ReqnrollCopyToClipboard = "reqnroll/copyToClipboard";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
     public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>

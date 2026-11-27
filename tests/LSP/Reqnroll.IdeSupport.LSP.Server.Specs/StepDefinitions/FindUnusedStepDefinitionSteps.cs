@@ -31,6 +31,33 @@ public sealed class FindUnusedStepDefinitionSteps
         count.Should().Be(expected, $"expected {expected} unused step definition(s) but got {count}");
     }
 
+    /// <summary>
+    /// Re-requests Find Unused until it returns <paramref name="expected"/> rows or the budget
+    /// runs out, for scenarios that change the binding registry through a notification the
+    /// server applies asynchronously (a file deletion, say) and so cannot assert on the first
+    /// response.
+    /// </summary>
+    [Then(@"(\d+) unused step definition(?:s are|s is| is| are) returned within (\d+) seconds")]
+    public async Task ThenNUnusedStepDefinitionsAreReturnedWithin(int expected, int seconds)
+    {
+        await _ctx.EnsureStartedAsync().ConfigureAwait(false);
+        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+
+        while (true)
+        {
+            _ctx.LastFindUnused = await _ctx.Harness.Client
+                .RequestFindUnusedStepDefinitionsAsync()
+                .ConfigureAwait(false);
+
+            if ((_ctx.LastFindUnused?.Items?.Count ?? 0) == expected || DateTime.UtcNow >= deadline)
+                break;
+
+            await Task.Delay(75).ConfigureAwait(false);
+        }
+
+        ThenNUnusedStepDefinitionsAreReturned(expected);
+    }
+
     [Then(@"the unused step definitions include expression ""(.*)""")]
     public void ThenUnusedStepDefinitionsIncludeExpression(string expression)
     {
