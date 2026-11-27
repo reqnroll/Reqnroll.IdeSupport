@@ -37,17 +37,19 @@ internal sealed class FormatDocumentService
     /// <summary>
     /// Sends <c>textDocument/formatting</c> (when <paramref name="isSelection"/> is false) or
     /// <c>textDocument/rangeFormatting</c> for lines [<paramref name="startLine"/>..<paramref name="endLine"/>]
-    /// (0-based, inclusive) and maps the response to line-range edits.
+    /// (0-based, inclusive) with the editor's indent settings as the formatting options, and maps the
+    /// response to line-range edits.
     /// </summary>
     public async Task<IReadOnlyList<GherkinLineRangeEdit>?> FormatDocumentAsync(
-        string            fileUri,
-        bool              isSelection,
-        int               startLine,
-        int               endLine,
-        CancellationToken cancellationToken)
+        string                   fileUri,
+        bool                     isSelection,
+        int                      startLine,
+        int                      endLine,
+        GherkinFormattingOptions options,
+        CancellationToken        cancellationToken)
     {
         var method     = isSelection ? LspStandardMethodNames.TextDocumentRangeFormatting : LspStandardMethodNames.TextDocumentFormatting;
-        var paramsJson = BuildParams(fileUri, isSelection, startLine, endLine);
+        var paramsJson = BuildParams(fileUri, isSelection, startLine, endLine, options);
 
         _logger.LogDebug(
             "FormatDocumentService: sending {Method} uri={FileUri} isSelection={IsSelection}",
@@ -102,11 +104,14 @@ internal sealed class FormatDocumentService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, bool isSelection, int startLine, int endLine)
+    internal static string BuildParams(
+        string fileUri, bool isSelection, int startLine, int endLine, GherkinFormattingOptions options)
     {
         var builder = new LspParamsBuilder()
             .AddTextDocument(fileUri)
-            .AddRaw("options", "{\"tabSize\":4,\"insertSpaces\":true}");
+            .AddRaw(
+                "options",
+                $"{{\"tabSize\":{options.IndentSize},\"insertSpaces\":{(options.InsertSpaces ? "true" : "false")}}}");
 
         if (isSelection)
         {

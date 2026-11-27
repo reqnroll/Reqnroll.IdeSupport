@@ -135,4 +135,42 @@ public class FormatDocumentCommandFilterTests
         startLine.Should().Be(5);
         endLine.Should().Be(5);
     }
+
+    private static IEditorOptions EditorOptions(int indentSize, bool convertTabsToSpaces, int tabSize = 4)
+    {
+        var options = Substitute.For<IEditorOptions>();
+        options.GetOptionValue(DefaultOptions.IndentSizeOptionId).Returns(indentSize);
+        options.GetOptionValue(DefaultOptions.TabSizeOptionId).Returns(tabSize);
+        options.GetOptionValue(DefaultOptions.ConvertTabsToSpacesOptionId).Returns(convertTabsToSpaces);
+        return options;
+    }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(4, false)]
+    [InlineData(8, true)]
+    public void GetFormattingOptions_reads_the_view_indent_size_and_insert_spaces(int indentSize, bool insertSpaces)
+    {
+        var options = FormatDocumentCommandFilter.GetFormattingOptions(EditorOptions(indentSize, insertSpaces));
+
+        options.Should().Be(new GherkinFormattingOptions(indentSize, insertSpaces));
+    }
+
+    [Fact]
+    public void GetFormattingOptions_uses_the_indent_size_not_the_tab_size()
+    {
+        var options = FormatDocumentCommandFilter.GetFormattingOptions(EditorOptions(indentSize: 2, convertTabsToSpaces: true, tabSize: 8));
+
+        options.IndentSize.Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void GetFormattingOptions_falls_back_to_the_default_when_the_indent_size_is_not_positive(int indentSize)
+    {
+        var options = FormatDocumentCommandFilter.GetFormattingOptions(EditorOptions(indentSize, false));
+
+        options.Should().Be(GherkinFormattingOptions.Default);
+    }
 }

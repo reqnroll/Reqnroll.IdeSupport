@@ -130,6 +130,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                 var fileUri     = GetTextBufferFileUri(wpfTextView);
                 var savePath    = GetTextBufferFilePath(wpfTextView);
                 var isSelection = commandId == CmdIdFormatSelection;
+                var options     = GetFormattingOptions(wpfTextView.Options);
 
                 var selection         = wpfTextView.Selection;
                 var selectionEnd      = selection.End.Position;
@@ -144,7 +145,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                 var requestSnapshot = wpfTextView.TextBuffer.CurrentSnapshot;
 
                 _logger.LogVerbose(
-                    $"FormatDocumentCommandFilter: redirecting command id={commandId} uri='{fileUri}' isSelection={isSelection} lines[{startLine}..{endLine}]");
+                    $"FormatDocumentCommandFilter: redirecting command id={commandId} uri='{fileUri}' isSelection={isSelection} lines[{startLine}..{endLine}] indentSize={options.IndentSize} insertSpaces={options.InsertSpaces}");
 
                 // Same shape as GoToDefinitionCommandFilter: a tracked, cancellable
                 // JoinableTask instead of a bare Task.Run, so a newer press supersedes this one,
@@ -159,7 +160,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                 {
                     try
                     {
-                        var edits = await redirect(fileUri, isSelection, startLine, endLine, ct)
+                        var edits = await redirect(fileUri, isSelection, startLine, endLine, options, ct)
                             .ConfigureAwait(false);
 
                         if (edits is null || edits.Count == 0)
@@ -265,6 +266,24 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
     /// </remarks>
     internal static (int StartLine, int EndLine) GetFormatLineRange(int startLine, int endLine, bool endPositionIsAtLineStart)
         => (startLine, SelectionLineRange.AdjustEndLineForWholeLineSelection(startLine, endLine, endPositionIsAtLineStart));
+
+    /// <summary>
+    /// Reads the view's Indent size and "Insert spaces" settings. Visual Studio already layers the
+    /// file's <c>.editorconfig</c> <c>indent_size</c>/<c>indent_style</c> and the language's
+    /// Tools &gt; Options &gt; Text Editor tab settings into the view options.
+    /// </summary>
+    /// <remarks>
+    /// The indent size, not the tab size, is sent as the LSP <c>tabSize</c>: the server uses that value
+    /// as the width of one indent level, and Visual Studio keeps the two apart (<c>indent_size</c> versus
+    /// <c>tab_width</c> in <c>.editorconfig</c>).
+    /// </remarks>
+    internal static GherkinFormattingOptions GetFormattingOptions(IEditorOptions editorOptions)
+    {
+        var indentSize = editorOptions.GetOptionValue(DefaultOptions.IndentSizeOptionId);
+        return indentSize > 0
+            ? new GherkinFormattingOptions(indentSize, editorOptions.GetOptionValue(DefaultOptions.ConvertTabsToSpacesOptionId))
+            : GherkinFormattingOptions.Default;
+    }
 
     internal static bool IsSnapshotStale(ITextSnapshot requestSnapshot, ITextSnapshot currentSnapshot) =>
         currentSnapshot.Version.VersionNumber != requestSnapshot.Version.VersionNumber;
