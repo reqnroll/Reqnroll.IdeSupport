@@ -1,4 +1,4 @@
-using Reqnroll.IdeSupport.Common;
+﻿using Reqnroll.IdeSupport.Common;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
 
@@ -16,4 +16,10 @@ public interface IWelcomeService
     /// VS to finish loading.
     /// </summary>
     void OnIdeScopeActivityStarted(IIdeScope ideScope);
+
+    /// <summary>
+    /// Counts today as a day of use, once the language server reports a project that uses
+    /// Reqnroll. Once per day, and not on the install day.
+    /// </summary>
+    void OnReqnrollProjectDetected(IIdeScope ideScope);
 }

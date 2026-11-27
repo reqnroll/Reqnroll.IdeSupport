@@ -136,6 +136,9 @@ public class Program
             using var preloadCts = new CancellationTokenSource();
             var scopeManager = server.Services.GetRequiredService<ILspWorkspaceScopeManager>();
             var logger = server.Services.GetRequiredService<IIdeSupportLogger>();
+            // Resolved before the preload listener starts so it sees every project, including the
+            // ones Visual Studio pushes through the side channel before the handshake.
+            server.Services.GetRequiredService<ReqnrollProjectPresenceNotifier>();
             var preloadTask = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
 
             // Periodic feature-usage flush, running for the whole server lifetime
@@ -320,11 +323,21 @@ public class Program
         // Initialize workspace scopes and custom protocol routing
         options.InitializeCustomProtocolRouting();
 
+        // Subscribes the Reqnroll-project notifier to project discovery before the client can send
+        // reqnroll/projectLoaded. Main also resolves it earlier, for projects Visual Studio pushes
+        // through the side channel before `initialize`; this covers hosts that only call ConfigureServer.
+        options.OnInitialize((languageServer, _, _) =>
+        {
+            languageServer.Services.GetRequiredService<ReqnrollProjectPresenceNotifier>();
+            return Task.CompletedTask;
+        });
+
         // ServerSessionStarted once the LSP handshake has completed (OnStarted runs
         // after `initialized`, so ClientIdeContext already carries the client's self-reported version).
         options.OnStarted((languageServer, _) =>
         {
             languageServer.Services.GetRequiredService<ServerSessionTelemetry>().ReportStarted();
+            languageServer.Services.GetRequiredService<ReqnrollProjectPresenceNotifier>().OnServerStarted();
             return Task.CompletedTask;
         });
 

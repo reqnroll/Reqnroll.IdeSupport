@@ -68,6 +68,12 @@ public static class CustomLspMethodNames
     /// </summary>
     public const string ReqnrollLogMessage = "reqnroll/logMessage";
     /// <summary>
+    /// Method name for the <c>reqnroll/reqnrollProjectDetected</c> notification: sent once per server
+    /// process, without parameters, when the first project that uses Reqnroll is seen. Clients hold
+    /// their telemetry until it arrives, except errors, server start failures, install and upgrade.
+    /// </summary>
+    public const string ReqnrollProjectDetected = "reqnroll/reqnrollProjectDetected";
+    /// <summary>
     /// Method name for the <c>reqnroll/copyToClipboard</c> notification: <c>{ text }</c> for the client to
     /// place on the IDE clipboard. LSP has no clipboard API, and the server cannot write the clipboard
     /// itself (it may run remotely or under another host), so the client does the copy.

@@ -1,5 +1,8 @@
 package net.reqnroll.idesupport.rider.telemetry
 
+import net.reqnroll.idesupport.rider.lsp.ReqnrollServerEvents
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.components.service
 import net.reqnroll.idesupport.rider.ReqnrollPlugin
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationInfo
@@ -160,7 +163,29 @@ object RiderTelemetryTransmitter {
      * always mirrors the attempt (sent or not) to the local debug log, matching VS's
      * `TelemetryTransmitter.TransmitEvent` and VS Code's `telemetry.ts#sendTelemetryEvent`.
      */
-    fun transmit(eventName: String, properties: Map<String, Any?>) {
+    fun transmit(eventName: String, properties: Map<String, Any?>) =
+        transmitNow(eventName, properties, Instant.now())
+
+    /**
+     * Transmits an event that belongs to [project]'s solution: held by that project's
+     * [ReqnrollProjectTelemetryGate] until its language server reports a Reqnroll project (errors,
+     * server start failures, install and upgrade excepted). A held event keeps the time it was raised.
+     * Use this for anything a solution without Reqnroll must not send; the plain [transmit] above is
+     * only for events that are never held or that are sent after a gate has opened.
+     */
+    fun transmit(project: Project, eventName: String, properties: Map<String, Any?>) {
+        // A closing solution's services are gone; its project-scoped events go with it.
+        if (project.isDisposed) return
+        transmit(project.service<ReqnrollServerEvents>().telemetryGate, eventName, properties)
+    }
+
+    /** [transmit] through [gate] directly, for the owner of the gate (no service lookup). */
+    fun transmit(gate: ReqnrollProjectTelemetryGate, eventName: String, properties: Map<String, Any?>) {
+        val timestamp = Instant.now()
+        gate.send(eventName) { transmitNow(eventName, properties, timestamp) }
+    }
+
+    private fun transmitNow(eventName: String, properties: Map<String, Any?>, timestamp: Instant) {
         val debugLog = RiderTelemetryDebugLog.fromEnvironment()
         val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
         val stringProps = stampedProperties(properties)
@@ -177,7 +202,7 @@ object RiderTelemetryTransmitter {
         }
 
         try {
-            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
+            val body = buildEnvelope(eventName, userId(), stringProps, timestamp, connection.instrumentationKey)
             post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
                 debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = reason)
             }

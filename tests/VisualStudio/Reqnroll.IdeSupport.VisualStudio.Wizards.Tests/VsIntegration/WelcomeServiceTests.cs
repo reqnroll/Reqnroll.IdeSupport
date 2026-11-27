@@ -133,7 +133,7 @@ public class WelcomeServiceTests
     // ── Daily usage tracking ─────────────────────────────────────────
 
     [Fact]
-    public void Existing_user_new_day_updates_usage_days()
+    public void Startup_does_not_count_a_day_of_use()
     {
         _registryManager.GetInstallStatus().Returns(new ReqnrollInstallationStatus
         {
@@ -144,6 +144,34 @@ public class WelcomeServiceTests
         });
 
         CreateService().OnIdeScopeActivityStarted(_ideScope);
+
+        _registryManager.DidNotReceiveWithAnyArgs().UpdateStatus(default!);
+        _telemetryService.DidNotReceiveWithAnyArgs().MonitorExtensionDaysOfUsage(default);
+    }
+
+    [Fact]
+    public void Detection_before_install_counts_nothing()
+    {
+        _registryManager.GetInstallStatus().Returns(new ReqnrollInstallationStatus());
+
+        CreateService().OnReqnrollProjectDetected(_ideScope);
+
+        _registryManager.DidNotReceiveWithAnyArgs().UpdateStatus(default!);
+        _telemetryService.DidNotReceiveWithAnyArgs().MonitorExtensionDaysOfUsage(default);
+    }
+
+    [Fact]
+    public void Existing_user_new_day_updates_usage_days()
+    {
+        _registryManager.GetInstallStatus().Returns(new ReqnrollInstallationStatus
+        {
+            InstalledVersion = new Version(1, 0, 0),
+            InstallDate = DateTime.Today,
+            LastUsedDate = DateTime.Today.AddDays(-1),
+            UsageDays = 5,
+        });
+
+        CreateService().OnReqnrollProjectDetected(_ideScope);
 
         _registryManager.Received(1).UpdateStatus(Arg.Is<ReqnrollInstallationStatus>(s =>
             s.UsageDays == 6 && s.LastUsedDate == DateTime.Today));
@@ -160,7 +188,7 @@ public class WelcomeServiceTests
             UsageDays = 5,
         });
 
-        CreateService().OnIdeScopeActivityStarted(_ideScope);
+        CreateService().OnReqnrollProjectDetected(_ideScope);
 
         _telemetryService.Received(1).MonitorExtensionDaysOfUsage(6);
     }
@@ -176,7 +204,7 @@ public class WelcomeServiceTests
             UsageDays = 5,
         });
 
-        CreateService().OnIdeScopeActivityStarted(_ideScope);
+        CreateService().OnReqnrollProjectDetected(_ideScope);
 
         _telemetryService.DidNotReceiveWithAnyArgs().MonitorExtensionDaysOfUsage(default);
     }

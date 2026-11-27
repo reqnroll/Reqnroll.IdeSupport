@@ -1,5 +1,6 @@
 package net.reqnroll.idesupport.rider.lsp
 
+import net.reqnroll.idesupport.rider.telemetry.ReqnrollProjectTelemetryGate
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -37,9 +38,12 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
         logFailure = ReqnrollDebugLogger::error,
     )
     private val processTracker = ReqnrollServerProcessTracker()
+
+    /** This solution's telemetry gate: reset on every server start, opened by `reqnroll/reqnrollProjectDetected`. */
+    val telemetryGate = ReqnrollProjectTelemetryGate()
     private val restartPolicy = ServerRestartPolicy()
     private val telemetry = ReqnrollServerLifecycleTelemetry(
-        RiderTelemetryTransmitter::transmit,
+        { eventName, properties -> RiderTelemetryTransmitter.transmit(telemetryGate, eventName, properties) },
         processTracker::startDetails,
         // Waits for the process to finish terminating, so never on the thread that reported the stop.
         { onReady ->
@@ -72,6 +76,8 @@ class ReqnrollServerEvents(private val project: Project) : LspServerListener {
 
     /** The server process is about to be launched (first start, or any restart): gives it a fresh session id. */
     fun serverStarting() {
+        // Telemetry is held per server session: this process must report a Reqnroll project itself.
+        telemetryGate.reset()
         processTracker.onStarting()
         telemetry.onStateChanged(LspServerState.Initializing)
     }

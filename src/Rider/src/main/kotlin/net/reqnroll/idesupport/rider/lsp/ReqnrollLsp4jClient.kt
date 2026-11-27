@@ -1,5 +1,6 @@
 package net.reqnroll.idesupport.rider.lsp
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
@@ -20,8 +21,9 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
  * confirmed against the actual platform source, `platform/lsp/src/api/Lsp4jClient.kt` in
  * intellij-community, not assumed): adds the reqnroll-custom server-to-client pushes this plugin
  * needs, `reqnroll/testOutcomes/changed` (LSP-server outcome pipeline), `reqnroll/logMessage`
- * (messages for the Reqnroll tool window) and `reqnroll/copyToClipboard` (a picked "Copy step
- * definition(s) to clipboard" quick fix).
+ * (messages for the Reqnroll tool window), `reqnroll/copyToClipboard` (a picked "Copy step
+ * definition(s) to clipboard" quick fix) and `reqnroll/reqnrollProjectDetected` (releases held
+ * telemetry).
  *
  * A decorator of [LspServerNotificationsHandler] — the approach [ReqnrollCodeLensRefreshInterceptor]
  * and [ReqnrollInlayHintRefreshInterceptor] use for the *standard* LSP pushes — cannot add this: every
@@ -44,6 +46,7 @@ class ReqnrollLsp4jClient(
     handler: LspServerNotificationsHandler,
 ) : Lsp4jClient(
     ReqnrollTelemetryEventInterceptor(
+        project,
         ReqnrollCodeLensRefreshInterceptor(project, ReqnrollInlayHintRefreshInterceptor(project, handler)),
     ),
 ) {
@@ -65,4 +68,11 @@ class ReqnrollLsp4jClient(
     /** `reqnroll/copyToClipboard`: text for the IDE clipboard, which LSP itself has no API for. */
     @JsonNotification("reqnroll/copyToClipboard")
     fun copyToClipboard(params: CopyToClipboardParams?) = ServerClipboard.copy(params)
+
+    /**
+     * `reqnroll/reqnrollProjectDetected` (no params): the solution contains a project that uses
+     * Reqnroll, so the telemetry held until then may be sent.
+     */
+    @JsonNotification("reqnroll/reqnrollProjectDetected")
+    fun reqnrollProjectDetected() = project.service<ReqnrollServerEvents>().telemetryGate.open()
 }

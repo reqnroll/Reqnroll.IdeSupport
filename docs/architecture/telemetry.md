@@ -110,6 +110,13 @@ sequenceDiagram
   never grants consent).
 - **Only the clients gate.** The server always emits `telemetry/event` and does not read any consent flag or the kill
   switch; each host drops events when its gate is closed, so revocation is immediate.
+- **Nothing but errors, install and upgrade before a Reqnroll project.** The server decides whether the workspace uses Reqnroll (it is the
+  only party that sees every project and owns `ReqnrollProjectDetector`) and says so once with
+  `reqnroll/reqnrollProjectDetected`. Each host holds every other event at its single send point until then, and
+  computes `Lifecycle.Extension.Loaded` and the daily-use heartbeat only then. `Error.*`, install, upgrade and the
+  server start-failure events are never held; the consent gates above still apply to them. The gate is per server
+  session: each client closes it again when it starts a new server process (a VS solution swap, a VS Code restart, a
+  Rider server start), and Rider keeps one gate per open solution. Details: the inventory's "Reqnroll-project gate".
 - Every event and its fields is documented in the public inventory.
 
 ## 7. Pitfalls and design decisions

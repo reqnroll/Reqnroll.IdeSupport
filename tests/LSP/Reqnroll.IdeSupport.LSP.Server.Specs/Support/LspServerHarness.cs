@@ -1,4 +1,4 @@
-using Nerdbank.Streams;
+﻿using Nerdbank.Streams;
 using Newtonsoft.Json.Linq;                                            // JToken (custom notification capture)
 using OmniSharp.Extensions.LanguageServer.Client;                      // LanguageClient factory + option extensions
 using OmniSharp.Extensions.LanguageServer.Protocol;                    // WorkspaceNames, DocumentUri
@@ -69,6 +69,11 @@ public sealed class LspServerHarness : IAsyncDisposable
     {
         get { lock (_pushLock) return _pushes.ToArray(); }
     }
+
+    private int _projectDetectedCount;
+
+    /// <summary>How many <c>reqnroll/reqnrollProjectDetected</c> notifications have arrived so far.</summary>
+    public int ReqnrollProjectDetectedCount => Volatile.Read(ref _projectDetectedCount);
 
     private readonly object _logMessageLock = new();
     private readonly List<(int Type, string Message)> _logMessages = new();
@@ -281,6 +286,14 @@ public sealed class LspServerHarness : IAsyncDisposable
             options.OnNotification("reqnroll/copyToClipboard", (JToken p) =>
             {
                 RecordClipboardText(p["text"]?.Value<string>() ?? string.Empty);
+                return Task.CompletedTask;
+            });
+
+            // Sink for the server's report that the workspace contains a project that uses Reqnroll.
+            // It has no params, so the handler takes none.
+            options.OnNotification("reqnroll/reqnrollProjectDetected", () =>
+            {
+                Interlocked.Increment(ref _projectDetectedCount);
                 return Task.CompletedTask;
             });
 

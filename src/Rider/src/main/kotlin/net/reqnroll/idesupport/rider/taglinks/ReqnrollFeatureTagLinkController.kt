@@ -259,7 +259,7 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
             if (!TagLinkSupport.isOpenableUrl(target)) return
 
             e.consume()
-            RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.COMMAND_TAG_LINK, emptyMap())
+            editor.project?.let { RiderTelemetryTransmitter.transmit(it, RiderTelemetryTransmitter.COMMAND_TAG_LINK, emptyMap()) }
             ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: opening tag link '$target'")
             BrowserUtil.browse(target)
         }

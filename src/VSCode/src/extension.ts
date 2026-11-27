@@ -1,7 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  State,
+} from 'vscode-languageclient/node';
 import {
   createTraceChannel,
   protocolLogLevelToArg,
@@ -57,7 +62,8 @@ import {
 } from './telemetry';
 import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
 import { ServerProcessTracker } from './lsp/serverProcessTracker';
-import { reportExtensionLifecycle } from './extensionLifecycleTelemetry';
+import { reportExtensionInstallOrUpgrade, reportExtensionUse } from './extensionLifecycleTelemetry';
+import { reqnrollProjectGate, registerReqnrollProjectDetected } from './reqnrollProjectGate';
 import {
   SOURCE_ACTIVATION,
   createReportingErrorHandler,
@@ -504,8 +510,20 @@ function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensi
   // before `client.start()` so a server that never comes up can still report; `registerTelemetry`
   // below reuses it. Attached before start so the first `Starting` transition is seen.
   ensureTelemetryReporter(context);
-  // Install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
-  void reportExtensionLifecycle(context, sendTelemetryEvent);
+  // Lifecycle events, parity with Visual Studio. Install and upgrade are reported at activation and
+  // are never held by the Reqnroll-project gate. Loaded and the daily heartbeat wait until the server
+  // reports a project that uses Reqnroll, so a workspace without Reqnroll is not counted as a day of
+  // use. The notification handler is subscribed before start() so every server (re)start is covered.
+  void reportExtensionInstallOrUpgrade(context, sendTelemetryEvent);
+  context.subscriptions.push(registerReqnrollProjectDetected(client));
+  // Telemetry is held per server session: every (re)start must report a Reqnroll project again.
+  // Subscribed before ServerLifecycleTelemetry, so a restart's own event is held with the rest.
+  context.subscriptions.push(
+    client.onDidChangeState((e) => {
+      if (e.newState === State.Starting) reqnrollProjectGate.reset();
+    }),
+  );
+  reqnrollProjectGate.onOpened(() => void reportExtensionUse(context, sendTelemetryEvent));
   serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent, serverProcessTracker);
   context.subscriptions.push(serverLifecycle);
 

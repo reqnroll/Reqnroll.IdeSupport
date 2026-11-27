@@ -295,20 +295,46 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             _logger.LogInfo("RunWelcomeServiceAsync: IVsUIShell resolved OK.");
 
             var telemetryService = ideScope.TelemetryService;
-            // Restores the legacy "Lifecycle.Extension.Loaded" signal (from the legacy
-            // MonitoringService.MonitorOpenProjectSystem, which also triggered the welcome flow
-            // itself — here that triggering already happens explicitly
-            // below via WelcomeService, so this call is telemetry-only).
-            telemetryService.MonitorOpenProjectSystem(ideScope);
             var dialogService = new VsWizardDialogService(vsUiShell, telemetryService);
 
             _logger.LogInfo("RunWelcomeServiceAsync: creating WelcomeService...");
             var welcomeService = new WelcomeService(
                 registryManager, versionProvider, dialogService, fileSystem);
 
+            // The welcome/upgrade dialog runs at startup, whatever the solution contains. Installed
+            // and upgraded are sent straight away; the dialog's own events (dismissed, links clicked)
+            // are held by ReqnrollProjectTelemetryGate until a Reqnroll project is seen.
             _logger.LogInfo("RunWelcomeServiceAsync: calling OnIdeScopeActivityStarted...");
             welcomeService.OnIdeScopeActivityStarted(ideScope);
             _logger.LogInfo("RunWelcomeServiceAsync: OnIdeScopeActivityStarted returned (dialog scheduled with 7s delay).");
+
+            // Lifecycle.Extension.Loaded and the day-of-use count wait until the language server
+            // reports a project that uses Reqnroll, so a solution without Reqnroll is not counted.
+            // Not awaited: that may be never.
+            _ = JoinableTaskFactory.RunAsync(async () =>
+            {
+                try
+                {
+                    await ReqnrollProjectTelemetryGate.Shared.WaitUntilOpenAsync(DisposalToken);
+                    await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+
+                    // Restores the legacy "Lifecycle.Extension.Loaded" signal (from the legacy
+                    // MonitoringService.MonitorOpenProjectSystem, which also triggered the welcome
+                    // flow itself — here that happens explicitly above, so this call is telemetry-only).
+                    telemetryService.MonitorOpenProjectSystem(ideScope);
+
+                    _logger.LogInfo("RunWelcomeServiceAsync: Reqnroll project detected; recording the day of use.");
+                    welcomeService.OnReqnrollProjectDetected(ideScope);
+                }
+                catch (OperationCanceledException)
+                {
+                    // VS closed before a Reqnroll project was seen.
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogException(ex, "RunWelcomeServiceAsync: lifecycle start failed");
+                }
+            });
         }
         catch (Exception ex)
         {
