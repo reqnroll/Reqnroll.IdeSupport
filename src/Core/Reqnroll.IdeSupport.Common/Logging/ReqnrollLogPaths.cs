@@ -27,7 +27,7 @@ public static class ReqnrollLogPaths
     /// <summary>
     /// Resolves the Reqnroll application directory for the current OS (<c>%LOCALAPPDATA%\Reqnroll</c>
     /// on Windows, etc.) — the shared root that also holds non-log state such as
-    /// <c>test-outcomes.json</c> and the telemetry <c>userid</c> file. Log files themselves live one
+    /// <c>test-outcomes.json</c> and the Visual Studio telemetry <c>installationid</c> file. Log files themselves live one
     /// level deeper, under <see cref="ResolveLogDirectory()"/> — use this instead of
     /// that when what's being resolved isn't actually a log.
     /// </summary>

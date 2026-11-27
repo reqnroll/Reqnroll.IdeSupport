@@ -91,6 +91,39 @@ public class TelemetryTransmitterTests
     }
 
     [Fact]
+    public void Should_NotCreateTheInstallationId_WhenTelemetryIsDisabled()
+    {
+        var installationIdStore = Substitute.For<IInstallationIdStore>();
+        var sut = CreateSut(installationIdStore: installationIdStore);
+        GivenTelemetryDisabled();
+
+        sut.TransmitEvent(FakeTelemetryEvent());
+        sut.TransmitExceptionEvent(new TimeoutException("slow"), Array.Empty<KeyValuePair<string, object>>());
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), true);
+
+        installationIdStore.DidNotReceive().GetInstallationId();
+        _telemetryChannel.SentTelemtries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Should_SendTheInstallationIdAsTheUserId_WhenTelemetryIsEnabled()
+    {
+        const string installationId = "491ed5c0-9f25-4c27-941a-19b17cc81c87";
+        var installationIdStore = Substitute.For<IInstallationIdStore>();
+        installationIdStore.GetInstallationId().Returns(installationId);
+        var sut = CreateSut(installationIdStore: installationIdStore);
+        GivenTelemetryEnabled();
+
+        sut.TransmitEvent(FakeTelemetryEvent());
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), true);
+
+        _telemetryChannel.SentTelemtries.Should().HaveCount(2)
+            .And.OnlyContain(t => t.Context.User.Id == installationId);
+        // Only ai.user.id carries the id; the account id is not sent.
+        _telemetryChannel.SentTelemtries.Should().OnlyContain(t => string.IsNullOrEmpty(t.Context.User.AccountId));
+    }
+
+    [Fact]
     public void Should_StampCanonicalClientIdentity_OnEveryEvent()
     {
         var versions = Substitute.For<IVersionProvider>();
@@ -149,7 +182,8 @@ public class TelemetryTransmitterTests
         _enableTelemetryCheckerStub.IsEnabled().Returns(false);
     }
 
-    private VsTelemetryTransmitter CreateSut(Action<TelemetryClient>? configureClient = null)
+    private VsTelemetryTransmitter CreateSut(Action<TelemetryClient>? configureClient = null,
+        IInstallationIdStore? installationIdStore = null)
     {
         _enableTelemetryCheckerStub = Substitute.For<IEnableTelemetryChecker>();
         _telemetryChannel = new InMemoryTelemetryChannel();
@@ -158,6 +192,8 @@ public class TelemetryTransmitterTests
             TelemetryChannel = _telemetryChannel,
             ConnectionString = $"InstrumentationKey={Guid.NewGuid():N}"
         };
+        if (installationIdStore is not null)
+            VsTelemetryTransmitter.ApplyInstallationId(config, installationIdStore);
         var telemetryClient = new TelemetryClient(config);
         configureClient?.Invoke(telemetryClient);
         var logger = Substitute.For<IIdeSupportLogger>();

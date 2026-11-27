@@ -38,7 +38,7 @@ now, so change them together (a unit test checks that they differ only in table 
 
 The same data has two names depending on where you open **Logs**:
 
-| Where you open Logs | Events table | Time | Properties | User |
+| Where you open Logs | Events table | Time | Properties | Installation id (`ai.user.id`) |
 |---|---|---|---|---|
 | Log Analytics **workspace** (the files in `queries/` use these) | `AppEvents` | `TimeGenerated` | `Properties` | `UserId` |
 | Application Insights **resource** (Monitoring > Logs) | `customEvents` | `timestamp` | `customDimensions` | `user_Id` |

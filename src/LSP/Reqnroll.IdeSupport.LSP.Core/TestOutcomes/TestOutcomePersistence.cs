@@ -84,7 +84,7 @@ public sealed class TestOutcomePersistence
     /// <summary>
     /// Uses <see cref="Logging.ReqnrollLogPaths.ResolveApplicationDirectory"/>, not
     /// <c>ResolveLogDirectory</c> — this file is persisted state, not a log, so it belongs in the
-    /// application directory's root alongside the telemetry <c>userid</c> file rather than under
+    /// application directory's root alongside the Visual Studio telemetry <c>installationid</c> file rather than under
     /// the <c>logs</c> subfolder; it is also exempt from the 10-day log-retention
     /// pruning that directory gets. Resolution is broadly safe (its own file enumeration is
     /// already guarded) but still combines environment-dependent paths via

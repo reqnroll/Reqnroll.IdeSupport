@@ -110,6 +110,11 @@ sequenceDiagram
   never grants consent).
 - **Only the clients gate.** The server always emits `telemetry/event` and does not read any consent flag or the kill
   switch; each host drops events when its gate is closed, so revocation is immediate.
+- **The `ai.user.id` value is an installation id, not a user id.** It is an anonymous GUID per installation, used to
+  approximate the number of installations and follow upgrades. Hosts create it only when the first permitted event is
+  sent, never while the gate is closed, and keep it in non-roaming storage: Visual Studio in
+  `%LOCALAPPDATA%\Reqnroll\installationid` (`FileInstallationIdStore`, stamped per event by a telemetry initializer),
+  Rider in the application-level `PropertiesComponent` (the non-roaming `other.xml`); VS Code uses `vscode.env.machineId`.
 - Every event and its fields is documented in the public inventory.
 
 ## 7. Pitfalls and design decisions

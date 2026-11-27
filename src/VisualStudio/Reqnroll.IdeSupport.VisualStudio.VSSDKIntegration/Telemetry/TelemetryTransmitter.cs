@@ -48,10 +48,10 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     [ImportingConstructor]
     public TelemetryTransmitter(
         IEnableTelemetryChecker enableTelemetryChecker,
-        IUserUniqueIdStore userUniqueIdStore,
+        IInstallationIdStore installationIdStore,
         IVersionProvider versionProvider,
         IIdeSupportLogger? logger = null)
-        : this(CreateClient(userUniqueIdStore, versionProvider), enableTelemetryChecker, logger,
+        : this(CreateClient(installationIdStore, versionProvider), enableTelemetryChecker, logger,
             TelemetryDebugLog.FromEnvironment())
     {
     }
@@ -83,7 +83,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         return reader.ReadLine();
     }
 
-    private static TelemetryClient CreateClient(IUserUniqueIdStore userStore, IVersionProvider versionProvider)
+    private static TelemetryClient CreateClient(IInstallationIdStore installationIdStore, IVersionProvider versionProvider)
     {
         // Best-effort delivery. InMemoryChannel is already what a default
         // TelemetryConfiguration uses (TelemetrySink creates one), so naming it here only makes the
@@ -99,12 +99,33 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             TelemetryChannel = new InMemoryChannel { MaxTelemetryBufferCapacity = 100, SendingInterval = TimeSpan.FromSeconds(30) },
         };
         config.ConnectionString = TelemetryConnectionOverride.FromEnvironment() ?? ReadBuiltInConnectionString();
+        ApplyInstallationId(config, installationIdStore);
         var client = new TelemetryClient(config);
-        client.Context.User.Id = userStore.GetUserId();
-        client.Context.User.AccountId = userStore.GetUserId();
         ApplyClientIdentity(client.Context.GlobalProperties, versionProvider);
         ApplyPrivacyDefaults(client.Context);
         return client;
+    }
+
+    /// <summary>
+    /// Stamps the installation id (<c>ai.user.id</c>) on each item as it is tracked, instead of on the
+    /// client when it is created. Items are only tracked once <see cref="IEnableTelemetryChecker"/> has
+    /// allowed them, so the id is neither created, persisted nor sent while telemetry is not permitted.
+    /// </summary>
+    internal static void ApplyInstallationId(TelemetryConfiguration config, IInstallationIdStore installationIdStore)
+        => config.TelemetryInitializers.Add(new InstallationIdTelemetryInitializer(installationIdStore));
+
+    private sealed class InstallationIdTelemetryInitializer : ITelemetryInitializer
+    {
+        private readonly IInstallationIdStore _installationIdStore;
+
+        public InstallationIdTelemetryInitializer(IInstallationIdStore installationIdStore)
+            => _installationIdStore = installationIdStore;
+
+        public void Initialize(ITelemetry telemetry)
+        {
+            if (string.IsNullOrEmpty(telemetry.Context.User.Id))
+                telemetry.Context.User.Id = _installationIdStore.GetInstallationId();
+        }
     }
 
     /// <summary>

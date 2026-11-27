@@ -139,7 +139,7 @@ object RiderTelemetryTransmitter {
 
     internal const val IDE_CLIENT = "rider"
 
-    private const val USER_ID_PROPERTY_KEY = "net.reqnroll.idesupport.telemetry.userId"
+    private const val INSTALLATION_ID_PROPERTY_KEY = "net.reqnroll.idesupport.telemetry.installationId"
 
     // Bounded timeouts: without them a black-holed endpoint leaves one pending request and
     // socket per event until the OS gives up.
@@ -177,7 +177,7 @@ object RiderTelemetryTransmitter {
         }
 
         try {
-            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
+            val body = buildEnvelope(eventName, installationId(), stringProps, Instant.now(), connection.instrumentationKey)
             post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
                 debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = reason)
             }
@@ -313,10 +313,17 @@ object RiderTelemetryTransmitter {
         properties.putIfAbsent(ClientSession.PROPERTY_NAME, ClientSession.id) // identifies this IDE process
     }
 
-    private fun userId(): String {
+    /**
+     * The anonymous installation id sent as `ai.user.id`: a random GUID created on the first event that
+     * telemetry permits and kept in the application-level [PropertiesComponent]. That component is stored
+     * in the IDE's `other.xml`, which the platform never roams or syncs, so the id stays with this
+     * installation. Only called after the opt-out check in [transmit], so nothing is created while
+     * telemetry is off.
+     */
+    private fun installationId(): String {
         val store = PropertiesComponent.getInstance()
-        return store.getValue(USER_ID_PROPERTY_KEY) ?: UUID.randomUUID().toString().also {
-            store.setValue(USER_ID_PROPERTY_KEY, it)
+        return store.getValue(INSTALLATION_ID_PROPERTY_KEY) ?: UUID.randomUUID().toString().also {
+            store.setValue(INSTALLATION_ID_PROPERTY_KEY, it)
         }
     }
 
@@ -338,14 +345,14 @@ object RiderTelemetryTransmitter {
      */
     internal fun buildEnvelope(
         eventName: String,
-        userId: String,
+        installationId: String,
         properties: Map<String, String>,
         timestamp: Instant,
         instrumentationKey: String = INSTRUMENTATION_KEY,
     ): String {
         val propsJson = properties.entries.joinToString(",") { (key, value) -> "${jsonString(key)}:${jsonString(value)}" }
         return """
-            {"name":"Microsoft.ApplicationInsights.Event","time":"$timestamp","iKey":${jsonString(instrumentationKey)},"tags":{"ai.user.id":${jsonString(userId)}},"data":{"baseType":"EventData","baseData":{"ver":2,"name":${jsonString(eventName)},"properties":{$propsJson}}}}
+            {"name":"Microsoft.ApplicationInsights.Event","time":"$timestamp","iKey":${jsonString(instrumentationKey)},"tags":{"ai.user.id":${jsonString(installationId)}},"data":{"baseType":"EventData","baseData":{"ver":2,"name":${jsonString(eventName)},"properties":{$propsJson}}}}
         """.trimIndent()
     }
 
